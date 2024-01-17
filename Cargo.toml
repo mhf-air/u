@@ -1,0 +1,32 @@
+[package]
+name = "u"
+version = "0.1.0"
+authors = ["mhf <mhfcbz@163.com>"]
+edition = "2021"
+
+default-run = "u"
+autobins = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+path = "src/lib.rs"
+
+# ----------------------------------------------------------------------
+[[bin]]
+name = "u"
+path = "src/main.rs"
+
+[[bin]]
+name = "u-cargo-lint"
+path = "bin/u-cargo-lint.rs"
+
+[[bin]]
+name = "utags"
+path = "bin/utags.rs"
+
+# ----------------------------------------------------------------------
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+ctrlc = "3.0"

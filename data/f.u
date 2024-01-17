@@ -1,0 +1,50 @@
+// for fmt
+
+/*
+    a
+*/
+name--c const &str = "
+    a
+"
+
+f func(
+	name String
+	age  i32
+
+	first-name String
+	age        i32
+) {
+	f func(a i32, abc i32) {
+	}
+
+	a := Person { first-name: "a".to-string(), age: 20 }
+	a := Person {}
+
+	a := Person {
+		name: "a".to-string()
+		age:  20
+
+		first-name: "hello".to-string()
+		a: Person {
+			name: "a".to-string()
+			age:  20
+		}
+		age-2: 20
+	}
+}
+
+Person struct {
+	name+ String
+	age   i32
+
+	first-name        String
+	age+(super)       i32
+	age+(in crate..a) i32
+}
+
+Color enum {
+	Red {
+		name+ String
+		age   i32
+	}
+}
