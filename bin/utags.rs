@@ -318,9 +318,9 @@ fn parse_items(p: &mut String, items: &[u::Item], filepath: &str, mod_: &Vec<&st
         } = ng;
         field.line = line;
         p.push_str(&text);
-        if let Some(generics) = &generics {
+        /* if let Some(generics) = &generics {
             field.signature = Some(generics);
-        }
+        } */
 
         field.set_access(&item.public.payload);
         p.push_str(&field.to_string());
@@ -352,11 +352,12 @@ struct NameGenericsReturn {
 
 fn name_generics(a: &NameGenerics) -> NameGenericsReturn {
     let generics = generics_text(&a.generics);
+    let b = generics.clone().unwrap_or(String::new());
     NameGenericsReturn {
         line: a.name.span.line,
         text: format!(
-            "{}\t{}\t{};\"\t{}",
-            a.name.id, a.filepath, a.name.span.line, a.type_char
+            "{}{}\t{}\t{};\"\t{}",
+            a.name.id, b, a.filepath, a.name.span.line, a.type_char
         ),
         generics,
     }
@@ -443,7 +444,7 @@ fn struct_fields(a: &u::Struct, filepath: &str, mod_: &Vec<&str>) -> String {
                 let mut field = TagField::default();
                 field.line = item.name.span.line;
 
-                let ctype = nested_ctype(mod_, &a.name.id);
+                let ctype = nested_ctype(mod_, &a.name.id, &a.generics);
                 field.ctype = Some(&ctype);
 
                 field.set_access(&item.public.payload);
@@ -460,7 +461,7 @@ fn struct_fields(a: &u::Struct, filepath: &str, mod_: &Vec<&str>) -> String {
                 let mut field = TagField::default();
                 field.line = a.name.span.line;
 
-                let ctype = nested_ctype(mod_, &a.name.id);
+                let ctype = nested_ctype(mod_, &a.name.id, &a.generics);
                 field.ctype = Some(&ctype);
 
                 field.set_access(&item.public.payload);
@@ -486,7 +487,7 @@ fn enum_fields(a: &u::Enum, filepath: &str, mod_: &Vec<&str>) -> String {
         let mut field = TagField::default();
         field.line = item.name.span.line;
 
-        let ctype = nested_ctype(mod_, &a.name.id);
+        let ctype = nested_ctype(mod_, &a.name.id, &a.generics);
         field.ctype = Some(&ctype);
 
         let mut a = String::new();
@@ -537,7 +538,7 @@ fn union_fields(a: &u::Union, filepath: &str, mod_: &Vec<&str>) -> String {
         let mut field = TagField::default();
         field.line = item.name.span.line;
 
-        let ctype = nested_ctype(mod_, &a.name.id);
+        let ctype = nested_ctype(mod_, &a.name.id, &a.generics);
         field.ctype = Some(&ctype);
 
         field.set_access(&item.public.payload);
@@ -555,7 +556,7 @@ fn interface_fields(a: &u::Interface, filepath: &str, mod_: &Vec<&str>) -> Strin
     for item in &a.items {
         let mut field = TagField::default();
 
-        let ctype = nested_ctype(mod_, &a.name.id);
+        let ctype = nested_ctype(mod_, &a.name.id, &a.generics);
         field.ctype = Some(&ctype);
 
         let sig;
@@ -751,8 +752,13 @@ fn impl_items(p: &mut String, a: &u::Impl, filepath: &str, mod_: &Vec<&str>) {
     }
 }
 
-fn nested_ctype(mod_: &Vec<&str>, a: &str) -> String {
+fn nested_ctype(mod_: &Vec<&str>, a: &str, gen: &Option<u::Generics>) -> String {
     let mut new_mod = mod_.clone();
     new_mod.push(a);
-    new_mod.join("..")
+    let mut r = new_mod.join("..");
+    let generics = generics_text(gen);
+    if let Some(b) = generics {
+        r.push_str(&b);
+    }
+    r
 }
