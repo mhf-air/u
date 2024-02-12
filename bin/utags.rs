@@ -311,11 +311,7 @@ fn parse_items(p: &mut String, items: &[u::Item], filepath: &str, mod_: &Vec<&st
             }
         }
 
-        let NameGenericsReturn {
-            line,
-            text,
-            generics,
-        } = ng;
+        let NameGenericsReturn { line, text, .. } = ng;
         field.line = line;
         p.push_str(&text);
         /* if let Some(generics) = &generics {
