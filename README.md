@@ -545,6 +545,16 @@ instead of
 
 	because it's so frequently used
 
+- **caveat**
+
+```
+// special case: wrap the cast type when the type consists of keyword const
+const-c-void[T] func(r &T) *const c-void {
+	ret r as (*const T) as (*const c-void)
+}
+
+```
+
 - **doc comment**
 
 	write doc comment in u's format, and generate the same format doc in rust

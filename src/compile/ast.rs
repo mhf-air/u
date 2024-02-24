@@ -4919,7 +4919,11 @@ impl ToLang for ExprOperator {
             ExprOperator::TypeCast(a) => {
                 p.push_rust(&a.expr);
                 p.push_raw(" as ");
-                p.push_rust(&a.type_no_bounds);
+                if let TypeNoBounds::Parenthesized(a) = &a.type_no_bounds {
+                    p.push_rust(&a.type_);
+                } else {
+                    p.push_rust(&a.type_no_bounds);
+                }
             }
             ExprOperator::Assignment(a) => {
                 p.push_rust(&a.left);
@@ -5032,7 +5036,11 @@ impl ToLang for ExprOperator {
             ExprOperator::TypeCast(a) => {
                 p.push_u(&a.expr);
                 p.push_raw(" as ");
-                p.push_u(&a.type_no_bounds);
+                if let TypeNoBounds::Parenthesized(a) = &a.type_no_bounds {
+                    p.push_u(&a.type_);
+                } else {
+                    p.push_u(&a.type_no_bounds);
+                }
             }
             ExprOperator::Assignment(a) => {
                 p.push_u(&a.left);
