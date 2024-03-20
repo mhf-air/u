@@ -594,6 +594,7 @@ impl Lex {
                     // /=
                     '=' => {
                         s.add_token(TokenCode::Assign(Assign::Div));
+                        i += 1;
                     }
                     // /
                     _ => {
