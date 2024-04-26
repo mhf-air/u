@@ -96,7 +96,7 @@ impl CmdNone {
         let s = self;
         if s.cmd.as_str() == "target/debug/u" {
             /* CmdCompile {
-                src: "/home/mhf/rust/wiki/u/abc/main.u".to_string(),
+                src: "/home/mhf/a/rust/wiki/u/abc/main.u".to_string(),
             }
             .run()?;
             Ok(()) */
