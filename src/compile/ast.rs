@@ -3050,6 +3050,7 @@ pub enum GenericArg {
     Type(Type),
     Const(GenericArgsConst),
     Binding(GenericArgsBinding),
+    Bounds(GenericArgsBounds),
 }
 impl ToLang for GenericArg {
     fn to_rust(&self, p: &mut LangFormatter) {
@@ -3066,6 +3067,11 @@ impl ToLang for GenericArg {
                 p.push_raw(" ");
                 p.push_rust(&a.type_);
             }
+            GenericArg::Bounds(a) => {
+                p.push_rust(&a.name);
+                p.push_raw(": ");
+                p.push_rust(&a.bounds);
+            }
         }
     }
     fn to_u(&self, p: &mut LangFormatter) {
@@ -3079,6 +3085,11 @@ impl ToLang for GenericArg {
                 p.push_u(&a.name);
                 p.push_raw(" = ");
                 p.push_u(&a.type_);
+            }
+            GenericArg::Bounds(a) => {
+                p.push_u(&a.name);
+                p.push_raw(": ");
+                p.push_u(&a.bounds);
             }
         }
     }
@@ -3118,6 +3129,11 @@ pub struct GenericArgsBinding {
     pub type_: Type,
 
     pub span_eq: Span,
+}
+#[derive(Debug)]
+pub struct GenericArgsBounds {
+    pub name: Identifier,
+    pub bounds: TypeParamBounds,
 }
 
 // --------------------------------------------------------------------------------

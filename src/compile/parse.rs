@@ -5141,9 +5141,16 @@ impl Parse {
                             type_,
                             span_eq: token.span,
                         })
-                    } else {
+                    } else if matches!(&token.code, T![,] | T!["]"]) {
                         let type_ = s.parse_type()?;
                         GenericArg::Type(type_)
+                    } else {
+                        s.plusplus();
+                        let bounds = s.parse_type_param_bounds()?;
+                        GenericArg::Bounds(GenericArgsBounds {
+                            name: identifier.clone(),
+                            bounds,
+                        })
                     }
                 }
                 _ => {

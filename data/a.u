@@ -208,6 +208,7 @@ Point['a 'b + 'c, 'd 'e] type = &'a i32
 Point[T] type = func(T, T) T
 Point[T] type = std..boxed..Box[dyn std..ops..Fn-once(isize) isize]
 Point[T] type = impl Iterator[Item = ops..Example[T]]
+Point[T] type = impl Iterator[Item ops..Example[T]]
 Point type = [S]..f
 Point type = [S as Copy]..f
 
@@ -215,6 +216,7 @@ foo['a, T] func[async, unsafe](a i32, b i32) i32 where {
 	T           Iterator
 	T..Item     Copy
 	string      Partial-eq[T]
+	T           Iterator[Item Copy]
 	(func(T))   Iterator
 	f           Box[dyn Fn-mut(&mut T) + 'a]
 }{}
@@ -296,11 +298,13 @@ My-union[T] union {
 }
 
 With-self interface Super[Self] where { Self Sized } {}
+Copy-iterator interface Iterator[Item Copy] {}
 
 Seq[T] interface[unsafe] Display + Debug where { T Copy } {
 	name--c const &str = "hello"
 	Item type = T
 	A type
+    Assoc type Trait2[Assoc2 Copy]
 
 	foo func() where { Self Sized } {
 	}
