@@ -5141,16 +5141,18 @@ impl Parse {
                             type_,
                             span_eq: token.span,
                         })
-                    } else if matches!(&token.code, T![,] | T!["]"]) {
-                        let type_ = s.parse_type()?;
-                        GenericArg::Type(type_)
-                    } else {
+                    } else if matches!(&token.code, T![super] | T![self] | T![Self] | T![crate])
+                        || matches!(&token.code, TokenCode::Identifier(_a))
+                    {
                         s.plusplus();
                         let bounds = s.parse_type_param_bounds()?;
                         GenericArg::Bounds(GenericArgsBounds {
                             name: identifier.clone(),
                             bounds,
                         })
+                    } else {
+                        let type_ = s.parse_type()?;
+                        GenericArg::Type(type_)
                     }
                 }
                 _ => {

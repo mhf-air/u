@@ -240,6 +240,7 @@ f func(
 }
 
 f func(a func(&mut App), b i32) {
+    list.collect[Vec[-]]()
 }
 
 // special case: wrap the cast type when the type consists of keyword const
@@ -304,7 +305,7 @@ Seq[T] interface[unsafe] Display + Debug where { T Copy } {
 	name--c const &str = "hello"
 	Item type = T
 	A type
-    Assoc type Trait2[Assoc2 Copy]
+	Assoc type Trait2[Assoc2 Copy]
 
 	foo func() where { Self Sized } {
 	}
@@ -399,13 +400,13 @@ f func() {
 	a := async[move] {
 	}
 
-    const {
-        < 1
-    }
+	const {
+		< 1
+	}
 
-    a := const {
-        < 1
-    }
+	a := const {
+		< 1
+	}
 }
 
 f func() {
