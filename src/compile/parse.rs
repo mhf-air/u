@@ -842,9 +842,15 @@ impl Parse {
                                 break;
                             }
                         }
+                        Keyword::Const => {
+                            let next_token = &s.tokens[start];
+                            if !matches!(&next_token.code, T!["{"]) {
+                                first_special_token = Some(token);
+                                break;
+                            }
+                        }
                         Keyword::Import
                         | Keyword::Extern
-                        | Keyword::Const
                         | Keyword::Enum
                         | Keyword::Func
                         | Keyword::Impl
@@ -4116,6 +4122,19 @@ impl Parse {
                             ExprUnsafeBlock {
                                 block: a,
                                 span_unsafe,
+                            },
+                        )));
+                    }
+                    Keyword::Const => {
+                        let span_const = token.span;
+                        let span_brace_open = s.current().span;
+                        s.expect(T!["{"])?;
+                        let mut a = s.parse_block_expr()?;
+                        a.span_brace_open = span_brace_open;
+                        r.payload = ExprPayload::WithBlock(Box::new(ExprWithBlock::ConstBlock(
+                            ExprConstBlock {
+                                block: a,
+                                span_const,
                             },
                         )));
                     }

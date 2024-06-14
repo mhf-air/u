@@ -4326,6 +4326,7 @@ pub enum ExprWithBlock {
     BlockExpr(BlockExpr),
     AsyncBlock(ExprAsyncBlock),
     UnsafeBlock(ExprUnsafeBlock),
+    ConstBlock(ExprConstBlock),
     Loop(Box<ExprLoop>),
     If(ExprIf),
     Match(ExprMatch),
@@ -4338,6 +4339,7 @@ impl ToLang for ExprWithBlock {
             ExprWithBlock::BlockExpr(a) => p.push_rust(a),
             ExprWithBlock::AsyncBlock(a) => p.push_rust(a),
             ExprWithBlock::UnsafeBlock(a) => p.push_rust(a),
+            ExprWithBlock::ConstBlock(a) => p.push_rust(a),
             ExprWithBlock::Loop(a) => p.push_rust(a.as_ref()),
             ExprWithBlock::If(a) => p.push_rust(a),
             ExprWithBlock::Match(a) => p.push_rust(a),
@@ -4350,6 +4352,7 @@ impl ToLang for ExprWithBlock {
             ExprWithBlock::BlockExpr(a) => p.push_u(a),
             ExprWithBlock::AsyncBlock(a) => p.push_u(a),
             ExprWithBlock::UnsafeBlock(a) => p.push_u(a),
+            ExprWithBlock::ConstBlock(a) => p.push_u(a),
             ExprWithBlock::Loop(a) => p.push_u(a.as_ref()),
             ExprWithBlock::If(a) => p.push_u(a),
             ExprWithBlock::Match(a) => p.push_u(a),
@@ -4404,6 +4407,27 @@ impl ToLang for ExprUnsafeBlock {
         let s = self;
 
         p.push_raw("unsafe");
+        p.push_u(&s.block);
+    }
+}
+#[derive(Debug)]
+pub struct ExprConstBlock {
+    pub block: BlockExpr,
+
+    pub span_const: Span,
+}
+impl ToLang for ExprConstBlock {
+    fn to_rust(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        p.push_str("const", s.span_const);
+        p.push_raw(" ");
+        p.push_rust(&s.block);
+    }
+    fn to_u(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        p.push_raw("const");
         p.push_u(&s.block);
     }
 }

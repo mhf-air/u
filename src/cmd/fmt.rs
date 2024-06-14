@@ -407,6 +407,7 @@ impl Fmt {
                 cc::ExprWithBlock::BlockExpr(a) => s.fmt_block(a),
                 cc::ExprWithBlock::AsyncBlock(a) => s.fmt_block(a.block),
                 cc::ExprWithBlock::UnsafeBlock(a) => s.fmt_block(a.block),
+                cc::ExprWithBlock::ConstBlock(a) => s.fmt_block(a.block),
                 cc::ExprWithBlock::Loop(a) => s.fmt_block(a.body),
                 cc::ExprWithBlock::If(a) => s.fmt_if(a),
                 cc::ExprWithBlock::Match(a) => {
@@ -803,6 +804,7 @@ fn multiline_expr(expr: &cc::Expr, line: usize) -> bool {
             cc::ExprWithBlock::BlockExpr(a) => a.span_brace_close.line > line,
             cc::ExprWithBlock::AsyncBlock(a) => a.block.span_brace_close.line > line,
             cc::ExprWithBlock::UnsafeBlock(a) => a.block.span_brace_close.line > line,
+            cc::ExprWithBlock::ConstBlock(a) => a.block.span_brace_close.line > line,
             cc::ExprWithBlock::Loop(a) => a.body.span_brace_close.line > line,
             cc::ExprWithBlock::If(a) => check_if(&a, line),
             cc::ExprWithBlock::Match(a) => a.span_brace_close.line > line,

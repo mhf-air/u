@@ -388,14 +388,20 @@ f func() {
 
 	a := unsafe {
 	}
-}
 
-f func() {
 	async {
 	}
 
 	a := async[move] {
 	}
+
+    const {
+        < 1
+    }
+
+    a := const {
+        < 1
+    }
 }
 
 f func() {
