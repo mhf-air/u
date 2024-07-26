@@ -5420,9 +5420,20 @@ impl Parse {
                 match &token.code {
                     T!["``"] => {
                         s.plusplus();
+                        let next_token = s.current();
+                        if matches!(next_token.code, T![:]) {
+                            return Ok(PatternNoTopAlt::WithRange(PatternRange {
+                                start: Some(PatternRangeBound::Literal(pattern_literal)),
+                                end: None,
+                                inclusive: false,
+                                span: token.span,
+                            }));
+                        }
+                        let bound = parse_range_pattern_bound(s)?;
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start: Some(PatternRangeBound::Literal(pattern_literal)),
-                            end: None,
+                            end: Some(bound),
+                            inclusive: false,
                             span: token.span,
                         }));
                     }
@@ -5432,6 +5443,7 @@ impl Parse {
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start: Some(PatternRangeBound::Literal(pattern_literal)),
                             end: Some(bound),
+                            inclusive: true,
                             span: token.span,
                         }));
                     }
@@ -5442,6 +5454,7 @@ impl Parse {
                             PatternWithoutRange::Obsolete(PatternRange {
                                 start: Some(PatternRangeBound::Literal(pattern_literal)),
                                 end: Some(bound),
+                                inclusive: true,
                                 span: token.span,
                             }),
                         ));
@@ -5463,9 +5476,20 @@ impl Parse {
                 match &token.code {
                     T!["``"] => {
                         s.plusplus();
+                        let next_token = s.current();
+                        if matches!(next_token.code, T![:]) {
+                            return Ok(PatternNoTopAlt::WithRange(PatternRange {
+                                start: Some(PatternRangeBound::Literal(pattern_literal)),
+                                end: None,
+                                inclusive: false,
+                                span: token.span,
+                            }));
+                        }
+                        let bound = parse_range_pattern_bound(s)?;
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start: Some(PatternRangeBound::Literal(pattern_literal)),
-                            end: None,
+                            end: Some(bound),
+                            inclusive: false,
                             span: token.span,
                         }));
                     }
@@ -5475,6 +5499,7 @@ impl Parse {
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start: Some(PatternRangeBound::Literal(pattern_literal)),
                             end: Some(bound),
+                            inclusive: true,
                             span: token.span,
                         }));
                     }
@@ -5485,6 +5510,7 @@ impl Parse {
                             PatternWithoutRange::Obsolete(PatternRange {
                                 start: Some(PatternRangeBound::Literal(pattern_literal)),
                                 end: Some(bound),
+                                inclusive: true,
                                 span: token.span,
                             }),
                         ));
@@ -5557,12 +5583,23 @@ impl Parse {
                     token.span,
                 )));
             }
+            // `` RangePattern
+            T!["``"] => {
+                let bound = parse_range_pattern_bound(s)?;
+                return Ok(PatternNoTopAlt::WithRange(PatternRange {
+                    start: None,
+                    end: Some(bound),
+                    inclusive: false,
+                    span: token.span,
+                }));
+            }
             // ``= RangePattern
             T!["``="] => {
                 let bound = parse_range_pattern_bound(s)?;
                 return Ok(PatternNoTopAlt::WithRange(PatternRange {
                     start: None,
                     end: Some(bound),
+                    inclusive: true,
                     span: token.span,
                 }));
             }
@@ -5754,9 +5791,20 @@ impl Parse {
                     T!["``"] => {
                         s.plusplus();
                         let start = Some(PatternRangeBound::Path(PathInExpr { items }));
+                        let next_token = s.current();
+                        if matches!(next_token.code, T![:]) {
+                            return Ok(PatternNoTopAlt::WithRange(PatternRange {
+                                start,
+                                end: None,
+                                inclusive: false,
+                                span: token.span,
+                            }));
+                        }
+                        let bound = parse_range_pattern_bound(s)?;
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start,
-                            end: None,
+                            end: Some(bound),
+                            inclusive: false,
                             span: token.span,
                         }));
                     }
@@ -5768,6 +5816,7 @@ impl Parse {
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start,
                             end: Some(bound),
+                            inclusive: true,
                             span: token.span,
                         }));
                     }
@@ -5780,6 +5829,7 @@ impl Parse {
                             PatternWithoutRange::Obsolete(PatternRange {
                                 start,
                                 end: Some(bound),
+                                inclusive: true,
                                 span: token.span,
                             }),
                         ));
@@ -5828,7 +5878,7 @@ impl Parse {
 
         unreachable!("not a pattern");
 
-        // after ``= or ...
+        // after ``=, `` or ...
         // only one PatternNoTopAlt is allowed
         fn parse_range_pattern_bound(s: &Parse) -> ParseResult<PatternRangeBound> {
             let mut pattern = s.parse_pattern()?;

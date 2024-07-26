@@ -3635,6 +3635,7 @@ pub enum PatternPath {
 pub struct PatternRange {
     pub start: Option<PatternRangeBound>,
     pub end: Option<PatternRangeBound>,
+    pub inclusive: bool,
 
     pub span: Span,
 }
@@ -3645,11 +3646,13 @@ impl ToLang for PatternRange {
         if let Some(start) = &s.start {
             p.push_rust(start);
         }
-        if let Some(end) = &s.end {
+        if s.inclusive {
             p.push_str("..=", s.span);
-            p.push_rust(end);
         } else {
             p.push_str("..", s.span);
+        }
+        if let Some(end) = &s.end {
+            p.push_rust(end);
         }
     }
     fn to_u(&self, p: &mut LangFormatter) {
@@ -3658,7 +3661,14 @@ impl ToLang for PatternRange {
         if let Some(start) = &s.start {
             p.push_u(start);
         }
-        p.push_raw("``=");
+        if s.inclusive {
+            p.push_str("..=", s.span);
+        } else {
+            p.push_str("..", s.span);
+        }
+        if let Some(end) = &s.end {
+            p.push_u(end);
+        }
     }
 }
 #[derive(Debug)]
