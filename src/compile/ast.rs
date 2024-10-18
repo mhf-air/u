@@ -707,6 +707,10 @@ impl ToLang for Func {
             p.push_str("unsafe", s.qualifier.span_unsafe.unwrap());
             p.push_raw(" ");
         }
+        if s.qualifier.safe {
+            p.push_str("safe", s.qualifier.span_safe.unwrap());
+            p.push_raw(" ");
+        }
         if let Some(extern_) = &s.qualifier.extern_ {
             p.push_str("extern", s.qualifier.span_extern.unwrap());
             p.push_raw(" ");
@@ -796,6 +800,9 @@ impl ToLang for Func {
         if s.qualifier.unsafe_ {
             p.push_raw("unsafe ");
         }
+        if s.qualifier.safe {
+            p.push_raw("safe ");
+        }
         if let Some(extern_) = &s.qualifier.extern_ {
             p.push_raw("extern ");
             if let Some(abi) = extern_ {
@@ -869,11 +876,13 @@ pub struct FuncQualifier {
     pub const_: bool,
     pub async_: bool,
     pub unsafe_: bool,
+    pub safe: bool,
     pub extern_: Option<Option<LiteralString>>,
 
     pub span_const: Option<Span>,
     pub span_async: Option<Span>,
     pub span_unsafe: Option<Span>,
+    pub span_safe: Option<Span>,
     pub span_extern: Option<Span>,
     pub span_abi: Option<Span>,
 }
@@ -1457,11 +1466,13 @@ impl ToLang for Const {
 #[derive(Debug, Default)]
 pub struct Static {
     pub name: Identifier,
+    pub safe: bool,
     pub mut_: bool,
     pub type_: Type,
     pub expr: Option<Expr>,
 
     pub span_static: Span,
+    pub span_safe: Option<Span>,
     pub span_mut: Option<Span>,
     pub span_eq: Option<Span>,
 }
@@ -1469,6 +1480,10 @@ impl ToLang for Static {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
+        if s.safe {
+            p.push_str("safe", s.span_safe.unwrap());
+            p.push_raw(" ");
+        }
         p.push_str("static", s.span_static);
         p.push_raw(" ");
         if s.mut_ {
@@ -1489,11 +1504,15 @@ impl ToLang for Static {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_u(&s.name);
+        if s.safe {
+            p.push_raw("safe");
+        }
         p.push_raw(" static ");
         if s.mut_ {
             p.push_raw("mut ");
         }
+        p.push_u(&s.name);
+        p.push_raw(": ");
         p.push_u(&s.type_);
         if let Some(expr) = &s.expr {
             p.push_raw(" = ");

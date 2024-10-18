@@ -1832,9 +1832,25 @@ impl Parse {
                         r.qualifier.span_extern = Some(token.span);
                     }
                     _ => {
-                        return Err(
-                            s.panic(token, &format!("illegal token {:?} in parse_func", token))
-                        );
+                        if let TokenCode::Identifier(ident) = &token.code {
+                            if ident.id == "safe" {
+                                if r.qualifier.safe {
+                                    return Err(s.panic(token, "already set safe"));
+                                }
+                                r.qualifier.safe = true;
+                                r.qualifier.span_safe = Some(token.span);
+                            } else {
+                                return Err(s.panic(
+                                    token,
+                                    &format!("illegal token {:?} in parse_func", token),
+                                ));
+                            }
+                        } else {
+                            return Err(s.panic(
+                                token,
+                                &format!("illegal token {:?} in parse_func", token),
+                            ));
+                        }
                     }
                 }
 
@@ -2363,6 +2379,21 @@ impl Parse {
 
         let mut r = Static::default();
 
+        let token = s.current();
+        if matches!(&token.code, T!["["]) {
+            s.plusplus();
+            let token = s.current();
+            let TokenCode::Identifier(ident) = &token.code else {
+                return Err(s.panic(token, &format!("illegal token {:?} for static item", token)));
+            };
+            if ident.id != "safe" {
+                return Err(s.panic(token, &format!("illegal id {:?} for static item", ident.id)));
+            }
+            r.span_safe = Some(token.span);
+            r.safe = true;
+            s.plusplus();
+            s.expect(T!["]"])?;
+        }
         let token = s.current();
         if matches!(&token.code, T![mut]) {
             r.span_mut = Some(token.span);

@@ -381,9 +381,11 @@ super..Person impl {}
 apply[F] func(f F) where { F Fn-once() } { }
 apply[F Fn-once()] func(f F) { }
 
-extern "C" {
+extern[unsafe] "C" {
 	abs func(input i32, ...) i32
+	abs func[safe](input i32, ...) i32
 	name--g static mut i32
+	name--g static[safe] mut i32
 }
 
 #[no-mangle]
