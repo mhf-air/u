@@ -240,7 +240,18 @@ f func(
 }
 
 f func(a func(&mut App), b i32) {
-    list.collect[Vec[-]]()
+	list.collect[Vec[-]]()
+
+	id := 1
+	a := &id
+	a := &mut id
+	a := &[raw] id
+	a := &[raw] mut id
+
+	a := &&id
+	a := &&mut id
+	a := &&[raw] id
+	a := &&[raw] mut id
 }
 
 // special case: wrap the cast type when the type consists of keyword const

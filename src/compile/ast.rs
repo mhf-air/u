@@ -4893,9 +4893,15 @@ impl ToLang for ExprOperator {
         match s {
             ExprOperator::Borrow(a) => {
                 p.push_str("&", a.span_ref);
+                if a.raw {
+                    p.push_str("raw", a.span_raw.unwrap());
+                    p.push_raw(" ");
+                }
                 if a.mut_ {
                     p.push_str("mut", a.span_mut.unwrap());
                     p.push_raw(" ");
+                } else if a.raw {
+                    p.push_raw("const ");
                 }
                 p.push_rust(&a.expr);
             }
@@ -5011,8 +5017,13 @@ impl ToLang for ExprOperator {
         match s {
             ExprOperator::Borrow(a) => {
                 p.push_raw("&");
+                if a.raw {
+                    p.push_raw("raw ");
+                }
                 if a.mut_ {
                     p.push_raw("mut ");
+                } else if a.raw {
+                    p.push_raw("const ");
                 }
                 p.push_u(&a.expr);
             }
@@ -5124,10 +5135,12 @@ impl ToLang for ExprOperator {
 
 #[derive(Debug, Default)]
 pub struct ExprBorrow {
+    pub raw: bool,
     pub mut_: bool,
     pub expr: Expr,
 
     pub span_ref: Span,
+    pub span_raw: Option<Span>,
     pub span_mut: Option<Span>,
 }
 #[derive(Debug)]

@@ -4204,28 +4204,18 @@ impl Parse {
 
                     // unary Expr
                     Op::BitAnd => {
-                        let mut borrow = ExprBorrow::default();
-                        borrow.span_ref = token.span;
-                        let token = s.current();
-                        if matches!(&token.code, T![mut]) {
-                            borrow.span_mut = Some(token.span);
-                            borrow.mut_ = true;
-                            s.plusplus();
-                        }
-                        borrow.expr = s.parse_binary_expr()?;
+                        let borrow = parse_borrow(s, &token, false)?;
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Operator(ExprOperator::Borrow(borrow)),
                         ));
                     }
                     Op::And => {
-                        let mut borrow = ExprBorrow::default();
-                        if matches!(&s.current().code, T![mut]) {
-                            borrow.mut_ = true;
-                            s.plusplus();
-                        }
-                        borrow.expr = s.parse_binary_expr()?;
+                        let borrow = parse_borrow(s, &token, true)?;
 
                         let mut outer_borrow = ExprBorrow::default();
+                        let mut outer_span = token.span;
+                        outer_span.width = 1;
+                        outer_borrow.span_ref = outer_span;
                         outer_borrow.expr = Expr {
                             outer_attrs: Attrs::default(),
                             payload: ExprPayload::WithoutBlock(Box::new(
@@ -4294,6 +4284,43 @@ impl Parse {
         }
 
         return Ok(r);
+
+        fn parse_borrow(s: &Parse, token: &Token, is_inner: bool) -> ParseResult<ExprBorrow> {
+            let mut borrow = ExprBorrow::default();
+            let mut inner_span = token.span;
+            if is_inner {
+                inner_span.column += 1;
+                inner_span.width = 1;
+            }
+            borrow.span_ref = inner_span;
+            let token = s.current();
+            if matches!(&token.code, T!["["]) {
+                s.plusplus();
+                let token = s.current();
+                let TokenCode::Identifier(ident) = &token.code else {
+                    return Err(
+                        s.panic(token, &format!("illegal token {:?} for borrow expr", token))
+                    );
+                };
+                if ident.id != "raw" {
+                    return Err(
+                        s.panic(token, &format!("illegal id {:?} for borrow expr", ident.id))
+                    );
+                }
+                borrow.span_raw = Some(token.span);
+                borrow.raw = true;
+                s.plusplus();
+                s.expect(T!["]"])?;
+            }
+            let token = s.current();
+            if matches!(&token.code, T![mut]) {
+                borrow.span_mut = Some(token.span);
+                borrow.mut_ = true;
+                s.plusplus();
+            }
+            borrow.expr = s.parse_binary_expr()?;
+            return Ok(borrow);
+        }
 
         fn parse_struct_expr_field(s: &Parse) -> ParseResult<ExprStructField> {
             let r;
