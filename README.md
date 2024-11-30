@@ -1482,10 +1482,12 @@ statement and expression
 
 - [impl Trait](https://blog.rust-lang.org/2024/09/05/impl-trait-capture-rules.html)
 
+- a new u-analyzer: a wrapper around rust-analyzer, being both a server and a client
+
 ## Fantasy
 
-- What a Rust with GC be like?
+- What a Rust with GC is like?
 	- prior art: Go
 
-- What an interpeted scripting Rust be like?
+- What an interpreted scripting Rust is like?
 	- prior art: Lua, JavaScript
