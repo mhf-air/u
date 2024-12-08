@@ -52,6 +52,13 @@
 		- Option, Result
 		- etc.
 
+### Send, Sync
+
+	- Send, and Sync: most types
+	- Send, not Sync: Cell, Ref-cell, Unsafe-cell, etc.
+	- Sync, not Send: Mutex-guard, types that use TLS in Drop, etc.
+	- not Send, not Sync: Rc, raw pointers, etc.
+
 ### compared with C
 
 	Rust puts extreme restrictions on C by default, then offer workarounds
