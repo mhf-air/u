@@ -212,13 +212,14 @@ Point[T] type = impl Iterator[Item ops..Example[T]]
 Point type = [S]..f
 Point type = [S as Copy]..f
 
-foo['a, T] func[async, unsafe](a i32, b i32) i32 where {
+foo['a, 'b, T] func[async, unsafe](a i32, b i32) i32 where {
 	T           Iterator
 	T..Item     Copy
 	string      Partial-eq[T]
 	T           Iterator[Item Copy]
 	(func(T))   Iterator
 	f           Box[dyn Fn-mut(&mut T) + 'a]
+	'a          'b
 }{}
 
 f func(
@@ -380,6 +381,9 @@ super..Person impl {}
 
 apply[F] func(f F) where { F Fn-once() } { }
 apply[F Fn-once()] func(f F) { }
+
+capture['a, T] func(x &'a (), y T) impl Sized + use['a, T, Self] {}
+capture['a, T] func(x &'a (), y T) impl Sized + use[] {}
 
 extern[unsafe] "C" {
 	abs func(input i32, ...) i32

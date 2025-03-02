@@ -1233,7 +1233,7 @@ impl Parse {
         while s.has_more() {
             let token = s.current();
             match &token.code {
-                T!["]"] | T![,] => {
+                T!["]"] | T![,] | T![;] => {
                     break;
                 }
                 TokenCode::Lifetime(identifier) => {
@@ -1277,8 +1277,54 @@ impl Parse {
             let token = s.current();
 
             if let TokenCode::Lifetime(identifier) = &token.code {
-                r.items.push(TypeParamBound::Lifetime(identifier.clone()));
+                r.items.push(TypeParamBound::Lifetime(Lifetime {
+                    name: identifier.clone(),
+                }));
                 s.plusplus();
+            } else if matches!(&token.code, T![use]) {
+                let span_use = token.span;
+                s.plusplus();
+                let token = s.current();
+                let span_square_open = token.span;
+                s.expect(T!["["])?;
+                let mut items = Vec::new();
+                while s.has_more() {
+                    let token = s.current();
+                    s.plusplus();
+                    match &token.code {
+                        TokenCode::Lifetime(identifier) => {
+                            items.push(UseBoundGenericArg::Lifetime(Lifetime {
+                                name: identifier.clone(),
+                            }));
+                        }
+                        TokenCode::Identifier(identifier) => {
+                            items.push(UseBoundGenericArg::Id(identifier.clone()));
+                        }
+                        T![Self] => {
+                            items.push(UseBoundGenericArg::Self_(token.span));
+                        }
+                        T![,] => {
+                            // skip check for now
+                        }
+                        T!["]"] => {
+                            let span_square_close = token.span;
+                            let use_bound = UseBound {
+                                items,
+                                span_use,
+                                span_square_open,
+                                span_square_close,
+                            };
+                            r.items.push(TypeParamBound::UseBound(use_bound));
+                            break;
+                        }
+                        _ => {
+                            return Err(s.panic(
+                                token,
+                                &format!("illegal token {:?} for type param bounds", token),
+                            ));
+                        }
+                    }
+                }
             } else {
                 let mut bound = InterfaceBound::default();
                 // possible ?
@@ -1378,7 +1424,6 @@ impl Parse {
                 s.plusplus();
                 break;
             }
-            let token = s.current();
             let stmt = s.parse_stmt()?;
             if let Stmt::Item(item) = stmt {
                 r.items.push(item);
@@ -4979,9 +5024,12 @@ impl Parse {
                 break;
             }
             if let TokenCode::Lifetime(identifier) = &token.code {
+                s.plusplus();
                 let bounds = s.parse_lifetime_bounds()?;
                 let item = WhereItemLifetime {
-                    lifetime: identifier.clone(),
+                    lifetime: Lifetime {
+                        name: identifier.clone(),
+                    },
                     lifetime_bounds: bounds.lifetime_bounds,
                 };
                 r.items.push(WhereItem::Lifetime(item));

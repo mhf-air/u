@@ -2416,7 +2416,7 @@ impl Default for GenericParamPayload {
 pub struct LifetimeParam {
     pub lifetime_bounds: Vec<Lifetime>,
 }
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Lifetime {
     pub name: Identifier,
 }
@@ -2549,7 +2549,7 @@ impl ToLang for WhereItem {
 }
 #[derive(Debug, Default)]
 pub struct WhereItemLifetime {
-    pub lifetime: Identifier,
+    pub lifetime: Lifetime,
     pub lifetime_bounds: Vec<Lifetime>,
 }
 #[derive(Debug, Default)]
@@ -2588,33 +2588,94 @@ impl ToLang for TypeParamBounds {
 }
 #[derive(Debug)]
 pub enum TypeParamBound {
-    Lifetime(Identifier),
+    Lifetime(Lifetime),
     InterfaceBound(InterfaceBound),
+    UseBound(UseBound),
 }
 impl ToLang for TypeParamBound {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
         match s {
-            TypeParamBound::Lifetime(a) => {
-                p.push_raw("'");
-                p.push_rust(a);
-            }
+            TypeParamBound::Lifetime(a) => p.push_rust(a),
             TypeParamBound::InterfaceBound(a) => p.push_rust(a),
+            TypeParamBound::UseBound(a) => p.push_rust(a),
         }
     }
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
         match s {
-            TypeParamBound::Lifetime(a) => {
-                p.push_raw("'");
-                p.push_u(a);
-            }
+            TypeParamBound::Lifetime(a) => p.push_u(a),
             TypeParamBound::InterfaceBound(a) => p.push_u(a),
+            TypeParamBound::UseBound(a) => p.push_u(a),
         }
     }
 }
+
+#[derive(Debug, Default)]
+pub struct UseBound {
+    pub items: Vec<UseBoundGenericArg>,
+
+    pub span_use: Span,
+    pub span_square_open: Span,
+    pub span_square_close: Span,
+}
+#[derive(Debug)]
+pub enum UseBoundGenericArg {
+    Lifetime(Lifetime),
+    Id(Identifier),
+    Self_(Span),
+}
+impl ToLang for UseBound {
+    fn to_rust(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        p.push_str("use", s.span_use);
+        p.push_str("<", s.span_square_open);
+        for (i, item) in s.items.iter().enumerate() {
+            if i != 0 {
+                p.push_raw(", ");
+            }
+            p.push_rust(item);
+        }
+        p.push_str(">", s.span_square_close);
+    }
+    fn to_u(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        p.push_str("use", s.span_use);
+        p.push_str("<", s.span_square_open);
+        for (i, item) in s.items.iter().enumerate() {
+            if i != 0 {
+                p.push_raw(", ");
+            }
+            p.push_u(item);
+        }
+        p.push_str(">", s.span_square_close);
+    }
+}
+impl ToLang for UseBoundGenericArg {
+    fn to_rust(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        match s {
+            UseBoundGenericArg::Lifetime(a) => p.push_rust(a),
+            UseBoundGenericArg::Id(a) => p.push_rust(a),
+            UseBoundGenericArg::Self_(a) => p.push_str("Self", *a),
+        }
+    }
+    fn to_u(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        match s {
+            UseBoundGenericArg::Lifetime(a) => p.push_rust(a),
+            UseBoundGenericArg::Id(a) => p.push_rust(a),
+            UseBoundGenericArg::Self_(a) => p.push_str("Self", *a),
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct InterfaceBound {
     pub unsized_: bool,
