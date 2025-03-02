@@ -1256,6 +1256,8 @@ impl ToLang for Token {
                     Keyword::Unsized => "unsized",
                     Keyword::Virtual => "virtual",
                     Keyword::Yield => "yield",
+                    Keyword::Try => "try",
+                    Keyword::Gen => "gen",
                 };
                 p.push_str(a, s.span);
             }
@@ -1405,6 +1407,8 @@ impl ToLang for Token {
                 Keyword::Unsized => p.push_raw("unsized"),
                 Keyword::Virtual => p.push_raw("virtual"),
                 Keyword::Yield => p.push_raw("yield"),
+                Keyword::Try => p.push_raw("try"),
+                Keyword::Gen => p.push_raw("gen"),
             },
             TokenCode::Assign(assign) => match assign {
                 Assign::Assign => p.push_raw("="),
@@ -2013,6 +2017,8 @@ pub enum Keyword {
     Unsized,
     Virtual,
     Yield,
+    Try,
+    Gen,
 }
 
 impl fmt::Debug for Keyword {
@@ -2073,6 +2079,8 @@ impl fmt::Debug for Keyword {
             Self::Unsized => write!(f, "unsized"),
             Self::Virtual => write!(f, "virtual"),
             Self::Yield => write!(f, "yield"),
+            Self::Try => write!(f, "try"),
+            Self::Gen => write!(f, "gen"),
         }
     }
 }
@@ -2445,6 +2453,8 @@ macro_rules! T {
     [ unsized ] => { TokenCode::Keyword(Keyword::Unsized) };
     [ virtual ] => { TokenCode::Keyword(Keyword::Virtual) };
     [ yield ] => { TokenCode::Keyword(Keyword::Yield) };
+    [ try ] => { TokenCode::Keyword(Keyword::Try) };
+    [ gen ] => { TokenCode::Keyword(Keyword::Gen) };
 
     // op
     [ + ] => { TokenCode::Op(Op::Add) };

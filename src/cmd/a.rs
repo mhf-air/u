@@ -663,7 +663,7 @@ u new my-project
             r#"[workspace]
 members = ["crates/*"]
 default-members = ["{}"]
-resolver = "2"
+resolver = "3"
 
 [workspace.package]
 version = "0.1.0"

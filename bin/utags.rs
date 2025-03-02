@@ -748,11 +748,11 @@ fn impl_items(p: &mut String, a: &u::Impl, filepath: &str, mod_: &Vec<&str>) {
     }
 }
 
-fn nested_ctype(mod_: &Vec<&str>, a: &str, gen: &Option<u::Generics>) -> String {
+fn nested_ctype(mod_: &Vec<&str>, a: &str, g: &Option<u::Generics>) -> String {
     let mut new_mod = mod_.clone();
     new_mod.push(a);
     let mut r = new_mod.join("..");
-    let generics = generics_text(gen);
+    let generics = generics_text(g);
     if let Some(b) = generics {
         r.push_str(&b);
     }
