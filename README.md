@@ -980,7 +980,7 @@ declaration
 
 	# --------------------------------------------------
 	# extern crate
-	# (as of rust 2021, this is rarely used)
+	# (as of rust 2024, this is rarely used)
 	crate {
 		std
 		ruststd std
