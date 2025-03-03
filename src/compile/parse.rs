@@ -4460,6 +4460,8 @@ impl Parse {
     // || Expr
     // || -> Type BlockExpr
     // |[move] a, b, c| Expr
+    // |[async] a, b, c| Expr
+    // |[async, move] a, b, c| Expr
     fn parse_closure_expr(&self) -> ParseResult<ExprClosure> {
         let s = self;
 
@@ -4474,10 +4476,22 @@ impl Parse {
                 while s.has_more() {
                     let token = s.current();
                     if matches!(token.code, T!["["]) {
-                        r.move_ = true;
-                        r.span_move = Some(token.span);
                         s.plusplus();
-                        s.expect(T![move])?;
+                        let token = s.current();
+                        if matches!(token.code, T![async]) {
+                            r.async_ = true;
+                            r.span_async = Some(token.span);
+                            s.plusplus();
+                            if matches!(s.current().code, T![,]) {
+                                s.plusplus();
+                            }
+                        }
+                        let token = s.current();
+                        if matches!(token.code, T![move]) {
+                            r.move_ = true;
+                            r.span_move = Some(token.span);
+                            s.plusplus();
+                        }
                         s.expect(T!["]"])?;
                     }
 

@@ -5788,11 +5788,13 @@ pub struct FuncParamOptionalType {
 }
 #[derive(Debug, Default)]
 pub struct ExprClosure {
+    pub async_: bool,
     pub move_: bool,
     pub params: Vec<FuncParamOptionalType>,
     pub return_type: Option<TypeNoBounds>,
     pub expr: Expr,
 
+    pub span_async: Option<Span>,
     pub span_move: Option<Span>,
     pub span_paren_open: Span,
     pub span_paren_close: Span,
@@ -5801,6 +5803,10 @@ impl ToLang for ExprClosure {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
+        if s.async_ {
+            p.push_str("async", s.span_async.unwrap());
+            p.push_raw(" ");
+        }
         if s.move_ {
             p.push_str("move", s.span_move.unwrap());
             p.push_raw(" ");
@@ -5833,6 +5839,9 @@ impl ToLang for ExprClosure {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
+        if s.async_ {
+            p.push_raw("async ");
+        }
         if s.move_ {
             p.push_raw("move ");
         }

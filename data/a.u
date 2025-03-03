@@ -464,6 +464,8 @@ f func() {
 	a(|[move] a, b| { ret 1 })
 	a(|-| { p -> (a, b) })
 	a(|| { {} -> (a, b) })
+	a(|[async]| { ret 1 })
+	a(|[async, move]| { ret 1 })
 }
 
 f func() {
