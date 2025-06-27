@@ -4560,18 +4560,7 @@ impl ToLang for ExprLoop {
             ExprLoopPayload::Loop => p.push_str("loop", s.span_for),
             ExprLoopPayload::While(a) => {
                 p.push_str("while", s.span_for);
-                p.push_raw(" ");
-                if !a.match_arm_patterns.is_empty() {
-                    p.push_raw("let ");
-                    for (i, item) in a.match_arm_patterns.iter().enumerate() {
-                        if i != 0 {
-                            p.push_raw("| ");
-                        }
-                        p.push_rust(item);
-                    }
-                    p.push_raw(" = ");
-                }
-                p.push_rust(&a.expr);
+                p.push_rust(&a.conditions);
             }
             ExprLoopPayload::In(a) => {
                 p.push_str("for", s.span_for);
@@ -4600,17 +4589,7 @@ impl ToLang for ExprLoop {
             ExprLoopPayload::Loop => p.push_raw("loop"),
             ExprLoopPayload::While(a) => {
                 p.push_raw("while ");
-                if !a.match_arm_patterns.is_empty() {
-                    p.push_raw("let ");
-                    for (i, item) in a.match_arm_patterns.iter().enumerate() {
-                        if i != 0 {
-                            p.push_raw("| ");
-                        }
-                        p.push_u(item);
-                    }
-                    p.push_raw(" = ");
-                }
-                p.push_u(&a.expr);
+                p.push_u(&a.conditions);
             }
             ExprLoopPayload::In(a) => {
                 p.push_raw("for ");
@@ -4633,8 +4612,7 @@ pub enum ExprLoopPayload {
 // while and while let
 #[derive(Debug)]
 pub struct ExprLoopWhile {
-    pub expr: Expr, // except struct expression
-    pub match_arm_patterns: Vec<Pattern>,
+    pub conditions: Conditions,
 }
 // in
 #[derive(Debug)]
@@ -4645,10 +4623,99 @@ pub struct ExprLoopIn {
     pub span_in: Span,
 }
 
+#[derive(Debug)]
+pub enum Conditions {
+    Expr(Expr),
+    LetChain(Vec<LetChainCondition>),
+}
+impl Default for Conditions {
+    fn default() -> Self {
+        Conditions::LetChain(Vec::new())
+    }
+}
+impl ToLang for Conditions {
+    fn to_rust(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        p.push_raw(" ");
+        match &s {
+            Conditions::Expr(expr) => {
+                p.push_rust(expr);
+            }
+            Conditions::LetChain(list) => {
+                for (i, item) in list.iter().enumerate() {
+                    if i != 0 {
+                        p.push_raw(" && ");
+                    }
+                    match item {
+                        LetChainCondition::Expr(expr) => {
+                            p.push_rust(expr);
+                        }
+                        LetChainCondition::Condition(a) => {
+                            p.push_rust(&a.outer_attrs);
+                            p.push_raw("let ");
+                            p.push_rust(&a.pattern);
+                            p.push_raw(" = ");
+                            p.push_rust(&a.scrutinee);
+                        }
+                    }
+                }
+            }
+        }
+        p.push_raw(" ");
+    }
+    fn to_u(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        p.push_raw(" ");
+        match &s {
+            Conditions::Expr(expr) => {
+                p.push_u(expr);
+            }
+            Conditions::LetChain(list) => {
+                for (i, item) in list.iter().enumerate() {
+                    if i != 0 {
+                        p.push_raw("&& ");
+                    }
+                    match item {
+                        LetChainCondition::Expr(expr) => {
+                            p.push_u(expr);
+                        }
+                        LetChainCondition::Condition(a) => {
+                            p.push_u(&a.outer_attrs);
+                            p.push_raw("let ");
+                            p.push_u(&a.pattern);
+                            p.push_raw(" = ");
+                            p.push_u(&a.scrutinee);
+                        }
+                    }
+                }
+            }
+        }
+        p.push_raw(" ");
+    }
+}
+
+#[derive(Debug)]
+pub enum LetChainCondition {
+    Expr(Expr),
+    Condition(LetChainConditionItem),
+}
+impl Default for LetChainCondition {
+    fn default() -> Self {
+        LetChainCondition::Expr(Expr::default())
+    }
+}
+#[derive(Debug)]
+pub struct LetChainConditionItem {
+    pub outer_attrs: Attrs,
+    pub pattern: Pattern,
+    pub scrutinee: Expr,
+}
+
 #[derive(Debug, Default)]
 pub struct ExprIf {
-    pub predicate: Expr, // except struct expression
-    pub match_arm_patterns: Vec<Pattern>,
+    pub conditions: Conditions,
     pub body: BlockExpr,
     pub else_: Option<ExprIfElse>,
 
@@ -4660,19 +4727,7 @@ impl ToLang for ExprIf {
         let s = self;
 
         p.push_str("if", s.span_if);
-        p.push_raw(" ");
-        if !s.match_arm_patterns.is_empty() {
-            p.push_raw("let ");
-            for (i, item) in s.match_arm_patterns.iter().enumerate() {
-                if i != 0 {
-                    p.push_raw("| ");
-                }
-                p.push_rust(item);
-            }
-            p.push_raw(" = ");
-        }
-        p.push_rust(&s.predicate);
-        p.push_raw(" ");
+        p.push_rust(&s.conditions);
         p.push_rust(&s.body);
 
         if let Some(else_) = &s.else_ {
@@ -4689,17 +4744,7 @@ impl ToLang for ExprIf {
         let s = self;
 
         p.push_raw("if ");
-        if !s.match_arm_patterns.is_empty() {
-            p.push_raw("let ");
-            for (i, item) in s.match_arm_patterns.iter().enumerate() {
-                if i != 0 {
-                    p.push_raw("| ");
-                }
-                p.push_u(item);
-            }
-            p.push_raw(" = ");
-        }
-        p.push_u(&s.predicate);
+        p.push_u(&s.conditions);
         p.push_u(&s.body);
 
         if let Some(else_) = &s.else_ {
@@ -4790,7 +4835,7 @@ pub struct ExprMatchItem {
 #[derive(Debug, Default)]
 pub struct ExprMatchArm {
     pub outer_attrs: Attrs,
-    pub patterns: Vec<Pattern>,
+    pub pattern: Pattern,
     pub guard: Option<ExprMatchArmGuard>,
 }
 impl ToLang for ExprMatchArm {
@@ -4798,12 +4843,7 @@ impl ToLang for ExprMatchArm {
         let s = self;
 
         p.push_rust(&s.outer_attrs);
-        for (i, item) in s.patterns.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(" | ");
-            }
-            p.push_rust(item);
-        }
+        p.push_rust(&s.pattern);
         if let Some(guard) = &s.guard {
             p.push_raw(" ");
             p.push_str("if", guard.span_if);
@@ -4815,12 +4855,7 @@ impl ToLang for ExprMatchArm {
         let s = self;
 
         p.push_u(&s.outer_attrs);
-        for (i, item) in s.patterns.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(" | ");
-            }
-            p.push_u(item);
-        }
+        p.push_u(&s.pattern);
         if let Some(guard) = &s.guard {
             p.push_raw(" if ");
             p.push_u(&guard.expr);

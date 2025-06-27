@@ -524,9 +524,29 @@ impl Fmt {
             s.fmt_stmt(stmt);
         }
     }
+    fn fmt_conditions(&mut self, conditions: cc::Conditions) {
+        let s = self;
+        match conditions {
+            cc::Conditions::Expr(expr) => {
+                s.fmt_expr(expr);
+            }
+            cc::Conditions::LetChain(list) => {
+                for item in list {
+                    match item {
+                        cc::LetChainCondition::Expr(expr) => {
+                            s.fmt_expr(expr);
+                        }
+                        cc::LetChainCondition::Condition(a) => {
+                            s.fmt_expr(a.scrutinee);
+                        }
+                    }
+                }
+            }
+        }
+    }
     fn fmt_if(&mut self, expr_if: cc::ExprIf) {
         let s = self;
-        s.fmt_expr(expr_if.predicate);
+        s.fmt_conditions(expr_if.conditions);
         s.fmt_block(expr_if.body);
         if let Some(e) = expr_if.else_ {
             match e {

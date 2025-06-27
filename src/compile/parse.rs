@@ -3006,13 +3006,8 @@ impl Parse {
             match &special_token.code {
                 // for Expr -> Patterns {
                 T![->] => {
-                    let expr = s.parse_expr()?;
-                    s.expect(T![->])?;
-                    let match_arm_patterns = s.parse_match_arm_patterns_stop()?;
-                    r.payload = ExprLoopPayload::While(ExprLoopWhile {
-                        expr,
-                        match_arm_patterns,
-                    });
+                    let conditions = s.parse_conditions()?;
+                    r.payload = ExprLoopPayload::While(ExprLoopWhile { conditions });
                 }
                 // for Pattern in Expr {
                 // for identifter, identifier in Expr {
@@ -3063,14 +3058,8 @@ impl Parse {
             }
         } else {
             // for Expr {
-            s.stop_on_brace_open.set(true);
-            let expr = s.parse_expr()?;
-            s.stop_on_brace_open.set(false);
-
-            r.payload = ExprLoopPayload::While(ExprLoopWhile {
-                expr,
-                match_arm_patterns: Vec::new(),
-            });
+            let conditions = s.parse_conditions()?;
+            r.payload = ExprLoopPayload::While(ExprLoopWhile { conditions });
         }
 
         // for auto completion
@@ -3086,20 +3075,61 @@ impl Parse {
         Ok(r)
     }
 
+    fn parse_conditions(&self) -> ParseResult<Conditions> {
+        let s = self;
+
+        let mut r = Vec::new();
+        loop {
+            let outer_attrs = s.parse_outer_attrs()?;
+
+            s.stop_on_brace_open.set(true);
+            let expr = s.parse_expr()?;
+            s.stop_on_brace_open.set(false);
+
+            if !matches!(&s.current().code, T![->]) {
+                r.push(LetChainCondition::Expr(expr));
+            } else {
+                s.plusplus();
+                let pattern = s.parse_match_arm_patterns_stop()?;
+                let a = LetChainConditionItem {
+                    outer_attrs,
+                    pattern,
+                    scrutinee: expr,
+                };
+                r.push(LetChainCondition::Condition(a));
+            }
+
+            let token = s.current();
+            match &token.code {
+                T![&&] => {
+                    s.plusplus();
+                    continue;
+                }
+                T!["{"] => {
+                    break;
+                }
+                _ => {
+                    return Err(s.panic(token, &format!("expected && or {{ but got {:?}", token)));
+                }
+            }
+        }
+
+        if r.len() == 1 && matches!(r[0], LetChainCondition::Expr(_)) {
+            let a = mem::take(&mut r[0]);
+            if let LetChainCondition::Expr(b) = a {
+                return Ok(Conditions::Expr(b));
+            }
+        }
+        return Ok(Conditions::LetChain(r));
+    }
+
     // after if
     fn parse_if(&self) -> ParseResult<ExprIf> {
         let s = self;
 
         let mut r = ExprIf::default();
 
-        s.stop_on_brace_open.set(true);
-        r.predicate = s.parse_expr()?;
-        s.stop_on_brace_open.set(false);
-
-        if matches!(&s.current().code, T![->]) {
-            s.plusplus();
-            r.match_arm_patterns = s.parse_match_arm_patterns_stop()?;
-        }
+        r.conditions = s.parse_conditions()?;
 
         // for auto completion
         if s.magic && matches!(&s.current().code, T![;]) {
@@ -3177,7 +3207,7 @@ impl Parse {
             r.arm.outer_attrs = s.parse_outer_attrs()?;
 
             // patterns
-            r.arm.patterns = s.parse_match_arm_patterns()?;
+            r.arm.pattern = s.parse_pattern()?;
 
             // guard
             let token = s.current();
@@ -5370,7 +5400,7 @@ impl Parse {
     // --------------------------------------------------------------------------------
     // pattern
 
-    fn parse_match_arm_patterns_stop(&self) -> ParseResult<Vec<Pattern>> {
+    fn parse_match_arm_patterns_stop(&self) -> ParseResult<Pattern> {
         let s = self;
 
         // find the first } token, check if it is followed by a {,
@@ -5401,7 +5431,7 @@ impl Parse {
             s.stop_on_brace_open.set(true);
         }
 
-        let r = s.parse_match_arm_patterns()?;
+        let r = s.parse_pattern()?;
 
         if stop_set {
             s.stop_on_brace_open.set(false);
@@ -5460,22 +5490,6 @@ impl Parse {
 
             Ok(start)
         }
-    }
-
-    fn parse_match_arm_patterns(&self) -> ParseResult<Vec<Pattern>> {
-        let s = self;
-
-        let mut r: Vec<Pattern> = Vec::new();
-
-        while s.has_more() {
-            r.push(s.parse_pattern()?);
-            if !matches!(&s.current().code, T![|]) {
-                break;
-            }
-            s.plusplus();
-        }
-
-        Ok(r)
     }
 
     fn parse_pattern(&self) -> ParseResult<Pattern> {

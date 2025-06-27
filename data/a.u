@@ -514,6 +514,11 @@ f func() {
 }
 
 f func() {
+	if v -> Semver { major, minor, ... } {
+	}
+}
+
+f func() {
 	b let = if a < 2 {
 		< ~1
 	} else {
@@ -627,4 +632,17 @@ vec macro {
 			temp-vec
 		}
 	};
+}
+
+f func() {
+	if v -> E..X(n) | E..Y(n) {
+	}
+    if a -> Some(b) {
+    }
+    if a == b && #[some-attr] outer -> Some(inner) &&
+            inner -> Some(number) &&
+            number == 1 {
+    }
+    if a == b && c -> Some(n) && n > 0 {
+    }
 }

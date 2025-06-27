@@ -1478,8 +1478,6 @@ statement and expression
 
 - Cargo configuration for README.md and other static files
 
-- [if-let-chains](https://rust-lang.github.io/rfcs/2497-if-let-chains.html)
-
 - a new u-analyzer: a wrapper around rust-analyzer, being both a server and a client
 
 ## Fantasy
