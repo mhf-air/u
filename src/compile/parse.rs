@@ -269,6 +269,14 @@ impl Parse {
                 delim_open = Pair::DoubleBraceOpen;
                 delim_close = Pair::DoubleBraceClose;
             }
+            T!["#["] => {
+                delim_open = Pair::OuterAttr;
+                delim_close = Pair::SquareClose;
+            }
+            T!["#!["] => {
+                delim_open = Pair::InnerAttr;
+                delim_close = Pair::SquareClose;
+            }
             _ => return Err(s.panic(token, &format!("illegal token {:?} in skip_pair", token))),
         }
 
@@ -3101,7 +3109,7 @@ impl Parse {
 
             let token = s.current();
             match &token.code {
-                T![&&] => {
+                T![,] => {
                     s.plusplus();
                     continue;
                 }
@@ -3109,7 +3117,7 @@ impl Parse {
                     break;
                 }
                 _ => {
-                    return Err(s.panic(token, &format!("expected && or {{ but got {:?}", token)));
+                    return Err(s.panic(token, &format!("expected , or {{ but got {:?}", token)));
                 }
             }
         }
@@ -5457,6 +5465,14 @@ impl Parse {
                 T!["{{"] => {
                     delim_open = Pair::DoubleBraceOpen;
                     delim_close = Pair::DoubleBraceClose;
+                }
+                T!["#["] => {
+                    delim_open = Pair::OuterAttr;
+                    delim_close = Pair::SquareClose;
+                }
+                T!["#!["] => {
+                    delim_open = Pair::InnerAttr;
+                    delim_close = Pair::SquareClose;
                 }
                 _ => {
                     return Err(s.panic(

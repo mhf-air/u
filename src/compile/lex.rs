@@ -91,7 +91,8 @@ impl Lex {
             TokenCode::Assign(a) => format!("{:?}", a).len(),
             TokenCode::Op(a) => format!("{:?}", a).len(),
             TokenCode::Pair(a) => match a {
-                Pair::DoubleBraceOpen | Pair::DoubleBraceClose => 2,
+                Pair::DoubleBraceOpen | Pair::DoubleBraceClose | Pair::OuterAttr => 2,
+                Pair::InnerAttr => 3,
                 _ => 1,
             },
         };
@@ -1012,7 +1013,7 @@ impl Lex {
                 '#' => match next_ch {
                     // #[
                     '[' => {
-                        s.add_token(TokenCode::Op(Op::OuterAttr));
+                        s.add_token(TokenCode::Pair(Pair::OuterAttr));
                         i += 1;
                     }
                     // #![
@@ -1020,7 +1021,7 @@ impl Lex {
                         if i + 2 >= total_len || chars[i + 2] != '[' {
                             return s.panic("expected [ after #!");
                         }
-                        s.add_token(TokenCode::Op(Op::InnerAttr));
+                        s.add_token(TokenCode::Pair(Pair::InnerAttr));
                         i += 2;
                     }
                     // #" "#
@@ -1308,8 +1309,6 @@ impl ToLang for Token {
                     Op::TickTick => "..",
                     Op::TickTickEq => "..=",
                     Op::Pound => "#",
-                    Op::OuterAttr => "#[",
-                    Op::InnerAttr => "#![",
                     Op::Question => "?",
                     Op::At => "@",
                     Op::Comma => ",",
@@ -1335,6 +1334,8 @@ impl ToLang for Token {
                     Pair::BraceClose => "}",
                     Pair::DoubleBraceOpen => "[",
                     Pair::DoubleBraceClose => "]",
+                    Pair::OuterAttr => "#[",
+                    Pair::InnerAttr => "#![",
                 };
                 p.push_str(a, s.span);
             }
@@ -1453,8 +1454,6 @@ impl ToLang for Token {
                 Op::TickTick => p.push_raw("``"),
                 Op::TickTickEq => p.push_raw("``="),
                 Op::Pound => p.push_raw("#"),
-                Op::OuterAttr => p.push_raw("#["),
-                Op::InnerAttr => p.push_raw("#!["),
                 Op::Question => p.push_raw("?"),
                 Op::At => p.push_raw("@"),
                 Op::Comma => p.push_raw(", "),
@@ -1477,6 +1476,8 @@ impl ToLang for Token {
                 Pair::BraceClose => p.push_raw("}"),
                 Pair::DoubleBraceOpen => p.push_raw("{{"),
                 Pair::DoubleBraceClose => p.push_raw("}}"),
+                Pair::OuterAttr => p.push_raw("#["),
+                Pair::InnerAttr => p.push_raw("#!["),
             },
         }
     }
@@ -2216,8 +2217,6 @@ pub enum Op {
     TickTick,
     TickTickEq,
     Pound,
-    OuterAttr,
-    InnerAttr,
     Question,
     At,
     Comma,
@@ -2263,8 +2262,6 @@ impl fmt::Debug for Op {
             Self::TickTick => write!(f, "``"),
             Self::TickTickEq => write!(f, "``="),
             Self::Pound => write!(f, "#"),
-            Self::OuterAttr => write!(f, "#["),
-            Self::InnerAttr => write!(f, "#!["),
             Self::Question => write!(f, "?"),
             Self::At => write!(f, "@"),
             Self::Comma => write!(f, ","),
@@ -2291,6 +2288,8 @@ pub enum Pair {
     BraceClose,
     DoubleBraceOpen,
     DoubleBraceClose,
+    OuterAttr,
+    InnerAttr,
 }
 
 impl fmt::Debug for Pair {
@@ -2304,6 +2303,8 @@ impl fmt::Debug for Pair {
             Self::BraceClose => write!(f, "}}"),
             Self::DoubleBraceOpen => write!(f, "{{{{"),
             Self::DoubleBraceClose => write!(f, "}}}}"),
+            Self::OuterAttr => write!(f, "#["),
+            Self::InnerAttr => write!(f, "#!["),
         }
     }
 }
@@ -2484,8 +2485,6 @@ macro_rules! T {
     [ "``" ] => { TokenCode::Op(Op::TickTick) };
     [ "``=" ] => { TokenCode::Op(Op::TickTickEq) };
     [ # ] => { TokenCode::Op(Op::Pound) };
-    [ "#[" ] => { TokenCode::Op(Op::OuterAttr) };
-    [ "#![" ] => { TokenCode::Op(Op::InnerAttr) };
     [ ? ] => { TokenCode::Op(Op::Question) };
     [ @ ] => { TokenCode::Op(Op::At) };
     [ , ] => { TokenCode::Op(Op::Comma) };
@@ -2522,4 +2521,6 @@ macro_rules! T {
     [ "}" ] => { TokenCode::Pair(Pair::BraceClose) };
     [ "{{" ] => { TokenCode::Pair(Pair::DoubleBraceOpen) };
     [ "}}" ] => { TokenCode::Pair(Pair::DoubleBraceClose) };
+    [ "#[" ] => { TokenCode::Pair(Pair::OuterAttr) };
+    [ "#![" ] => { TokenCode::Pair(Pair::InnerAttr) };
 }

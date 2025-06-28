@@ -386,6 +386,32 @@ example
 	}
 ```
 
+- **use , instead of && as separators between chains of conditions in if and while statements**
+```
+example
+
+	// use , instead of && as separators between chains of conditions,
+	// because && can be regarded as part of the expr
+	if a == b, c && d, #[some-attr] outer -> Some(inner),
+			inner -> Some(number),
+			number == 1 {
+	}
+	if a == b, c -> Some(n), n > 0 {
+	}
+
+	for v -> E..X(n) | E..Y(n) {
+	}
+	for a -> Some(b) {
+	}
+	for a == b, c && d, #[some-attr] outer -> Some(inner),
+			inner -> Some(number),
+			number == 1 {
+	}
+	for a == b, c -> Some(n), n > 0 {
+	}
+
+```
+
 - **allow semicolon(;) as seperators in addition to comma(,) in multi-line pairs**
 
 ```
