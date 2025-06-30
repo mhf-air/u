@@ -16,11 +16,11 @@ I like Rust's semantics, but dislike some of its syntax
 
 	change snake_case, UpperCamelCase, SCREAMING_SNAKE_CASE to **dash-case** because it's the best way to seperate words
 
-	- Upper-camel-case for UpperCamelCase,
-	- set-name for set_name,
-	- name--c for NAME(which is a const),
-	- name--g for NAME(which is a static),
-	- AnYThInGcUsTom--r for AnYThInGcUsTom,
+	- Upper-camel-case for UpperCamelCase
+	- set-name for set_name
+	- name--c for NAME(which is a const)
+	- name--g for NAME(which is a static)
+	- AnYThInGcUsTom--r for AnYThInGcUsTom
 
 	as for identifiers containing digit, forbid '-' followed by a digit, and consider digits as lower-case letters.
 
@@ -99,7 +99,7 @@ example
 		age   i32
 	}
 
-	private-func+(self) func(id string, count i32) i32 {
+	private-func+ func(id string, count i32) i32 {
 		a := 1
 		a let i32 = 1
 		a let mut = 1
@@ -275,7 +275,7 @@ example
 
 - **use + instead of pub for exporting symbols**
 
-	use + after symbol name. + to pub, no + to pub(super) (in Rust, Associated items in a pub Trait are public by default;
+	use + after symbol name. + to pub, no + to pub(crate) (in Rust, Associated items in a pub Trait are public by default;
 	Enum variants in a pub enum are also public by default)
 
 ```
@@ -1505,6 +1505,8 @@ statement and expression
 - Cargo configuration for README.md and other static files
 
 - a new u-analyzer: a wrapper around rust-analyzer, being both a server and a client
+
+- use u-id"default-page" instead of u"default-page"
 
 ## Fantasy
 
