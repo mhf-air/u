@@ -1670,12 +1670,12 @@ impl Literal {
 
         let prefix = p.as_ref().map(String::as_str);
         let lit_str = match prefix {
-            Some("u") => {
+            Some("u-id") => {
                 let mut lit_str = lit_str;
 
                 let mut l = Lex::new();
                 if l.lex(lit_str.text.clone()).is_err() {
-                    return Err("illegal u string");
+                    return Err("illegal u-id string");
                 }
                 let tokens: Vec<Token> = l
                     .tokens

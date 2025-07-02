@@ -279,8 +279,8 @@ impl CmdCompile {
                 if item.has_hyphen {
                     item.name = item.name.replace("-", "_");
                 }
-                buf.push_str(&format!("mod {}___;\n", item.name));
-                buf.push_str(&format!("pub use self::{}___::*;\n", item.name));
+                buf.push_str(&format!("mod _{};\n", item.name));
+                buf.push_str(&format!("pub use _{}::*;\n", item.name));
             }
         }
 

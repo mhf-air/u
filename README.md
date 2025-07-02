@@ -1506,7 +1506,8 @@ statement and expression
 
 - a new u-analyzer: a wrapper around rust-analyzer, being both a server and a client
 
-- use u-id"default-page" instead of u"default-page"
+- maybe rm .u/, instead put .user.rs file along with user.u file. that way I can remove u-path"string",
+  u commands would be easy to write
 
 ## Fantasy
 
