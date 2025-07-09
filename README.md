@@ -28,6 +28,8 @@ I like Rust's semantics, but dislike some of its syntax
 
 	side effect: all minus related operators have to be changed with ~.
 
+	possible future conflict: when ~ is used in Rust
+
 	this needs some adaptation, but the good news is that these operators are not frequently used
 
 ```
@@ -47,6 +49,8 @@ and minus becomes
 	It's worth it, because generics are used more often than arrays
 
 	so turbofish is unneccesary, since [ ] are solely used for generics, all the [ ] in expressions can be transformed to turbofish in Rust
+
+	possible future conflict: when {{ }} is used in Rust
 
 ```
 example
@@ -161,6 +165,11 @@ example
 
 	a++
 	a := if b > 0 { < b } else { < -b }
+
+	a := some-func()
+		.some-method()
+		.b
+		.c
 ```
 
 - **use .. insteaf of :: for path separator**
@@ -168,6 +177,8 @@ example
 	because it's easier to type and distinguishes path segments better
 
 	side effect: have to use `` for Rust's .. operator, etc.
+
+	possible future conflict: when `` is used in Rust
 
 ```
 example
@@ -193,6 +204,8 @@ example
 - **add another syntax for let, and add mut to all function parameters**
 
 	in my opinion, the bindings should be mutable by default, because that is the most frequent situation.
+
+	possible future conflict: when := is used in Rust
 
 ```
 example
@@ -230,16 +243,18 @@ becomes
 
 	"foo"s is translated to "foo".to_owned()
 
-- **add u string**
+	possible future conflict: when ""s is used in Rust
+
+- **add u-id string**
 
 ```
 example
 
 	#[derive(Serialize, Deserialize)]
 	Param struct {
-		#[serde(default = u"default-page")]
+		#[serde(default = u-id"default-page")]
 		page i32
-		#[serde(default = u"api..default-limit")]
+		#[serde(default = u-id"api..default-limit")]
 		limit i32
 	}
 
@@ -306,8 +321,8 @@ example
 unmentioned items are like this
 
 	#[path = "a.rs"]
-	mod a___;
-	pub use self::a___::*;
+	mod _a;
+	pub use _a::*;
 
 or if util is a directory
 
@@ -370,6 +385,8 @@ example
 
 	destructive assignment is not supported, because using a pattern as lvalue is very confusing,
 	and destructive declaration is already sufficent to use
+
+	possible future conflict: when -> is used in Rust as part of an expression
 
 ```
 example
@@ -467,6 +484,8 @@ example
 
 	because it's easier to type(at least in my keyboard layout, where ! is located in "-" in QUERTY keyboard)
 
+	possible future conflict: when ,, is used in Rust
+
 ```
 example
 
@@ -537,6 +556,8 @@ example
 - **drop leading r in raw string literal**
 
 	use #" "#, or ##" "##, or ###" "###, etc.
+
+	possible future conflict: when #""# is used in Rust
 
 - **use ... instead of .. as rest pattern**
 
