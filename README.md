@@ -1537,3 +1537,4 @@ statement and expression
 
 - What an interpreted scripting Rust is like?
 	- prior art: Lua, JavaScript
+	- answer: WASM

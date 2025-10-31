@@ -5101,8 +5101,6 @@ impl Parse {
                     } else {
                         item.type_ = Type::TypeNoBounds(a);
                     }
-                } else {
-                    item.type_ = item.type_;
                 }
 
                 item.bounds = s.parse_type_param_bounds()?;
