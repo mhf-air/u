@@ -14,7 +14,7 @@ I like Rust's semantics, but dislike some of its syntax
 
 - **allow dash(-) in identifiers**
 
-	change snake_case, UpperCamelCase, SCREAMING_SNAKE_CASE to **dash-case** because it's the best way to seperate words
+	change snake_case, UpperCamelCase, SCREAMING_SNAKE_CASE to **dash-case** because it's the best way to separate words
 
 	- Upper-camel-case for UpperCamelCase
 	- set-name for set_name
@@ -384,7 +384,7 @@ example
 	```
 
 	destructive assignment is not supported, because using a pattern as lvalue is very confusing,
-	and destructive declaration is already sufficent to use
+	and destructive declaration is already sufficient to use
 
 	possible future conflict: when -> is used in Rust as part of an expression
 
@@ -429,7 +429,7 @@ example
 
 ```
 
-- **allow semicolon(;) as seperators in addition to comma(,) in multi-line pairs**
+- **allow semicolon(;) as separators in addition to comma(,) in multi-line pairs**
 
 ```
 example
