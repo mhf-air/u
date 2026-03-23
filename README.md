@@ -734,8 +734,9 @@ install vim-u
 	Plug 'mhf-air/vim-u'
 
 modify dense-analysis/ale
-	mkdir ~/.vim/bundle/ale/ale_linters/u
-	cp ~/rust/third/u/src/data/u.vim ~/.vim/bundle/ale/ale_linters/u/u.vim
+	cd ~/.vim/bundle/ale/ale_linters
+	mkdir u
+	cp ~/a/rust/third/rust/u/data/u.vim .
 
 install modified rust-analyzer
 
@@ -745,8 +746,7 @@ install modified rust-analyzer
 		cd rust-analyzer
 		git remote add upstream https://github.com/rust-analyzer/rust-analyzer.git
 		git checkout u
-		cargo install --path crates/rust-analyzer
-		(if this fails, try "cargo install --locked --path crates/rust-analyzer")
+		./u-install.sh
 
 	sync from upstream
 		git checkout master
