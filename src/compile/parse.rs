@@ -3113,11 +3113,14 @@ impl Parse {
 					s.plusplus();
 					continue;
 				}
-				T!["{"] => {
+				// : for match arm
+				T!["{"] | T![:] => {
 					break;
 				}
 				_ => {
-					return Err(s.panic(token, &format!("expected , or {{ but got {:?}", token)));
+					return Err(
+						s.panic(token, &format!("expected , or {{ or : but got {:?}", token))
+					);
 				}
 			}
 		}
@@ -3222,7 +3225,7 @@ impl Parse {
 			if matches!(&token.code, T![if]) {
 				s.plusplus();
 				r.arm.guard = Some(ExprMatchArmGuard {
-					expr: s.parse_expr()?,
+					conditions: s.parse_conditions()?,
 					span_if: token.span,
 				});
 			}

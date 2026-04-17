@@ -568,6 +568,16 @@ f func() {
 			a
 		-:
 	}
+
+	match msg {
+		Some(x) if x > 0: {
+			a()
+		}
+		Some(x) if compute(x) -> Ok(y): {
+			a()
+		}
+		-: {}
+	}
 }
 
 f func() {
@@ -657,4 +667,4 @@ vec macro {
 	};
 }
 
-// current Rust version: 1.94.0
+// current Rust version: 1.95.0

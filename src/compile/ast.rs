@@ -4848,7 +4848,7 @@ impl ToLang for ExprMatchArm {
 			p.push_raw(" ");
 			p.push_str("if", guard.span_if);
 			p.push_raw(" ");
-			p.push_rust(&guard.expr);
+			p.push_rust(&guard.conditions);
 		}
 	}
 	fn to_u(&self, p: &mut LangFormatter) {
@@ -4858,13 +4858,13 @@ impl ToLang for ExprMatchArm {
 		p.push_u(&s.pattern);
 		if let Some(guard) = &s.guard {
 			p.push_raw(" if ");
-			p.push_u(&guard.expr);
+			p.push_u(&guard.conditions);
 		}
 	}
 }
 #[derive(Debug)]
 pub struct ExprMatchArmGuard {
-	pub expr: Expr,
+	pub conditions: Conditions,
 
 	pub span_if: Span,
 }

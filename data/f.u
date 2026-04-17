@@ -1,10 +1,10 @@
 // for fmt
 
 /*
-    a
+	a
 */
 name--c const &str = "
-    a
+	a
 "
 
 f func(
