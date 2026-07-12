@@ -766,7 +766,9 @@ path = "main.rs"
 		io_func!(fs::create_dir(U_LOCAL_ROOT), || U_LOCAL_ROOT);
 		env::set_current_dir(U_LOCAL_ROOT)?;
 		io_func!(fs::copy("../u.toml", "Cargo.toml"), || "../u.toml");
-		let _ = io_func!(fs::copy("../u.lock", "Cargo.lock"), || "../u.lock");
+		if Path::new("../u.lock").exists() {
+			let _ = io_func!(fs::copy("../u.lock", "Cargo.lock"), || "../u.lock");
+		}
 		io_func!(fs::create_dir("crates"), || "crates");
 
 		env::set_current_dir("crates")?;
