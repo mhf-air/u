@@ -446,6 +446,18 @@ impl Lex {
 						continue;
 					}
 					new_i = delta;
+					// for cases such as a.0.0
+					if let Some(a) = s.tokens.last() && matches!(a.code, TokenCode::Op(Op::Dot)) {
+						let a = chars[start..new_i].iter().collect();
+						s.add_token(TokenCode::Literal(Literal {
+							payload: LiteralPayload::Int(a),
+							prefix: None,
+							suffix: None,
+							span: Span::default(),
+						}));
+						i = new_i;
+						continue 'outer;
+					}
 					break;
 				}
 				// possible .
