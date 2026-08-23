@@ -1507,56 +1507,26 @@ impl Parse {
 
 		let mut r = Crate::default();
 
-		// {
-		s.expect(T!["{"])?;
-
-		let mut buf: Vec<Identifier> = Vec::new();
-		let mut start_token = s.current();
-		while s.has_more() {
+		let token = s.current();
+		let TokenCode::Identifier(a) = &token.code else {
+			return Err(s.panic(token, &format!("expected identifier, but got {:?}", token)));
+		};
+		s.plusplus();
+		let mut alias = None;
+		let token = s.current();
+		if matches!(&token.code, T![as]) {
+			s.plusplus();
 			let token = s.current();
-			match &token.code {
-				T!["}"] => {
-					s.plusplus();
-					break;
-				}
-				T![;] => {
-					s.plusplus();
-					match buf.len() {
-						0 => continue,
-						1 => {
-							start_token = s.current();
-							r.items.push(CrateItem {
-								alias: None,
-								name: buf[0].clone(),
-							});
-						}
-						2 => {
-							start_token = s.current();
-							r.items.push(CrateItem {
-								alias: Some(buf[0].clone()),
-								name: buf[1].clone(),
-							});
-						}
-						_ => {
-							return Err(
-								s.panic(start_token, "at most 2 identifiers for a crate item")
-							);
-						}
-					}
-
-					buf.clear();
-				}
-				TokenCode::Identifier(a) => {
-					s.plusplus();
-					buf.push(a.clone());
-				}
-				_ => {
-					return Err(
-						s.panic(token, &format!("expected identifier, but got {:?}", token))
-					);
-				}
+			if let TokenCode::Identifier(a) = &token.code {
+				alias = Some(a.clone());
+				s.plusplus();
 			}
 		}
+		r.items.push(CrateItem {
+			alias,
+			name: a.clone(),
+		});
+		s.expect(T![;])?;
 
 		Ok(r)
 	}

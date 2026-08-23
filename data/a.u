@@ -5,11 +5,9 @@ see the last line for the current Rust version
 
 #![allow(unused-imports)]
 
-crate {
-	std
-	ruststd std
-	- foo
-}
+crate std
+crate std as ruststd
+crate foo as -
 
 import {
 	+ crate..a
