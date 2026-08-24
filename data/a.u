@@ -10,25 +10,25 @@ crate std as ruststd
 crate foo as -
 
 import {
-	+ crate..a
-	+ crate..a..*
-	crate..a..*
-	super..a
-	self..a
-	-..crate-abc..a
+    + crate..a
+    + crate..a..*
+    crate..a..*
+    super..a
+    self..a
+    -..crate-abc..a
 
-	std
-	std..env
-	std..env..consts as env-consts
-	super..Api-result as Result
-	std..option { Option, Option..Some, Option..None as nil }
-	astd..option {
-		Option {
-			self
-			Some
-			None as nil
-		}
-	}
+    std
+    std..env
+    std..env..consts as env-consts
+    super..Api-result as Result
+    std..option { Option, Option..Some, Option..None as nil }
+    astd..option {
+        Option {
+            self
+            Some
+            None as nil
+        }
+    }
 }
 
 import + crate..a
@@ -54,159 +54,159 @@ vis-in-path+(in crate..a..b) mod {}
 
 #[allow(non-camel-case-types)]
 sub+ mod {
-	name--c+ const &str = "hello"
-	name--g static mut &str = "hello"
+    name--c+ const &str = "hello"
+    name--g static mut &str = "hello"
 }
 
 #[derive(Serialize, Deserialize)]
 Param struct {
-	#[serde(default = u"default-page")]
-	page i32
-	#[serde(default = u"api..default-limit")]
-	limit i32
+    #[serde(default = u"default-page")]
+    page   i32
+    #[serde(default = u"api..default-limit")]
+    limit   i32
 }
 
 f func() {
-	d,,(a, b)
-	println,,("{} {:?}", a, b)
+    d,,(a, b)
+    println,,("{} {:?}", a, b)
 
-	quote,,{
-		pub fn api-config() -> api..Api-config {
-			ret api..Api-config {
-				``Default..default()
-			};
-		}
-	}
+    quote,,{
+        pub fn api-config() -> api..Api-config {
+            ret api..Api-config {
+                ``Default..default()
+            };
+        }
+    }
 
-	a := include-str,,("../../some-dir/a")
-	a := std..fs..read-to-string(u-path"some-dir/a").unwrap()
+    a := include-str,,("../../some-dir/a")
+    a := std..fs..read-to-string(u-path"some-dir/a").unwrap()
 }
 
 call,,(1, 2, 3)
 call,,{select a from b}
 call,,[stmt]{
-	name--c+ const &str = "hello"
-	~1
+    name--c+ const &str = "hello"
+    ~1
 
-	a..r#match() as i32
-	a..b() as i32
+    a..r#match() as i32
+    a..b() as i32
 
-	a let (i32, ) = (1, )
-	a -> (1, )
+    a let (i32, ) = (1, )
+    a -> (1, )
 
-	continue
-	break
-	ret
+    continue
+    break
+    ret
 
-	a := '😻'
-	a := 1_234.0E~18_f64
+    a := '😻'
+    a := 1_234.0E~18_f64
 
-	a := 1.0
-	a := a.0
-	a := a.0.0
+    a := 1.0
+    a := a.0
+    a := a.0.0
 
-	a := 'a'
-	a := b'a'
+    a := 'a'
+    a := b'a'
 
-	a := "foo\""
-	a := "foo
+    a := "foo\""
+    a := "foo
 bar"
-	a := #"foo"#
-	a := b#"package
+    a := #"foo"#
+    a := b#"package
 name = "foo"
 # see more
 "#
 
-	a := "foo"s
-	a := "foo".to-owned()
+    a := "foo"s
+    a := "foo".to-owned()
 }
 
 f func() {
-	a{ name: "", ...b }
-	a{
-		name: ""
-		...b
-	}
-	a{
-		name: ""
-		age
-	}
+    a{ name: "", ...b }
+    a{
+        name:   ""
+        ...b
+    }
+    a{
+        name:   ""
+        age
+    }
 
-	(a, b)
-	(
-		a
-		b
-	)
+    (a, b)
+    (
+        a
+        b
+    )
 
-	a let {{i32: 1}}
+    a let {{i32: 1}}
 
-	{{0: 1}}
-	{{0, 1}}
-	{{
-		0,
-		1,
-	}}
-	{{
-		0
-		1
-	}}
-	{{
-		a,
-	}}
-	a let func(i32, ...)
+    {{0: 1}}
+    {{0, 1}}
+    {{
+        0,
+        1,
+    }}
+    {{
+        0
+        1
+    }}
+    {{
+        a,
+    }}
+    a let func(i32, ...)
 
-	f(a, b)
-	a.b(
-		a
-		b
-	)
-	f(
-		a
-		b
-	)
+    f(a, b)
+    a.b(
+        a
+        b
+    )
+    f(
+        a
+        b
+    )
 }
 
 f func() {
-	a{ name: "", ...Default..default() }
-	a{ name: "", ... }
-	a{
-		name: ""
-		...
-	}
+    a{ name: "", ...Default..default() }
+    a{ name: "", ... }
+    a{
+        name:   ""
+        ...
+    }
 
-	a{ name: "", ...b }
+    a{ name: "", ...b }
 }
 
 identifier func() {
-	- := "-"
-	a := "a"
+    - := "-"
+    a := "a"
 
-	c- := "c-"
-	-c := "-c"
-	aa := "aa"
-	aA := "aA"
-	Aa := "Aa"
-	AA := "AA"
+    c- := "c-"
+    -c := "-c"
+    aa := "aa"
+    aA := "aA"
+    Aa := "Aa"
+    AA := "AA"
 
-	-- := "--"
-	--- := "---"
-	--r := "--r"
-	--c := "--c"
-	--g := "--g"
+    -- := "--"
+    --- := "---"
+    --r := "--r"
+    --c := "--c"
+    --g := "--g"
 
-	name--c := "name--c"
-	num--g := "num--g"
+    name--c := "name--c"
+    num--g := "num--g"
 
-	Order := "Order"
-	Order- := "Order-"
-	Order-item := "Order-item"
-	Order-item--r := "Order-item--r"
+    Order := "Order"
+    Order- := "Order-"
+    Order-item := "Order-item"
+    Order-item--r := "Order-item--r"
 
-	order := "order"
-	submit-order := "submit-order"
-	mut- := "mut-"
+    order := "order"
+    submit-order := "submit-order"
+    mut- := "mut-"
 
-	c-void := "c-void"
+    c-void := "c-void"
 }
 
 name--c+ const &str = "hello"
@@ -226,67 +226,67 @@ Point type = [S]..f
 Point type = [S as Copy]..f
 
 foo['a, 'b, T] func[async, unsafe](a i32, b i32) i32 where {
-	T           Iterator
-	T..Item     Copy
-	string      Partial-eq[T]
-	T           Iterator[Item Copy]
-	(func(T))   Iterator
-	f           Box[dyn Fn-mut(&mut T) + 'a]
-	'a          'b
+    T           Iterator
+    T..Item     Copy
+    string      Partial-eq[T]
+    T           Iterator[Item Copy]
+    (func(T))   Iterator
+    f           Box[dyn Fn-mut(&mut T) + 'a]
+    'a          'b
 }{}
 
 f func(
-	a i32
-	b i32
+    a   i32
+    b   i32
 ) {
-	f(
-		a
-		b
-	)
-	a let func(
-		i32
-		i32
-	)
-	vec,,(
-		a
-		b
-	)
+    f(
+        a
+        b
+    )
+    a let func(
+        i32
+        i32
+    )
+    vec,,(
+        a
+        b
+    )
 }
 
 f func(a func(&mut App), b i32) {
-	list.collect[Vec[-]]()
+    list.collect[Vec[-]]()
 
-	id := 1
-	a := &id
-	a := &mut id
-	a := &[raw] id
-	a := &[raw] mut id
+    id := 1
+    a := &id
+    a := &mut id
+    a := &[raw] id
+    a := &[raw] mut id
 
-	a := &&id
-	a := &&mut id
-	a := &&[raw] id
-	a := &&[raw] mut id
+    a := &&id
+    a := &&mut id
+    a := &&[raw] id
+    a := &&[raw] mut id
 }
 
 // special case: wrap the cast type when the type consists of keyword const
 const-c-void[T] func(r &T) *const c-void {
-	ret r as (*const T) as (*const c-void)
+    ret r as (*const T) as (*const c-void)
 }
 
 #[!derive(Debug)]
 Person['a] struct {
-	#[serde(rename = "lnum")]
-	name+ &'a str
-	age   i32
+    #[serde(rename = "lnum")]
+    name+   &'a str
+    age     i32
 }
 
 Person['a] impl fmt..Debug {
-	fmt (&) func(f &mut fmt..Formatter['-]) fmt..Result {
-		f.debug-struct("")
-			.field(&s.name, "")
-			.field(&s.age, "")
-			.finish()
-	}
+    fmt (&) func(f &mut fmt..Formatter['-]) fmt..Result {
+        f.debug-struct("")
+            .field(&s.name, "")
+            .field(&s.age, "")
+            .finish()
+    }
 }
 
 Pair[T, U] struct(+ T, U)
@@ -295,89 +295,89 @@ Foo[N const usize = 10 + 1] struct
 
 #[repr(u8)]
 Color enum {
-	Red = 1
-	Green
-	Blue
+    Red = 1
+    Green
+    Blue
 }
 Color impl {
-	red-2--c const Color = Color..Red
+    red-2--c const Color = Color..Red
 }
 
 #[repr(u8)]
 Foo enum {
-	A(u8)
-	B(i8)
-	C(bool) = 42
+    A(u8)
+    B(i8)
+    C(bool) = 42
 }
 
 Animal[T, E] enum {
-	Dog(string, f64)
-	Cat {
-		name   string
-		weight f64
-	}
+    Dog(string, f64)
+    Cat {
+        name     string
+        weight   f64
+    }
 }
 
 My-union[T] union {
-	name+ string
-	age   i32
+    name+   string
+    age     i32
 }
 
 With-self interface Super[Self] where { Self Sized } {}
 Copy-iterator interface Iterator[Item Copy] {}
 
 Seq[T] interface[unsafe] Display + Debug where { T Copy } {
-	name--c const &str = "hello"
-	Item type = T
-	A type
-	Assoc type Trait2[Assoc2 Copy]
+    name--c const &str = "hello"
+    Item type = T
+    A type
+    Assoc type Trait2[Assoc2 Copy]
 
-	foo func() where { Self Sized } {
-	}
+    foo func() where { Self Sized } {
+    }
 
-	mov (Self) func()
-	mov (Rc[Self]) func()
+    mov (Self) func()
+    mov (Rc[Self]) func()
 
-	len (&) func() u32
-	elt-at (&) func(n u32) T
-	iter[F] (&mut) func(f F) where { F Iterator }
+    len (&) func() u32
+    elt-at (&) func(n u32) T
+    iter[F] (&mut) func(f F) where { F Iterator }
 
-	call,,()
+    call,,()
 }
 
 Foo interface {
-	Bar['a] type
+    Bar['a] type
 
-	Item['a] type where { Self 'a }
-	next['a] (&'a mut) func() Option[Self..Item['a]]
+    Item['a] type where { Self 'a }
+    next['a] (&'a mut) func() Option[Self..Item['a]]
 
-	Pointer[T] type Deref[Target = T]
-	new[T] func(value T) Self..Pointer[T]
+    Pointer[T] type Deref[Target = T]
+    new[T] func(value T) Self..Pointer[T]
 
-	Array['x, N const usize] type where { Self 'x }
-	borrow-array['a, N const usize] (&'a) func() Self..Array['a, N]
+    Array['x, N const usize] type where { Self 'x }
+    borrow-array['a, N const usize] (&'a) func() Self..Array['a, N]
 }
 
 Person impl {
-	test (&) func(a &str) {
-		d,,()
-	}
+    test (&) func(a &str) {
+        d,,()
+    }
 }
 Person impl {
-	abc (&) func(a &str) {
-		d,,()
-	}
+    abc (&) func(a &str) {
+        d,,()
+    }
 
-	init+ (&mut) func(a &str) {
-		d,,()
-	}
-	init+(self) (Self) func(a &str) {
-		d,,()
-	}
+    init+ (&mut) func(a &str) {
+        d,,()
+    }
+    init+(self) (Self) func(a &str) {
+        d,,()
+    }
 }
 
 Point[f32] impl {
-	distance (&) func() f32 {}
+    distance (&) func() f32 {}
 }
 
 {{T: N}} [T, N const usize] impl[unsafe] My-trait {}
@@ -385,9 +385,9 @@ Point[f32] impl {
 (str) [I] impl ops..Index[I] {}
 
 crate..Person impl {
-	abc (&) func() {
-		crate..a
-	}
+    abc (&) func() {
+        crate..a
+    }
 }
 self..Person impl {}
 super..Person impl {}
@@ -399,10 +399,10 @@ capture['a, T] func(x &'a (), y T) impl Sized + use['a, T, Self] {}
 capture['a, T] func(x &'a (), y T) impl Sized + use[] {}
 
 extern[unsafe] "C" {
-	abs func(input i32, ...) i32
-	abs func[safe](input i32, ...) i32
-	name--g static mut i32
-	name--g static[safe] mut i32
+    abs func(input i32, ...) i32
+    abs func[safe](input i32, ...) i32
+    name--g static mut i32
+    name--g static[safe] mut i32
 }
 
 #[no-mangle]
@@ -413,227 +413,227 @@ dangerous func[unsafe]() {
 }
 
 f func() {
-	unsafe {
-		dangerous()
-	}
+    unsafe {
+        dangerous()
+    }
 
-	< unsafe {
-		dangerous()
-	}
+    < unsafe {
+        dangerous()
+    }
 
-	a := unsafe {
-	}
+    a := unsafe {
+    }
 
-	async {
-	}
+    async {
+    }
 
-	a := async[move] {
-	}
+    a := async[move] {
+    }
 
-	const {
-		< 1
-	}
+    const {
+        < 1
+    }
 
-	a := const {
-		< 1
-	}
+    a := const {
+        < 1
+    }
 }
 
 f func() {
-	a := match c {
-		``5: "a"
-		5``6: "b"
-		6``=7: "c"
-		8: "d"
-		9``: "e"
-	}
-	a := match c {
-		``=6: "a"
-		-: "b"
-	}
-	a := match c {
-		``a: "a"
-		b``c: "b"
-		d``=e: "c"
-		f: "d"
-		g``: "e"
-	}
+    a := match c {
+        ``5: "a"
+        5``6: "b"
+        6``=7: "c"
+        8: "d"
+        9``: "e"
+    }
+    a := match c {
+        ``=6: "a"
+        -: "b"
+    }
+    a := match c {
+        ``a: "a"
+        b``c: "b"
+        d``=e: "c"
+        f: "d"
+        g``: "e"
+    }
 }
 
 f func() {
-	parse -> (a, b)
+    parse -> (a, b)
 
-	parse -> (a, b) else {
-		ret
-	}
+    parse -> (a, b) else {
+        ret
+    }
 
-	{
-		< (a, b)
-	} -> (a, mut b)
+    {
+        < (a, b)
+    } -> (a, mut b)
 
-	a * b + c
+    a * b + c
 
-	a(|[move]| { ret 1 })
-	a(|[move] a, b| { ret 1 })
-	a(|-| { p -> (a, b) })
-	a(|| { {} -> (a, b) })
-	a(|[async]| { ret 1 })
-	a(|[async, move]| { ret 1 })
+    a(|[move]| { ret 1 })
+    a(|[move] a, b| { ret 1 })
+    a(|-| { p -> (a, b) })
+    a(|| { {} -> (a, b) })
+    a(|[async]| { ret 1 })
+    a(|[async, move]| { ret 1 })
 }
 
 f func() {
-	a := 1
-	a let
-	a let i32
-	a let = 1
-	a let mut
-	a let mut i32
-	a let mut i32 = 1
+    a := 1
+    a let
+    a let i32
+    a let = 1
+    a let mut
+    a let mut i32
+    a let mut i32 = 1
 }
 
 f func() {
-	if a < 2 {
-		< ~1
-	}
+    if a < 2 {
+        < ~1
+    }
 
-	if a < 2 {
-		< ~1
-	} else {
-		< 1
-	}
+    if a < 2 {
+        < ~1
+    } else {
+        < 1
+    }
 
-	if a < 2 {
-		< ~1
-	} else if a > 10 {
-		< 0
-	} else {
-		< 1
-	}
+    if a < 2 {
+        < ~1
+    } else if a > 10 {
+        < 0
+    } else {
+        < 1
+    }
 
-	if b -> Err(err) {
-	}
+    if b -> Err(err) {
+    }
 
-	if b -> Err(x | y) {
-	}
+    if b -> Err(x | y) {
+    }
 
-	if b -> Color..Red {
-	}
+    if b -> Color..Red {
+    }
 
-	if b -> a..Person{ name } {
-	}
+    if b -> a..Person{ name } {
+    }
 
-	if if true { < true } else { < false } {
-	}
+    if if true { < true } else { < false } {
+    }
 }
 
 f func() {
-	if v -> E..X(n) | E..Y(n) {
-	}
-	if a -> Some(b) {
-	}
+    if v -> E..X(n) | E..Y(n) {
+    }
+    if a -> Some(b) {
+    }
 
-	// use , instead of && as separators between chains of conditions,
-	// because && can be regarded as part of the expr
-	if a == b, c && d, #[some-attr] outer -> Some(inner),
-			inner -> Some(number),
-			number == 1 {
-	}
-	if a == b, c -> Some(n), n > 0 {
-	}
+    // use , instead of && as separators between chains of conditions,
+    // because && can be regarded as part of the expr
+    if a == b, c && d, #[some-attr] outer -> Some(inner),
+            inner -> Some(number),
+            number == 1 {
+    }
+    if a == b, c -> Some(n), n > 0 {
+    }
 
-	for v -> E..X(n) | E..Y(n) {
-	}
-	for a -> Some(b) {
-	}
-	for a == b, c && d, #[some-attr] outer -> Some(inner),
-			inner -> Some(number),
-			number == 1 {
-	}
-	for a == b, c -> Some(n), n > 0 {
-	}
+    for v -> E..X(n) | E..Y(n) {
+    }
+    for a -> Some(b) {
+    }
+    for a == b, c && d, #[some-attr] outer -> Some(inner),
+            inner -> Some(number),
+            number == 1 {
+    }
+    for a == b, c -> Some(n), n > 0 {
+    }
 }
 
 f func() {
-	b let = if a < 2 {
-		< ~1
-	} else {
-		< 1
-	}
+    b let = if a < 2 {
+        < ~1
+    } else {
+        < 1
+    }
 }
 
 f func() {
-	match message {
-		Message..Quit: a
-		Message..Write-string(write): a
-		Message..Move{ x, y: 0 }: a
-		Message..Move{ ... }: a
-		Message..Change-color{
-			0: red
-			1: green
-			2: -
-		}: a
-		Message..Change-color{
-			0: red,
-			1: green,
-			2: -,
-		}:
-			a
-		-:
-	}
+    match message {
+        Message..Quit: a
+        Message..Write-string(write): a
+        Message..Move{ x, y: 0 }: a
+        Message..Move{ ... }: a
+        Message..Change-color{
+            0: red
+            1: green
+            2: -
+        }: a
+        Message..Change-color{
+            0: red,
+            1: green,
+            2: -,
+        }:
+            a
+        -:
+    }
 
-	match msg {
-		Some(x) if x > 0: {
-			a()
-		}
-		Some(x) if compute(x) -> Ok(y): {
-			a()
-		}
-		-: {}
-	}
+    match msg {
+        Some(x) if x > 0: {
+            a()
+        }
+        Some(x) if compute(x) -> Ok(y): {
+            a()
+        }
+        -: {}
+    }
 }
 
 f func() {
-	match message {
-		Message..Quit: d,,("Quit")
-		Message..Write-string(write): d,,(&write)
-		Message..Move{ x, y: 0 }: d,,("move {} horizontally", x)
-		Message..Move{ ... }: d,,("other move")
-		Message..Change-color{ 0: red, 1: green, 2: - }:
-			d,,("color change, red: {}, green: {}", red, green)
-		-: {}
-	}
+    match message {
+        Message..Quit: d,,("Quit")
+        Message..Write-string(write): d,,(&write)
+        Message..Move{ x, y: 0 }: d,,("move {} horizontally", x)
+        Message..Move{ ... }: d,,("other move")
+        Message..Change-color{ 0: red, 1: green, 2: - }:
+            d,,("color change, red: {}, green: {}", red, green)
+        -: {}
+    }
 }
 
 f func() {
-	for {}
-	'a: for {} // '
+    for {}
+    'a: for {} // '
 
-	for a.len() > 0 {}
+    for a.len() > 0 {}
 
-	for vals.pop() -> Some(v @ 1) | Some(v @ 2) {}
+    for vals.pop() -> Some(v @ 1) | Some(v @ 2) {}
 
-	for item in list {}
+    for item in list {}
 
-	for (i, item) in list.enumerate() {}
+    for (i, item) in list.enumerate() {}
 
-	for n in (0``) {}
+    for n in (0``) {}
 
 }
 
 f func() {
-	a := 'x: {
-		break 'x 1
-	}
+    a := 'x: {
+        break 'x 1
+    }
 }
 
 // magic cases, only useful for rust-analyzer
 /* f func() {
-	if a -> a
-	match a
-	match a {
-		-
-	}
-	for a -> a
+    if a -> a
+    match a
+    match a {
+        -
+    }
+    for a -> a
 } */
 
 /** title
@@ -649,34 +649,34 @@ b
 */
 /// a
 f func() {
-	sum let u32 = (0``)
-		.map(|n u32| -> u32 { < n * n })
-		.take-while(|n &u32| -> bool { < *n < 1000 })
-		.filter(|n &u32| -> bool { < *n % 2 == 1 })
-		.fold(0, |acc u32, n u32| { < acc + n } )
+    sum let u32 = (0``)
+        .map(|n u32| -> u32 { < n * n })
+        .take-while(|n &u32| -> bool { < *n < 1000 })
+        .filter(|n &u32| -> bool { < *n % 2 == 1 })
+        .fold(0, |acc u32, n u32| { < acc + n } )
 
-	sum let u32 = (0``)
-		.map(|n| n * n)
-		.take-while(|n| *n < 1000)
-		.filter(|n| *n % 2 == 1)
-		.fold(0, |acc, n| acc + n)
+    sum let u32 = (0``)
+        .map(|n| n * n)
+        .take-while(|n| *n < 1000)
+        .filter(|n| *n % 2 == 1)
+        .fold(0, |acc, n| acc + n)
 }
 
 test {
-	test-it-works func() {
-	}
+    test-it-works func() {
+    }
 }
 
 vec macro {
-	( $( $x:expr ),* ) => {
-		{
-			let mut temp-vec = Vec..new();
-			$(
-				temp-vec.push($x);
-			)*
-			temp-vec
-		}
-	};
+    ( $( $x:expr ),* ) => {
+        {
+            let mut temp-vec = Vec..new();
+            $(
+                temp-vec.push($x);
+            )*
+            temp-vec
+        }
+    };
 }
 
 // current Rust version: 1.98.0
