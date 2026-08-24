@@ -11,24 +11,38 @@ crate foo as -
 
 import {
 	+ crate..a
-	* crate..a
-	+ * crate..a
+	+ crate..a..*
+	crate..a..*
 	super..a
 	self..a
+	-..crate-abc..a
 
 	std
 	std..env
-	env-consts std..env..consts
-	Result super..Api-result
-	std..option { Option, Option..Some, nil Option..None }
+	std..env..consts as env-consts
+	super..Api-result as Result
+	std..option { Option, Option..Some, Option..None as nil }
 	astd..option {
 		Option {
 			self
 			Some
-			nil None
+			None as nil
 		}
 	}
 }
+
+import + crate..a
+import + crate..a..*
+import crate..a..*
+import super..a
+import self..a
+import -..crate-abc..a
+
+import std
+import std..env
+import std..env..consts as env-consts
+import super..Api-result as Result
+import std..option { Option, Option..Some, Option..None as nil }
 
 empty-mod mod
 u-custom-mod,,{a, b, c-d}

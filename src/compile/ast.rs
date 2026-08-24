@@ -589,7 +589,7 @@ impl ToLang for Import {
 		let s = self;
 
 		for item in &s.items {
-			if matches!(item.public.payload, VisibilityPayload::Pub) {
+			if item.public.is_some() {
 				p.push_raw("pub ");
 			}
 			p.push_raw("use ");
@@ -614,7 +614,7 @@ impl ToLang for Import {
 }
 #[derive(Debug, Default)]
 pub struct ImportItem {
-	pub public: Visibility,
+	pub public: Option<Visibility>,
 	pub alias: Option<Identifier>,
 	pub paths: Vec<Identifier>, // path.len() > 0
 	pub sub: Vec<ImportItem>,
@@ -629,7 +629,9 @@ impl ToLang for ImportItem {
 			p.push_raw("::");
 		}
 
-		p.push_rust(&s.paths[0]);
+		if s.paths[0].id != "-" {
+			p.push_rust(&s.paths[0]);
+		}
 		for path in &s.paths[1..] {
 			p.push_raw("::");
 			p.push_rust(path);
