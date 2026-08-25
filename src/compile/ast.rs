@@ -1809,15 +1809,9 @@ impl ToLang for Macro {
 
         p.push_raw(" ");
         p.push_str("{", s.span_brace_open);
-        p.push_raw("\n");
-        p.inc_indent();
-        p.indent();
 
-        tokens_to_rust(&s.tokens, p);
+        tokens_to_rust(s.span_brace_open, &s.tokens, s.span_brace_close, p);
 
-        p.push_raw("\n");
-        p.dec_indent();
-        p.indent();
         p.push_str("}", s.span_brace_close);
     }
     fn to_u(&self, p: &mut LangFormatter) {
@@ -1827,51 +1821,44 @@ impl ToLang for Macro {
         p.push_u(&s.name);
 
         p.push_raw(" {\n");
-        p.inc_indent();
-        p.indent();
 
-        tokens_to_rust(&s.tokens, p);
+        tokens_to_rust(s.span_brace_open, &s.tokens, s.span_brace_close, p);
 
-        p.push_raw("\n");
-        p.dec_indent();
-        p.indent();
         p.push_raw("}");
     }
 }
 
-pub fn tokens_to_rust(list: &[Token], p: &mut LangFormatter) {
+pub fn tokens_to_rust(span_open: Span, list: &[Token], span_close: Span, p: &mut LangFormatter) {
     if list.is_empty() {
         return;
     }
 
-    let mut last_line = list[0].span.line;
-    let mut need_inc_indent = false;
-    let mut square_count = 0;
+    let mut last_line = span_open.line;
+    let mut last_end = list[0].span.column;
+    let mut is_attr = false;
+
     for item in list {
-        if item.span.line > last_line {
-            p.push_raw("\n");
-            if need_inc_indent {
-                p.inc_indent();
-            }
-            if matches!(item.code, T![")"] | T!["]"] | T!["}"] | T!["}}"]) {
-                p.dec_indent();
-            }
-            p.indent();
+        let cur_line = item.span.line;
+        if cur_line > last_line {
+            push_many_raw(cur_line - last_line, "\n", p);
+            last_line = cur_line;
+            // column starts from 1 not 0
+            last_end = 1;
         }
-        need_inc_indent = matches!(item.code, T!["("] | T!["["] | T!["{"] | T!["{{"]);
-        last_line = item.span.line;
+        push_many_raw(item.span.column - last_end, " ", p);
+        last_end = item.span.column + item.span.width;
 
         // for attrs in macro and macro call, #[ ]
         match &item.code {
             T!["#["] | T!["#!["] => {
-                square_count += 1;
+                is_attr = true;
                 p.push_rust(item);
             }
             T!["]"] => {
-                if square_count == 0 {
+                if !is_attr {
                     p.push_rust(item);
-                } else if square_count == 1 {
-                    square_count -= 1;
+                } else if is_attr {
+                    is_attr = false;
                     p.push_rust(&Token {
                         span: item.span,
                         code: T!["}}"],
@@ -1882,9 +1869,19 @@ pub fn tokens_to_rust(list: &[Token], p: &mut LangFormatter) {
                 p.push_rust(item);
             }
         }
+    }
 
-        // next space
-        p.push_raw(" ");
+    let cur_line = span_close.line;
+    if cur_line > last_line {
+        push_many_raw(cur_line - last_line, "\n", p);
+        last_end = 1;
+    }
+    push_many_raw(span_close.column - last_end, " ", p);
+
+    fn push_many_raw(n: usize, text: &str, p: &mut LangFormatter) {
+        for _ in 0..n {
+            p.push_raw(text);
+        }
     }
 }
 
@@ -1894,12 +1891,10 @@ pub struct MacroCall {
     pub body: MacroCallBody,
 
     pub span_macro_call: Span,
-    pub span_paren_open: Option<Span>,
-    pub span_paren_close: Option<Span>,
-    pub span_brace_open: Option<Span>,
-    pub span_brace_close: Option<Span>,
+    pub span_delim_open: Span,
+    pub span_delim_close: Span,
 }
-impl MacroCall {
+/* impl MacroCall {
     fn special_to_rust(&self, p: &mut LangFormatter) -> bool {
         let s = self;
 
@@ -1932,53 +1927,23 @@ impl MacroCall {
         p.push_str("!", s.span_macro_call);
         p.push_rust(&s.body);
     }
-}
+} */
 impl ToLang for MacroCall {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if s.special_to_rust(p) {
+        /* if s.special_to_rust(p) {
             return;
-        }
+        } */
 
         p.push_rust(&s.path);
         p.push_str("!", s.span_macro_call);
-        p.push_rust(&s.body);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
 
-        p.push_u(&s.path);
-        p.push_raw("!");
-        p.push_u(&s.body);
-    }
-}
-#[derive(Debug)]
-pub enum MacroCallBody {
-    Token(MacroCallBodyToken),   // ,,{}
-    Expr(Vec<Expr>),             // ,,()
-    Stmt(Vec<Stmt>),             // ,,[stmt]{}
-    UCustomMod(Vec<Identifier>), // u-custom-mod,,{}
-}
-impl Default for MacroCallBody {
-    fn default() -> Self {
-        MacroCallBody::Token(MacroCallBodyToken { list: Vec::new() })
-    }
-}
-impl ToLang for MacroCallBody {
-    fn to_rust(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            MacroCallBody::Token(a) => {
-                p.push_raw("{\n");
-                p.inc_indent();
-                p.indent();
-                tokens_to_rust(&a.list, p);
-                p.dec_indent();
-                p.push_raw("\n");
-                p.indent();
-                p.push_raw("}");
+        match &s.body {
+            MacroCallBody::Token(list) => {
+                p.push_str("{", s.span_delim_open);
+                tokens_to_rust(s.span_delim_open, list, s.span_delim_close, p);
+                p.push_str("}", s.span_delim_close);
             }
             MacroCallBody::Expr(list) => {
                 p.push_raw("(");
@@ -1999,17 +1964,19 @@ impl ToLang for MacroCallBody {
                 p.dec_indent();
                 p.indent();
                 p.push_raw("}");
-            }
-            MacroCallBody::UCustomMod(_) => {}
+            } // MacroCallBody::UCustomMod(_) => {}
         }
     }
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        match s {
-            MacroCallBody::Token(a) => {
+        p.push_u(&s.path);
+        p.push_raw("!");
+
+        match &s.body {
+            MacroCallBody::Token(list) => {
                 p.push_raw("[");
-                for (i, item) in a.list.iter().enumerate() {
+                for (i, item) in list.iter().enumerate() {
                     if i != 0 {
                         p.push_raw(" ");
                     }
@@ -2036,14 +2003,21 @@ impl ToLang for MacroCallBody {
                 p.dec_indent();
                 p.indent();
                 p.push_raw("}");
-            }
-            MacroCallBody::UCustomMod(_) => {}
+            } // MacroCallBody::UCustomMod(_) => {}
         }
     }
 }
 #[derive(Debug)]
-pub struct MacroCallBodyToken {
-    pub list: Vec<Token>,
+pub enum MacroCallBody {
+    Token(Vec<Token>), // ,,{}
+    Expr(Vec<Expr>),   // ,,()
+    Stmt(Vec<Stmt>),   // ,,[stmt]{}
+                       // UCustomMod(Vec<Identifier>), // u-custom-mod,,{}
+}
+impl Default for MacroCallBody {
+    fn default() -> Self {
+        MacroCallBody::Token(Vec::new())
+    }
 }
 #[derive(Debug)]
 pub struct MapEntry {

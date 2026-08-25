@@ -2628,7 +2628,7 @@ impl Parse {
         let token = s.current();
         s.plusplus();
 
-        let special_macro = if r.path.items.len() == 1 {
+        /* let special_macro = if r.path.items.len() == 1 {
             if let SimplePathSegment::Identifier(identifier) = &r.path.items[0] {
                 let a = identifier.id.as_str();
                 match a {
@@ -2653,15 +2653,15 @@ impl Parse {
             }
         } else {
             ""
-        };
+        }; */
 
         match &token.code {
             T!["("] => {
-                r.span_paren_open = Some(token.span);
+                r.span_delim_open = token.span;
                 // (expr, expr, ...)
                 let (exprs, span_paren_close) = parse_exprs(s)?;
                 r.body = MacroCallBody::Expr(exprs);
-                r.span_paren_close = Some(span_paren_close)
+                r.span_delim_close = span_paren_close;
             }
             T!["["] => {
                 // [stmt]{ items }
@@ -2685,17 +2685,24 @@ impl Parse {
                 if !matches!(&token.code, T!["{"]) {
                     return Err(s.panic(token, &format!("expected {{, but got {:?}", token)));
                 }
-                r.span_brace_open = Some(token.span);
+                r.span_delim_open = token.span;
                 s.plusplus();
 
                 let mut block = s.parse_block_expr()?;
                 block.span_brace_open = token.span;
-                r.span_brace_close = Some(block.span_brace_close);
+                r.span_delim_close = block.span_brace_close;
                 r.body = MacroCallBody::Stmt(block.stmts);
             }
             T!["{"] => {
-                r.span_brace_open = Some(token.span);
-                if special_macro == "u-custom-mod" {
+                r.span_delim_open = token.span;
+                // { tokens }
+                let tokens = parse_tokens(s)?;
+                s.minusminus();
+                r.span_delim_close = s.current().span;
+                s.plusplus();
+                r.body = MacroCallBody::Token(tokens);
+
+                /* if special_macro == "u-custom-mod" {
                     // { tokens }
                     let (custom, span_brace_close) = parse_u_custom_mod(s)?;
                     r.body = MacroCallBody::UCustomMod(custom);
@@ -2705,7 +2712,7 @@ impl Parse {
                     let tokens = parse_tokens(s)?;
                     r.span_brace_close = Some(s.current().span);
                     r.body = MacroCallBody::Token(MacroCallBodyToken { list: tokens });
-                }
+                } */
             }
             _ => {
                 return Err(s.panic(
@@ -2717,7 +2724,7 @@ impl Parse {
 
         return Ok(r);
 
-        fn parse_u_custom_mod(s: &Parse) -> ParseResult<(Vec<Identifier>, Span)> {
+        /* fn parse_u_custom_mod(s: &Parse) -> ParseResult<(Vec<Identifier>, Span)> {
             let mut r = Vec::new();
             let mut span_brace_close = Span::default();
 
@@ -2739,7 +2746,7 @@ impl Parse {
             }
 
             Ok((r, span_brace_close))
-        }
+        } */
 
         fn parse_exprs(s: &Parse) -> ParseResult<(Vec<Expr>, Span)> {
             let mut r = Vec::new();

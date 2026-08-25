@@ -385,8 +385,7 @@ impl Fmt {
                     s.fmt_stmt(stmt);
                 }
             }
-            cc::MacroCallBody::Token(_) => {}
-            cc::MacroCallBody::UCustomMod(_) => {}
+            cc::MacroCallBody::Token(_) => {} // cc::MacroCallBody::UCustomMod(_) => {}
         }
     }
     fn fmt_import(&mut self, items: Vec<cc::ImportItem>) {
@@ -933,11 +932,10 @@ fn multiline_expr(expr: &cc::Expr, line: usize) -> bool {
                 }
             }
             cc::ExprWithoutBlock::MacroCall(a) => match a.body {
-                cc::MacroCallBody::Expr(_) | cc::MacroCallBody::UCustomMod(_) => {
-                    a.span_paren_close.unwrap().line > line
-                }
+                // cc::MacroCallBody::Expr(_) | cc::MacroCallBody::UCustomMod(_) => {
+                cc::MacroCallBody::Expr(_) => a.span_delim_close.line > line,
                 cc::MacroCallBody::Token(_) | cc::MacroCallBody::Stmt(_) => {
-                    a.span_brace_close.unwrap().line > line
+                    a.span_delim_close.line > line
                 }
             },
         },

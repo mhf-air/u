@@ -84,6 +84,17 @@ f func() {
 
 call,,(1, 2, 3)
 call,,{select a from b}
+call,,{
+    let a = 1.1;
+    if a > 0 {
+        ret;
+    }
+    #[derive(Debug)]
+    struct Order-item {
+        name: String,
+        age: i32,
+    }
+}
 call,,[stmt]{
     name--c+ const &str = "hello"
     ~1

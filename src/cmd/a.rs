@@ -312,11 +312,11 @@ impl CmdCompile {
                                 }
                             }
                         }
-                        cc::MacroCallBody::UCustomMod(ref list) => {
+                        /* cc::MacroCallBody::UCustomMod(ref list) => {
                             for a in list {
                                 set.insert(&a.id);
                             }
-                        }
+                        } */
                         _ => {}
                     },
                     _ => {}
