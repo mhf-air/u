@@ -1889,61 +1889,40 @@ pub fn tokens_to_rust(span_open: Span, list: &[Token], span_close: Span, p: &mut
 pub struct MacroCall {
     pub path: SimplePath,
     pub body: MacroCallBody,
+    // 1: (), 2: [], 0: {}
+    pub delim: i32,
 
     pub span_macro_call: Span,
     pub span_delim_open: Span,
     pub span_delim_close: Span,
 }
-/* impl MacroCall {
-    fn special_to_rust(&self, p: &mut LangFormatter) -> bool {
-        let s = self;
-
-        if s.path.items.len() == 1 {
-            if let SimplePathSegment::Identifier(identifier) = &s.path.items[0] {
-                match identifier.id.as_str() {
-                    "d" => {
-                        s.p_to_rust(p, identifier.span);
-                        true
-                    }
-                    "u-custom-mod" => {
-                        p.push_raw("\n");
-                        true
-                    }
-                    _ => false,
-                }
-            } else {
-                false
-            }
-        } else {
-            false
-        }
-    }
-
-    fn p_to_rust(&self, p: &mut LangFormatter, span: Span) {
-        let s = self;
-
-        let id = Identifier::new("dbg".to_string(), span.line, span.column);
-        p.push_rust(&id);
-        p.push_str("!", s.span_macro_call);
-        p.push_rust(&s.body);
-    }
-} */
 impl ToLang for MacroCall {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        /* if s.special_to_rust(p) {
-            return;
-        } */
+        match &s.body {
+            MacroCallBody::Token(_) => {}
+            MacroCallBody::Expr(_) => {
+                p.push_raw("/* u:expr */");
+            }
+            MacroCallBody::Stmt(_) => {
+                p.push_raw("/* u:stmt */");
+            }
+        }
 
         p.push_rust(&s.path);
         p.push_str("!", s.span_macro_call);
 
         match &s.body {
             MacroCallBody::Token(list) => {
-                p.push_str("{", s.span_delim_open);
+                let pairs = match s.delim {
+                    1 => ("(", ")"),
+                    2 => ("[", "]"),
+                    _ => ("{", "}"),
+                };
+                p.push_str(pairs.0, s.span_delim_open);
                 tokens_to_rust(s.span_delim_open, list, s.span_delim_close, p);
-                p.push_str("}", s.span_delim_close);
+                p.push_str(pairs.1, s.span_delim_close);
             }
             MacroCallBody::Expr(list) => {
                 p.push_raw("(");
@@ -1964,25 +1943,35 @@ impl ToLang for MacroCall {
                 p.dec_indent();
                 p.indent();
                 p.push_raw("}");
-            } // MacroCallBody::UCustomMod(_) => {}
+            }
         }
     }
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
+
+        match &s.body {
+            MacroCallBody::Token(_) => {}
+            MacroCallBody::Expr(_) => {
+                p.push_raw("/* u:expr */");
+            }
+            MacroCallBody::Stmt(_) => {
+                p.push_raw("/* u:stmt */");
+            }
+        }
 
         p.push_u(&s.path);
         p.push_raw("!");
 
         match &s.body {
             MacroCallBody::Token(list) => {
-                p.push_raw("[");
-                for (i, item) in list.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(" ");
-                    }
-                    p.push_u(item);
-                }
-                p.push_raw("]");
+                let pairs = match s.delim {
+                    1 => ("(", ")"),
+                    2 => ("[", "]"),
+                    _ => ("{", "}"),
+                };
+                p.push_str(pairs.0, s.span_delim_open);
+                tokens_to_rust(s.span_delim_open, list, s.span_delim_close, p);
+                p.push_str(pairs.1, s.span_delim_close);
             }
             MacroCallBody::Expr(list) => {
                 p.push_raw("(");
@@ -2003,16 +1992,15 @@ impl ToLang for MacroCall {
                 p.dec_indent();
                 p.indent();
                 p.push_raw("}");
-            } // MacroCallBody::UCustomMod(_) => {}
+            }
         }
     }
 }
 #[derive(Debug)]
 pub enum MacroCallBody {
-    Token(Vec<Token>), // ,,{}
+    Token(Vec<Token>), // ,,{} ,,[p]{} ,,[s]{}
     Expr(Vec<Expr>),   // ,,()
     Stmt(Vec<Stmt>),   // ,,[stmt]{}
-                       // UCustomMod(Vec<Identifier>), // u-custom-mod,,{}
 }
 impl Default for MacroCallBody {
     fn default() -> Self {

@@ -2628,33 +2628,6 @@ impl Parse {
         let token = s.current();
         s.plusplus();
 
-        /* let special_macro = if r.path.items.len() == 1 {
-            if let SimplePathSegment::Identifier(identifier) = &r.path.items[0] {
-                let a = identifier.id.as_str();
-                match a {
-                    "u-custom-mod" => {
-                        if !matches!(token.code, T!["{"]) {
-                            return Err(
-                                s.panic(token, &format!("expected {{, but got {:?}", token))
-                            );
-                        }
-                        a
-                    }
-                    "d" => {
-                        if !matches!(token.code, T!["("]) {
-                            return Err(s.panic(token, &format!("expected (, but got {:?}", token)));
-                        }
-                        a
-                    }
-                    _ => "",
-                }
-            } else {
-                ""
-            }
-        } else {
-            ""
-        }; */
-
         match &token.code {
             T!["("] => {
                 r.span_delim_open = token.span;
@@ -2664,34 +2637,53 @@ impl Parse {
                 r.span_delim_close = span_paren_close;
             }
             T!["["] => {
-                // [stmt]{ items }
+                // [stmt] [p] [s]
+                let mut delim = 0;
+                let mut is_stmt = false;
                 let token = s.current();
-                if let TokenCode::Identifier(identifier) = &token.code {
-                    if identifier.id != "stmt" {
-                        return Err(
-                            s.panic(token, &format!("expected stmt, but got {:?}", identifier))
-                        );
+                let TokenCode::Identifier(identifier) = &token.code else {
+                    return Err(s.panic(
+                        token,
+                        &format!("expected stmt, p, or s, but got {:?}", token),
+                    ));
+                };
+                match identifier.id.as_ref() {
+                    "stmt" => {
+                        is_stmt = true;
                     }
-                } else {
-                    return Err(s.panic(token, &format!("expected stmt, but got {:?}", token)));
+                    "p" => {
+                        delim = 1;
+                    }
+                    "s" => {
+                        delim = 2;
+                    }
+                    _ => {
+                        return Err(s.panic(
+                            token,
+                            &format!("expected stmt, p, or s, but got {:?}", identifier),
+                        ));
+                    }
                 }
                 s.plusplus();
+                s.expect(T!["]"])?;
                 let token = s.current();
-                if !matches!(&token.code, T!["]"]) {
-                    return Err(s.panic(token, &format!("expected ], but got {:?}", token)));
-                }
-                s.plusplus();
-                let token = s.current();
-                if !matches!(&token.code, T!["{"]) {
-                    return Err(s.panic(token, &format!("expected {{, but got {:?}", token)));
-                }
+                s.expect(T!["{"])?;
                 r.span_delim_open = token.span;
-                s.plusplus();
 
-                let mut block = s.parse_block_expr()?;
-                block.span_brace_open = token.span;
-                r.span_delim_close = block.span_brace_close;
-                r.body = MacroCallBody::Stmt(block.stmts);
+                if is_stmt {
+                    let mut block = s.parse_block_expr()?;
+                    block.span_brace_open = token.span;
+                    r.span_delim_close = block.span_brace_close;
+                    r.body = MacroCallBody::Stmt(block.stmts);
+                } else {
+                    r.delim = delim;
+                    // { tokens }
+                    let tokens = parse_tokens(s)?;
+                    s.minusminus();
+                    r.span_delim_close = s.current().span;
+                    s.plusplus();
+                    r.body = MacroCallBody::Token(tokens);
+                }
             }
             T!["{"] => {
                 r.span_delim_open = token.span;
@@ -2701,18 +2693,6 @@ impl Parse {
                 r.span_delim_close = s.current().span;
                 s.plusplus();
                 r.body = MacroCallBody::Token(tokens);
-
-                /* if special_macro == "u-custom-mod" {
-                    // { tokens }
-                    let (custom, span_brace_close) = parse_u_custom_mod(s)?;
-                    r.body = MacroCallBody::UCustomMod(custom);
-                    r.span_brace_close = Some(span_brace_close);
-                } else {
-                    // { tokens }
-                    let tokens = parse_tokens(s)?;
-                    r.span_brace_close = Some(s.current().span);
-                    r.body = MacroCallBody::Token(MacroCallBodyToken { list: tokens });
-                } */
             }
             _ => {
                 return Err(s.panic(
@@ -2723,30 +2703,6 @@ impl Parse {
         }
 
         return Ok(r);
-
-        /* fn parse_u_custom_mod(s: &Parse) -> ParseResult<(Vec<Identifier>, Span)> {
-            let mut r = Vec::new();
-            let mut span_brace_close = Span::default();
-
-            while s.has_more() {
-                let token = s.current();
-                if let TokenCode::Identifier(id) = &token.code {
-                    r.push(id.clone());
-                    s.plusplus();
-                    let token = s.current();
-                    if matches!(token.code, T!["}"]) {
-                        span_brace_close = token.span;
-                        s.plusplus();
-                        break;
-                    }
-                    s.expect(T![,])?;
-                } else {
-                    return Err(s.panic(token, &format!("expected identifier but got {:?}", token)));
-                }
-            }
-
-            Ok((r, span_brace_close))
-        } */
 
         fn parse_exprs(s: &Parse) -> ParseResult<(Vec<Expr>, Span)> {
             let mut r = Vec::new();
