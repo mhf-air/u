@@ -418,7 +418,7 @@ impl Parse {
 
         if first_special_token.is_none() {
             // parse test block
-            let token = s.current();
+            /* let token = s.current();
             if let TokenCode::Identifier(identifier) = &token.code {
                 if identifier.id == "test" && matches!(&s.nth(1).code, T!["{"]) {
                     s.plusplus();
@@ -430,7 +430,7 @@ impl Parse {
                         payload: ItemPayload::Test(a),
                     }));
                 }
-            }
+            } */
 
             // parse expr
             let expr = s.parse_expr()?;
@@ -851,6 +851,14 @@ impl Parse {
                             }
                         }
                         Keyword::Const => {
+                            if start >= 2 {
+                                // for case like that:
+                                // ret r as *const T as *const c-void
+                                let last_token = &s.tokens[start - 2];
+                                if matches!(&last_token.code, T![*]) {
+                                    continue;
+                                }
+                            }
                             let next_token = &s.tokens[start];
                             if !matches!(&next_token.code, T!["{"]) {
                                 first_special_token = Some(token);
@@ -1448,7 +1456,7 @@ impl Parse {
         Ok(r)
     }
 
-    fn parse_test(&self) -> ParseResult<Test> {
+    fn _parse_test(&self) -> ParseResult<Test> {
         let s = self;
 
         let mut r = Test::default();

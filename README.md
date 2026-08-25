@@ -19,7 +19,6 @@ I like Rust's semantics, but dislike some of its syntax
 	- Upper-camel-case for UpperCamelCase
 	- set-name for set_name
 	- name--c for NAME(which is a const)
-	- name--g for NAME(which is a static)
 	- AnYThInGcUsTom--r for AnYThInGcUsTom
 
 	as for identifiers containing digit, forbid '-' followed by a digit, and consider digits as lower-case letters.
@@ -35,7 +34,7 @@ I like Rust's semantics, but dislike some of its syntax
 ```
 example
 
-	Order-item, order-name, dir-path--c, name--g
+	Order-item, order-name, dir-path--c
 
 and minus becomes
 	~1, ~~
@@ -96,7 +95,7 @@ turbofish becomes
 example
 
 	dir-path--c const &str = "/tmp"
-	server--g static Option[Server] = None
+	server--c static Option[Server] = None
 
 	User+['a] struct {
 		name+ &'a str

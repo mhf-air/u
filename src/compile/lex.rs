@@ -1874,14 +1874,9 @@ impl Identifier {
         if len > 2 {
             if chars[len - 3] == '-' && chars[len - 2] == '-' {
                 match chars[len - 1] {
-                    'c' | 'g' => {
+                    'c' => {
                         if len == 3 {
-                            p.push_str("__");
-                            if chars[len - 1] == 'c' {
-                                p.push('c');
-                            } else {
-                                p.push('g');
-                            }
+                            p.push_str("__c");
                             return p;
                         }
                         let r = &chars[..len - 3];

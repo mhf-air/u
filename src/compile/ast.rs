@@ -5056,11 +5056,14 @@ impl ToLang for ExprOperator {
             ExprOperator::TypeCast(a) => {
                 p.push_rust(&a.expr);
                 p.push_raw(" as ");
-                if let TypeNoBounds::Parenthesized(a) = &a.type_no_bounds {
+                // NOTE can't do that, because in some cases parens are neccessary, like
+                //  a := b as (for['a] func(&'a str))
+                /* if let TypeNoBounds::Parenthesized(a) = &a.type_no_bounds {
                     p.push_rust(&a.type_);
                 } else {
                     p.push_rust(&a.type_no_bounds);
-                }
+                } */
+                p.push_rust(&a.type_no_bounds);
             }
             ExprOperator::Assignment(a) => {
                 p.push_rust(&a.left);

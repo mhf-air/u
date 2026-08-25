@@ -55,7 +55,7 @@ vis-in-path+(in crate..a..b) mod {}
 #[allow(non-camel-case-types)]
 sub+ mod {
     name--c+ const &str = "hello"
-    name--g static mut &str = "hello"
+    name--c static mut &str = "hello"
 }
 
 #[derive(Serialize, Deserialize)]
@@ -205,10 +205,8 @@ identifier func() {
     --- := "---"
     --r := "--r"
     --c := "--c"
-    --g := "--g"
 
     name--c := "name--c"
-    num--g := "num--g"
 
     Order := "Order"
     Order- := "Order-"
@@ -223,8 +221,8 @@ identifier func() {
 }
 
 name--c+ const &str = "hello"
-num--g static i32 = 0
-num--g static mut i32 = 0
+num--c static i32 = 0
+num--c static mut i32 = 0
 
 Point+[T Copy + Default] type = (T, T)
 Point[N const usize] type = {{i32: N}}
@@ -281,9 +279,9 @@ f func(a func(&mut App), b i32) {
     a := &&[raw] mut id
 }
 
-// special case: wrap the cast type when the type consists of keyword const
 const-c-void[T] func(r &T) *const c-void {
-    ret r as (*const T) as (*const c-void)
+    a let = b as (for['a] func(&'a str))
+    ret r as *const T as *const c-void
 }
 
 #[!derive(Debug)]
@@ -414,8 +412,8 @@ capture['a, T] func(x &'a (), y T) impl Sized + use[] {}
 extern[unsafe] "C" {
     abs func(input i32, ...) i32
     abs func[safe](input i32, ...) i32
-    name--g static mut i32
-    name--g static[safe] mut i32
+    name--c static mut i32
+    name--c static[safe] mut i32
 }
 
 #[no-mangle]
@@ -673,11 +671,6 @@ f func() {
         .take-while(|n| *n < 1000)
         .filter(|n| *n % 2 == 1)
         .fold(0, |acc, n| acc + n)
-}
-
-test {
-    test-it-works func() {
-    }
 }
 
 vec macro {
