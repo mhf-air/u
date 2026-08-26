@@ -19,7 +19,7 @@ I like Rust's semantics, but dislike some of its syntax
 	- Upper-camel-case for UpperCamelCase
 	- set-name for set_name
 	- name--c for NAME(which is a const or static)
-	- AnYThInGcUsTom--r for AnYThInGcUsTom
+	- anYThInGcUsTom--r for anYThInGcUsTom
 
 	as for identifiers containing digit, forbid '-' followed by a digit, and consider digits as lower-case letters.
 
@@ -117,7 +117,7 @@ example
 
 		mixup[V, W] (&) func[unsafe, async](other Point[V, W]) Point[T, W]
 		mixup[V, W] (&mut) func[unsafe, async](other Point[V, W]) Point[T, W]
-		mixup[V, W] (self) func[unsafe, async](other Point[V, W]) Point[T, W]
+		mixup[V, W] () func[unsafe, async](other Point[V, W]) Point[T, W]
 		mixup[V, W] (Box[Self]) func[unsafe, async](other Point[V, W]) Point[T, W]
 		mixup[V, W] (Pin[Box[Self]]) func[unsafe, async](other Point[V, W]) Point[T, W]
 	}
@@ -125,16 +125,25 @@ example
 
 - **move method receiver to a different place, and use s as self**
 
+```
 	implementation: add
 		let mut s = self;
-	at the start of method body
+	or
+        let s = self;
+	at the start of method body, except when there's
+        \"no-s"
+    before method's signature
 
 	pros: it's clearer and shorter
 
-```
 example
 
 	User impl {
+        \"no-s"
+		get-age+ (&) func i32 {
+			< self.age
+		}
+
 		get-age+ (&) func i32 {
 			< s.age
 		}
@@ -143,7 +152,7 @@ example
 			s.age = new-age
 		}
 
-		move (Self) func() {
+		move () func() {
 			s.age = 0
 		}
 	}
@@ -236,7 +245,8 @@ becomes
 
 - **#[derive(Debug)] for all structs and enums by default**
 
-	add #[derive(Debug)] for all structs and enums, except for the case that they have outer attributes that is ***#[!derive(Debug)]***
+	add #[derive(Debug)] for all structs and enums,
+    except when they have outer mark that is ***\"no-derive-debug"***
 
 	pros: no need to add that to them, and almost all structs need Debug
 
@@ -248,7 +258,7 @@ example
 	Has-debug struct {
 	}
 
-	#[!derive(Debug)]
+    \"no-derive-debug"
 	No-debug struct {
 	}
 ```
@@ -292,28 +302,6 @@ unmentioned items are like this
 or if util is a directory
 
 	pub mod util;
-```
-
-- **custom mod.u file**
-
-deprecated:
-if you customize the mod.u file, in order to prevent the above processing
-
-just write ordinary u code
-```
-	a mod
-	cfg,,[stmt] {
-		a mod
-	}
-```
-and if some mod names are within macros, use u-custom-mod
-```
-	u-custom-mod,,{a, b, c-d}
-	cfg_rt,,{
-		mod a;
-		mod b;
-		mod c-d;
-	}
 ```
 
 - **use unified for syntax instead of loop, while, for**
@@ -519,18 +507,16 @@ example
 	}
 ```
 
-- **drop leading r in raw string literal**
-
-	use #" "#, or ##" "##, or ###" "###, etc.
-
-	possible future conflict: when #""# is used in Rust
-
 - **use ... instead of .. as rest pattern**
 
 - **patterns in function parameters**
 
 	it's bad to have that in function parameters.
 	if you really need that, add a destructuring assignment at the start of the function body
+
+```
+f func(\"pat"mut a: i32, b i32) {}
+```
 
 - **doc comment**
 

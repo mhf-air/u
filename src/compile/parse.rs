@@ -907,92 +907,101 @@ impl Parse {
     fn parse_pub_with_default(&self, payload: VisibilityPayload) -> ParseResult<Visibility> {
         let s = self;
 
-        // possible +
-        let token = s.current();
-        let r = if matches!(&token.code, T![+]) {
-            s.plusplus();
+        // default
+        let plus_token = s.current();
+        if !matches!(&plus_token.code, T![+]) {
+            let r = Visibility {
+                span: Span {
+                    line: plus_token.span.line,
+                    column: 0,
+                    width: 0,
+                },
+                payload,
+                is_default: true,
+            };
+            return Ok(r);
+        }
 
-            if matches!(s.current().code, T!["("]) {
-                s.plusplus();
-                let token = s.current();
-                if matches!(s.nth(1).code, T![")"]) {
-                    s.inc(2);
-                    match token.code {
-                        T![self] => Visibility {
-                            span: token.span,
-                            payload: VisibilityPayload::Private,
-                            is_default: false,
-                        },
-                        T![super] => Visibility {
-                            span: token.span,
-                            payload: VisibilityPayload::Super,
-                            is_default: false,
-                        },
-                        T![crate] => Visibility {
-                            span: token.span,
-                            payload: VisibilityPayload::Crate,
-                            is_default: false,
-                        },
-                        _ => {
-                            // NOTE main-loop+ (Self) func()
-                            s.dec(3);
-                            Visibility {
-                                span: token.span,
-                                payload: VisibilityPayload::Pub,
-                                is_default: false,
-                            }
-                        }
-                    }
-                } else if matches!(token.code, T![in]) {
-                    s.plusplus();
-                    let items = s.parse_path_expr_segments()?;
-                    let mut path = SimplePath::default();
-                    for item in items {
-                        if !item.generic_args.items.is_empty() {
-                            return Err(s.panic(token, "pub can't contain generic params"));
-                        }
-                        let result = SimplePathSegment::try_from(item.name);
-                        if let Ok(a) = result {
-                            path.items.push(a);
-                        } else {
-                            return Err(s.panic(token, "pub can't contain Self"));
-                        }
-                    }
-                    s.plusplus();
-                    Visibility {
-                        span: token.span,
-                        payload: VisibilityPayload::SimplePath(path),
-                        is_default: false,
-                    }
-                } else {
-                    // NOTE main-loop+ (&mut) func()
-                    s.minusminus();
+        s.plusplus();
+        // +
+        if !matches!(s.current().code, T!["("]) {
+            return pub_vis(&plus_token);
+        };
+
+        // the token after '+('
+        let token = s.nth(1);
+        // + ()
+        if matches!(token.code, T![")"]) {
+            return pub_vis(&plus_token);
+        }
+
+        // +(sth)
+        if matches!(s.nth(2).code, T![")"]) {
+            s.inc(3);
+            let r = match token.code {
+                T![self] => Visibility {
+                    span: token.span,
+                    payload: VisibilityPayload::Private,
+                    is_default: false,
+                },
+                T![super] => Visibility {
+                    span: token.span,
+                    payload: VisibilityPayload::Super,
+                    is_default: false,
+                },
+                T![crate] => Visibility {
+                    span: token.span,
+                    payload: VisibilityPayload::Crate,
+                    is_default: false,
+                },
+                _ => {
+                    // not part of +()
+                    s.dec(3);
                     Visibility {
                         span: token.span,
                         payload: VisibilityPayload::Pub,
                         is_default: false,
                     }
                 }
-            } else {
-                Visibility {
-                    span: token.span,
-                    payload: VisibilityPayload::Pub,
-                    is_default: false,
+            };
+            return Ok(r);
+        }
+
+        // +(in some-path)
+        if matches!(token.code, T![in]) {
+            s.inc(2);
+            let items = s.parse_path_expr_segments()?;
+            let mut path = SimplePath::default();
+            for item in items {
+                if !item.generic_args.items.is_empty() {
+                    return Err(s.panic(token, "pub can't contain generic params"));
+                }
+                let result = SimplePathSegment::try_from(item.name);
+                if let Ok(a) = result {
+                    path.items.push(a);
+                } else {
+                    return Err(s.panic(token, "pub can't contain Self"));
                 }
             }
-        } else {
-            Visibility {
-                span: Span {
-                    line: token.span.line,
-                    column: 0,
-                    width: 0,
-                },
-                payload,
-                is_default: true,
-            }
-        };
+            s.plusplus();
+            let r = Visibility {
+                span: token.span,
+                payload: VisibilityPayload::SimplePath(path),
+                is_default: false,
+            };
+            return Ok(r);
+        }
 
-        Ok(r)
+        return pub_vis(&plus_token);
+
+        fn pub_vis(token: &Token) -> ParseResult<Visibility> {
+            let r = Visibility {
+                span: token.span,
+                payload: VisibilityPayload::Pub,
+                is_default: false,
+            };
+            return Ok(r);
+        }
     }
 
     fn parse_identifier_pub(&self) -> ParseResult<IdentifierPlus> {
@@ -1965,7 +1974,7 @@ impl Parse {
         Ok(r)
     }
 
-    // (&), (&'a), (&'a mut), (&mut), (self), (Type)
+    // (&), (&'a), (&'a mut), (&mut), (), (Type)
     fn parse_func_self_param(&self) -> ParseResult<SelfParam> {
         let s = self;
 
@@ -2017,11 +2026,10 @@ impl Parse {
                     s.expect(T![")"])?;
                 }
             }
-        } else if matches!(token.code, T![self]) {
+        } else if matches!(token.code, T![")"]) {
             short.span_self = Some(token.span);
             r.payload = SelfParamPayload::Short(short);
             s.plusplus();
-            s.expect(T![")"])?;
         } else {
             r.payload = SelfParamPayload::Type(s.parse_type()?);
             s.expect(T![")"])?;

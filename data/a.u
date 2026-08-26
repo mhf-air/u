@@ -45,7 +45,6 @@ import super..Api-result as Result
 import std..option { Option, Option..Some, Option..None as nil }
 
 empty-mod mod
-u-custom-mod,,{a, b, c-d}
 
 vis-self+(self) mod {}
 vis-super+(super) mod {}
@@ -121,8 +120,9 @@ call,,[stmt]{
     a := "foo\""
     a := "foo
 bar"
-    a := #"foo"#
-    a := ##"foo#"##
+    a := r#"foo"#
+    a := r##"foo#"##
+    a := br##"foo#"##
     a := b##"foo#"##
     a := b#"package
 name = "foo"
@@ -342,7 +342,7 @@ Seq[T] interface[unsafe] Display + Debug where { T Copy } {
     foo func() where { Self Sized } {
     }
 
-    mov (self) func()
+    mov () func()
     mov (Rc[Self]) func()
 
     len (&) func() u32
@@ -371,16 +371,16 @@ Person impl {
     }
 }
 Person impl {
-    abc (&) func(a &str) {
-        d,,()
-    }
+    abc (&) func(a &str) {}
+    abc+ (&) func(a &str) {}
+    init+ (&mut) func(a &str) {}
 
-    init+ (&mut) func(a &str) {
-        d,,()
-    }
-    init+(self) (self) func(a &str) {
-        d,,()
-    }
+    init+ () func(a &str) {}
+    init+(self) () func(a &str) {}
+    init+(crate) () func(a &str) {}
+    init+(in crate..abc) () func(a &str) {}
+
+    init+ (crate..Abc) func(a &str) {}
 }
 
 Point[f32] impl {

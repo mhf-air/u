@@ -2714,6 +2714,8 @@ impl ToLang for SimplePath {
         for (i, item) in s.items.iter().enumerate() {
             if i != 0 {
                 p.push_raw("::");
+            } else if let SimplePathSegment::Identifier(a) = item && a.id == "-" {
+                continue;
             }
             p.push_rust(item);
         }

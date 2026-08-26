@@ -1518,7 +1518,6 @@ impl LiteralString {
         let mut p = String::new();
 
         if s.raw_count > 0 {
-            p.push('r');
             for _ in 0..s.raw_count {
                 p.push('#');
             }
