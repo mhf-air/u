@@ -346,7 +346,7 @@ Seq[T] interface[unsafe] Display + Debug where { T Copy } {
     foo func() where { Self Sized } {
     }
 
-    mov (Self) func()
+    mov (self) func()
     mov (Rc[Self]) func()
 
     len (&) func() u32
@@ -382,7 +382,7 @@ Person impl {
     init+ (&mut) func(a &str) {
         d,,()
     }
-    init+(self) (Self) func(a &str) {
+    init+(self) (self) func(a &str) {
         d,,()
     }
 }

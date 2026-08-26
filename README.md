@@ -117,7 +117,7 @@ example
 
 		mixup[V, W] (&) func[unsafe, async](other Point[V, W]) Point[T, W]
 		mixup[V, W] (&mut) func[unsafe, async](other Point[V, W]) Point[T, W]
-		mixup[V, W] (Self) func[unsafe, async](other Point[V, W]) Point[T, W]
+		mixup[V, W] (self) func[unsafe, async](other Point[V, W]) Point[T, W]
 		mixup[V, W] (Box[Self]) func[unsafe, async](other Point[V, W]) Point[T, W]
 		mixup[V, W] (Pin[Box[Self]]) func[unsafe, async](other Point[V, W]) Point[T, W]
 	}
@@ -227,10 +227,10 @@ becomes
 	let c i64 = 1;
 	let d mut i64 = 1;
 
-	fn abc(mut a: i32) {
+	fn abc(a: i32) {
 	}
 
-	let mut closure = |mut a| {
+	let mut closure = |a| {
 	};
 ```
 

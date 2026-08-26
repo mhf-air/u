@@ -1965,7 +1965,7 @@ impl Parse {
         Ok(r)
     }
 
-    // (&), (&'a), (&'a mut), (&mut), (Type)
+    // (&), (&'a), (&'a mut), (&mut), (self), (Type)
     fn parse_func_self_param(&self) -> ParseResult<SelfParam> {
         let s = self;
 
@@ -2017,6 +2017,11 @@ impl Parse {
                     s.expect(T![")"])?;
                 }
             }
+        } else if matches!(token.code, T![self]) {
+            short.span_self = Some(token.span);
+            r.payload = SelfParamPayload::Short(short);
+            s.plusplus();
+            s.expect(T![")"])?;
         } else {
             r.payload = SelfParamPayload::Type(s.parse_type()?);
             s.expect(T![")"])?;

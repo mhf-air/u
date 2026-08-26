@@ -320,6 +320,7 @@ impl ToLang for Item {
                     }
                 }
                 if derive {
+                    p.indent();
                     p.push_raw("#[derive(Debug)]\n");
                 }
             }
@@ -741,9 +742,6 @@ impl ToLang for Func {
         }
         for (i, param) in s.params.iter().enumerate() {
             p.push_rust(&param.outer_attrs);
-            if s.body.is_some() && param.name.id != "-" {
-                p.push_raw("mut ");
-            }
             p.push_rust(&param.name);
             p.push_raw(": ");
             p.push_rust(&param.type_);
@@ -830,9 +828,6 @@ impl ToLang for Func {
         }
         for (i, param) in s.params.iter().enumerate() {
             p.push_u(&param.outer_attrs);
-            if s.body.is_some() && param.name.id != "-" {
-                p.push_raw("mut ");
-            }
             p.push_u(&param.name);
             p.push_raw(": ");
             p.push_u(&param.type_);
@@ -902,10 +897,14 @@ impl ToLang for SelfParam {
         p.push_rust(&s.outer_attrs);
         match &s.payload {
             SelfParamPayload::Type(a) => {
-                p.push_raw("mut self: ");
+                p.push_raw("self: ");
                 p.push_rust(a);
             }
             SelfParamPayload::Short(a) => {
+                if let Some(span) = a.span_self {
+                    p.push_str("self", span);
+                    return;
+                }
                 p.push_str("&", a.span_ref);
                 if let Some(label) = &a.label {
                     p.push_raw("'");
@@ -926,10 +925,14 @@ impl ToLang for SelfParam {
         p.push_u(&s.outer_attrs);
         match &s.payload {
             SelfParamPayload::Type(a) => {
-                p.push_raw("mut self: ");
+                p.push_raw("self: ");
                 p.push_u(a);
             }
             SelfParamPayload::Short(a) => {
+                if let Some(span) = a.span_self {
+                    p.push_str("self", span);
+                    return;
+                }
                 p.push_raw("&");
                 if let Some(label) = &a.label {
                     p.push_raw("'");
@@ -959,6 +962,7 @@ pub struct SelfParamShort {
     pub label: Option<Identifier>,
     pub mut_: bool,
 
+    pub span_self: Option<Span>,
     pub span_ref: Span,
     pub span_mut: Option<Span>,
 }
@@ -5819,9 +5823,6 @@ impl ToLang for ExprClosure {
         p.push_str("|", s.span_paren_open);
         for (i, item) in s.params.iter().enumerate() {
             p.push_rust(&item.outer_attrs);
-            if &item.name.id != "-" {
-                p.push_raw("mut ");
-            }
             p.push_rust(&item.name);
             if let Some(type_) = &item.type_ {
                 p.push_raw(": ");
@@ -5853,9 +5854,6 @@ impl ToLang for ExprClosure {
         p.push_raw("|");
         for (i, item) in s.params.iter().enumerate() {
             p.push_u(&item.outer_attrs);
-            if &item.name.id != "-" {
-                p.push_raw("mut ");
-            }
             p.push_u(&item.name);
             if let Some(type_) = &item.type_ {
                 p.push_raw(": ");
