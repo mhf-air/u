@@ -60,10 +60,10 @@ sub+ mod {
 
 #[derive(Serialize, Deserialize)]
 Param struct {
-    #[serde(default = u"default-page")]
-    page   i32
-    #[serde(default = u"api..default-limit")]
-    limit   i32
+    #[serde(default = "default_page")]
+    default-page    i32
+    #[serde(default = "api::default_limit")]
+    default-limit   i32
 }
 
 f func() {
@@ -77,9 +77,6 @@ f func() {
             };
         }
     }
-
-    a := include-str,,("../../some-dir/a")
-    a := std..fs..read-to-string(u-path"some-dir/a").unwrap()
 }
 
 call,,(1, 2, 3)
@@ -125,13 +122,12 @@ call,,[stmt]{
     a := "foo
 bar"
     a := #"foo"#
+    a := ##"foo#"##
+    a := b##"foo#"##
     a := b#"package
 name = "foo"
 # see more
 "#
-
-    a := "foo"s
-    a := "foo".to-owned()
 }
 
 f func() {
@@ -239,7 +235,7 @@ Point type = [S as Copy]..f
 foo['a, 'b, T] func[async, unsafe](a i32, b i32) i32 where {
     T           Iterator
     T..Item     Copy
-    string      Partial-eq[T]
+    String      Partial-eq[T]
     T           Iterator[Item Copy]
     (func(T))   Iterator
     f           Box[dyn Fn-mut(&mut T) + 'a]
@@ -322,15 +318,15 @@ Foo enum {
 }
 
 Animal[T, E] enum {
-    Dog(string, f64)
+    Dog(String, f64)
     Cat {
-        name     string
+        name     String
         weight   f64
     }
 }
 
 My-union[T] union {
-    name+   string
+    name+   String
     age     i32
 }
 

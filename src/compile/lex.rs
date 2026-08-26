@@ -52,12 +52,7 @@ impl Lex {
                     }
                     LiteralPayload::String(b) => {
                         let a = 2 + b.text.len() + b.raw_count * 2;
-                        if b.u_path {
-                            // u-path"a" to "../a"
-                            a + 3
-                        } else {
-                            a
-                        }
+                        a
                     }
                     LiteralPayload::Char(b) => 2 + b.text.len(),
                 };
@@ -632,23 +627,17 @@ impl Lex {
                             s.line = start_line;
                             let (suffix, end) = get_literal_suffix(delta + 1);
                             let a = chars[start..delta].iter().collect();
-                            let lit_str = Literal::new_string_with_prefix(
-                                LiteralString {
-                                    raw_count: 0,
-                                    text: a,
-                                    u_tokens: Vec::new(),
-                                    u_path: false,
-                                },
+                            s.add_token(TokenCode::Literal(Literal::new_with_prefix(
+                                LiteralPayload::String(
+                                    LiteralString {
+                                        raw_count: 0,
+                                        text: a,
+                                        u_tokens: Vec::new(),
+                                    }
+                                ),
                                 &mut id_prefix,
                                 suffix,
-                            );
-                            let lit_str = match lit_str {
-                                Ok(a) => a,
-                                Err(err) => {
-                                    return s.panic(err);
-                                }
-                            };
-                            s.add_token(TokenCode::Literal(lit_str));
+                            )));
                             i = end;
                             s.line = new_line;
                             continue 'outer;
@@ -1077,23 +1066,17 @@ impl Lex {
                                 s.line = start_line;
                                 let (suffix, end) = get_literal_suffix(delta + raw_count + 1);
                                 let a = chars[start..delta].iter().collect();
-                                let lit_str = Literal::new_string_with_prefix(
-                                    LiteralString {
-                                        raw_count,
-                                        text: a,
-                                        u_tokens: Vec::new(),
-                                        u_path: false,
-                                    },
+                                s.add_token(TokenCode::Literal(Literal::new_with_prefix(
+                                    LiteralPayload::String(
+                                        LiteralString {
+                                            raw_count,
+                                            text: a,
+                                            u_tokens: Vec::new(),
+                                        }
+                                    ),
                                     &mut id_prefix,
                                     suffix,
-                                );
-                                let lit_str = match lit_str {
-                                    Ok(a) => a,
-                                    Err(err) => {
-                                        return s.panic(err);
-                                    }
-                                };
-                                s.add_token(TokenCode::Literal(lit_str));
+                                )));
                                 i = end;
                                 s.line = new_line;
                                 continue 'outer;
@@ -1527,7 +1510,6 @@ pub struct LiteralString {
     raw_count: usize, // number of pound sign
     pub text: String,
     u_tokens: Vec<Token>,
-    u_path: bool,
 }
 impl LiteralString {
     fn to_rust_string(&self) -> String {
@@ -1665,53 +1647,6 @@ impl Literal {
             span: Span::default(),
         }
     }
-
-    fn new_string_with_prefix(
-        lit_str: LiteralString,
-        prefix: &mut Option<String>,
-        suffix: Option<String>,
-    ) -> Result<Literal, &'static str> {
-        let p = prefix.clone();
-        *prefix = None;
-
-        let prefix = p.as_ref().map(String::as_str);
-        let lit_str = match prefix {
-            Some("u-id") => {
-                let mut lit_str = lit_str;
-
-                let mut l = Lex::new();
-                if l.lex(lit_str.text.clone()).is_err() {
-                    return Err("illegal u-id string");
-                }
-                let tokens: Vec<Token> = l
-                    .tokens
-                    .into_iter()
-                    .filter(|token| !token.is_added_semicolon())
-                    .collect();
-                lit_str.u_tokens = tokens;
-                lit_str
-            }
-            Some("u-path") => {
-                let mut lit_str = lit_str;
-                lit_str.text = format!("../{}", lit_str.text);
-                lit_str.u_path = true;
-                return Ok(Literal {
-                    payload: LiteralPayload::String(lit_str),
-                    prefix: None,
-                    suffix,
-                    span: Span::default(),
-                });
-            }
-            _ => lit_str,
-        };
-
-        Ok(Literal {
-            payload: LiteralPayload::String(lit_str),
-            prefix: p,
-            suffix,
-            span: Span::default(),
-        })
-    }
 }
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum LiteralPayload {
@@ -1754,13 +1689,8 @@ impl ToLang for Literal {
             }
             r.push_str(a);
             if let Some(suffix) = &s.suffix {
-                // NOTE builtin literal suffix for String
-                if suffix == "s" {
-                    r.push_str(".to_owned()");
-                } else {
-                    let suffix = Identifier::id_to_rust(&suffix);
-                    r.push_str(&suffix);
-                }
+                let suffix = Identifier::id_to_rust(&suffix);
+                r.push_str(&suffix);
             }
             p.push_str(&r, s.span);
         };
@@ -1863,9 +1793,6 @@ impl Identifier {
         let mut p = String::new();
         if id.is_empty() {
             return "".to_string();
-        }
-        if id == "string" {
-            return "String".to_string();
         }
 
         let chars: Vec<char> = id.chars().collect();

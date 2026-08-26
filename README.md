@@ -18,7 +18,7 @@ I like Rust's semantics, but dislike some of its syntax
 
 	- Upper-camel-case for UpperCamelCase
 	- set-name for set_name
-	- name--c for NAME(which is a const)
+	- name--c for NAME(which is a const or static)
 	- AnYThInGcUsTom--r for AnYThInGcUsTom
 
 	as for identifiers containing digit, forbid '-' followed by a digit, and consider digits as lower-case letters.
@@ -55,9 +55,9 @@ and minus becomes
 example
 
 	User struct {
-		desc     Option[string]
-		tags     Vec[string]
-		an-array {{i32: 10}}
+		desc       Option[string]
+		tags       Vec[string]
+		an-array   {{i32: 10}}
 	}
 
 and array becomes
@@ -98,8 +98,8 @@ example
 	server--c static Option[Server] = None
 
 	User+['a] struct {
-		name+ &'a str
-		age   i32
+		name+   &'a str
+		age     i32
 	}
 
 	private-func+ func(id string, count i32) i32 {
@@ -171,7 +171,7 @@ example
 		.c
 ```
 
-- **use .. insteaf of :: for path separator**
+- **use .. instead of :: for path separator**
 
 	because it's easier to type and distinguishes path segments better
 
@@ -196,9 +196,9 @@ example
 	}
 ```
 
-- **forbid leading :: before a path**
+- **new syntax for leading :: of a path**
 
-	Useless to me. When mod name and external crate name collide, change one of those
+    use -..crate-name..abc, which translates to ::crate_name::abc
 
 - **add another syntax for let, and add mut to all function parameters**
 
@@ -234,47 +234,13 @@ becomes
 	};
 ```
 
-- **use string instead of String, and add string literal for String**
-
-	all "string" identifiers are translated to "String", because it's easier to type and strings are so frequently used
-
-	if some library exports "string", then use "string--r" to refer to it
-
-	"foo"s is translated to "foo".to_owned()
-
-	possible future conflict: when ""s is used in Rust
-
-- **add u-id string**
-
-```
-example
-
-	#[derive(Serialize, Deserialize)]
-	Param struct {
-		#[serde(default = u-id"default-page")]
-		page i32
-		#[serde(default = u-id"api..default-limit")]
-		limit i32
-	}
-
-becomes
-
-	#[derive(Serialize, Deserialize)]
-	struct Param {
-		#[serde(default = "default_page")]
-		page: i32,
-		#[serde(default = "api::default_limit")]
-		limit: i32,
-	}
-```
-
 - **#[derive(Debug)] for all structs and enums by default**
 
 	add #[derive(Debug)] for all structs and enums, except for the case that they have outer attributes that is ***#[!derive(Debug)]***
 
 	pros: no need to add that to them, and almost all structs need Debug
 
-	cons: increased compilation time and binary size (but I think this is a good tradeoff)
+	cons: increased compilation time and binary size (but I think this is a good trade-off)
 
 ```
 example
@@ -330,6 +296,7 @@ or if util is a directory
 
 - **custom mod.u file**
 
+deprecated:
 if you customize the mod.u file, in order to prevent the above processing
 
 just write ordinary u code
@@ -560,85 +527,16 @@ example
 
 - **use ... instead of .. as rest pattern**
 
-- **unit test**
-
-	add a test block. any functions in that block whose name starts with test- automatically
-	have a #[test] attribute added
-```
-example
-
-	test {
-		test-add func() {
-		}
-	}
-
-instead of
-
-	#[cfg(test)]
-	test mod {
-		#[test]
-		add func() {
-		}
-	}
-```
-
 - **patterns in function parameters**
 
 	it's bad to have that in function parameters.
 	if you really need that, add a destructuring assignment at the start of the function body
-
-- **use d,,() for dbg!()**
-
-	because it's so frequently used
-
-- **caveat**
-
-```
-// special case: wrap the cast type when the type consists of keyword const
-const-c-void[T] func(r &T) *const c-void {
-	ret r as (*const T) as (*const c-void)
-}
-
-```
 
 - **doc comment**
 
 	write doc comment in u's format, and generate the same format doc in rust
 
 	TODO: maybe generating rust doc in the future
-
-- **add u-path string literal**
-
-	adds "../" before the string literal
-
-	because when you run `u run`, under the hood it runs `cd .u; cargo run`, so the static files are one level
-	above relative to the rust files
-
-	NOTE: the relative path of those static files referenced in source code must refer all the way to the project root,
-	like u-path"../../crates/some-crate/some-file", instead of u-path"../some-file"
-
-```
-example
-
-	read-to-str(u-path"some-dir/a")
-	include-str,,(u-path"../../some-dir/a")
-
-becomes
-
-	read-to-str("../some-dir/a")
-	include-str,,("../../../some-dir/a")
-
-suppose there is a file some-dir/a
-
-$ROOT/
-	some-dir/
-		a
-	crates/
-		$ROOT/
-			src/
-			main.u
-
-```
 
 ### for more examples, check [a.u file](./data/a.u)
 
