@@ -2838,6 +2838,9 @@ impl ToLang for PathInExpr {
         for (i, item) in s.items.iter().enumerate() {
             if i != 0 {
                 p.push_raw("::");
+            } else if let PathIdentSegment::Identifier(a) = &item.name && a.id == "-" {
+                // -..crate-abc..Abc turns into ::crate_abc::Abc
+                continue;
             }
             p.push_rust(item);
         }
@@ -2974,6 +2977,9 @@ impl ToLang for TypePath {
         for (i, item) in s.items.iter().enumerate() {
             if i != 0 {
                 p.push_raw("::");
+            } else if let PathIdentSegment::Identifier(a) = &item.name && a.id == "-" {
+                // -..crate-abc..Abc turns into ::crate_abc::Abc
+                continue;
             }
             p.push_rust(item);
         }

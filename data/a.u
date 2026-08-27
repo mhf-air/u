@@ -242,6 +242,12 @@ foo['a, 'b, T] func[async, unsafe](a i32, b i32) i32 where {
     'a          'b
 }{}
 
+f func() {
+    import -..crate-abc..Abc
+    Point type = -..crate-abc..Abc
+    -..crate-abc..f()
+}
+
 f func(
     a   i32
     b   i32
