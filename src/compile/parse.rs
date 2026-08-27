@@ -2009,7 +2009,11 @@ impl Parse {
                         }
                     }
                     _ => {
-                        r.payload = SelfParamPayload::Type(s.parse_type()?);
+                        let typ = SelfParamType {
+                            typ: s.parse_type()?,
+                            span_mut: None,
+                        };
+                        r.payload = SelfParamPayload::Type(typ);
                         s.expect(T![")"])?;
                     }
                 },
@@ -2022,7 +2026,11 @@ impl Parse {
                     }
                 }
                 _ => {
-                    r.payload = SelfParamPayload::Type(s.parse_type()?);
+                    let typ = SelfParamType {
+                        typ: s.parse_type()?,
+                        span_mut: None,
+                    };
+                    r.payload = SelfParamPayload::Type(typ);
                     s.expect(T![")"])?;
                 }
             }
@@ -2031,7 +2039,17 @@ impl Parse {
             r.payload = SelfParamPayload::Short(short);
             s.plusplus();
         } else {
-            r.payload = SelfParamPayload::Type(s.parse_type()?);
+            // (mut Type)
+            let mut span_mut = None;
+            if matches!(token.code, T![mut]) {
+                span_mut = Some(s.nth(1).span);
+                s.plusplus();
+            }
+            let typ = SelfParamType {
+                typ: s.parse_type()?,
+                span_mut,
+            };
+            r.payload = SelfParamPayload::Type(typ);
             s.expect(T![")"])?;
         }
 

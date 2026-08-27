@@ -66,11 +66,11 @@ Param struct {
 }
 
 f func() {
-    d,,(a, b)
+    dbg,,(a, b)
     println,,("{} {:?}", a, b)
 
     quote,,{
-        pub fn api-config() -> api..Api-config {
+        pub func api-config() -> api..Api-config {
             ret api..Api-config {
                 ``Default..default()
             };
@@ -179,7 +179,7 @@ f func() {
     a{ name: "", ...Default..default() }
     a{ name: "", ... }
     a{
-        name:   ""
+        name: ""
         ...
     }
 
@@ -367,7 +367,6 @@ Foo interface {
 
 Person impl {
     test (&) func(a &str) {
-        d,,()
     }
 }
 Person impl {
@@ -381,6 +380,7 @@ Person impl {
     init+(in crate..abc) () func(a &str) {}
 
     init+ (crate..Abc) func(a &str) {}
+    init+ (mut crate..Abc) func(a &str) {}
 }
 
 Point[f32] impl {
@@ -601,12 +601,12 @@ f func() {
 
 f func() {
     match message {
-        Message..Quit: d,,("Quit")
-        Message..Write-string(write): d,,(&write)
-        Message..Move{ x, y: 0 }: d,,("move {} horizontally", x)
-        Message..Move{ ... }: d,,("other move")
+        Message..Quit: dbg,,("Quit")
+        Message..Write-string(write): dbg,,(&write)
+        Message..Move{ x, y: 0 }: dbg,,("move {} horizontally", x)
+        Message..Move{ ... }: dbg,,("other move")
         Message..Change-color{ 0: red, 1: green, 2: - }:
-            d,,("color change, red: {}, green: {}", red, green)
+            dbg,,("color change, red: {}, green: {}", red, green)
         -: {}
     }
 }

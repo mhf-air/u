@@ -897,8 +897,11 @@ impl ToLang for SelfParam {
         p.push_rust(&s.outer_attrs);
         match &s.payload {
             SelfParamPayload::Type(a) => {
+                if let Some(span) = a.span_mut {
+                    p.push_str("mut ", span);
+                }
                 p.push_raw("self: ");
-                p.push_rust(a);
+                p.push_rust(&a.typ);
             }
             SelfParamPayload::Short(a) => {
                 if let Some(span) = a.span_self {
@@ -925,8 +928,11 @@ impl ToLang for SelfParam {
         p.push_u(&s.outer_attrs);
         match &s.payload {
             SelfParamPayload::Type(a) => {
+                if let Some(span) = a.span_mut {
+                    p.push_str("mut ", span);
+                }
                 p.push_raw("self: ");
-                p.push_u(a);
+                p.push_rust(&a.typ);
             }
             SelfParamPayload::Short(a) => {
                 if let Some(span) = a.span_self {
@@ -949,8 +955,8 @@ impl ToLang for SelfParam {
 }
 #[derive(Debug)]
 pub enum SelfParamPayload {
-    Type(Type),
     Short(SelfParamShort),
+    Type(SelfParamType),
 }
 impl Default for SelfParamPayload {
     fn default() -> Self {
@@ -964,6 +970,12 @@ pub struct SelfParamShort {
 
     pub span_self: Option<Span>,
     pub span_ref: Span,
+    pub span_mut: Option<Span>,
+}
+#[derive(Debug, Default)]
+pub struct SelfParamType {
+    pub typ: Type,
+
     pub span_mut: Option<Span>,
 }
 #[derive(Debug, Default)]
