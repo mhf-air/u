@@ -103,10 +103,6 @@ example
 	}
 
 	private-func+ func(id string, count i32) i32 {
-		a := 1
-		a let i32 = 1
-		a let mut = 1
-		a let mut i32 = 1
 		ret 0
 	}
 
@@ -131,7 +127,7 @@ example
 	or
         let s = self;
 	at the start of method body, except when there's
-        \"no-s"
+        $"no-s"
     before method's signature
 
 	pros: it's clearer and shorter
@@ -139,7 +135,7 @@ example
 example
 
 	User impl {
-        \"no-s"
+        $"no-s"
 		get-age+ (&) func i32 {
 			< self.age
 		}
@@ -209,9 +205,7 @@ example
 
     use -..crate-name..abc, which translates to ::crate_name::abc
 
-- **add another syntax for let, and add mut to all function parameters**
-
-	in my opinion, the bindings should be mutable by default, because that is the most frequent situation.
+- **add another syntax for let
 
 	possible future conflict: when := is used in Rust
 
@@ -219,34 +213,22 @@ example
 example
 
 	a := 1
-	b let = 1
-	c let i64 = 1
-	d let mut i64 = 1
-
-	abc func(a i32) {
-	}
-
-	closure := |a| {
-	}
+	b mut := 1
+	c i64 := 1
+	d mut i64 := 1
 
 becomes
 
-	let mut a = 1;
-	let b = 1;
-	let c i64 = 1;
-	let d mut i64 = 1;
-
-	fn abc(a: i32) {
-	}
-
-	let mut closure = |a| {
-	};
+	let a = 1;
+	let mut b = 1;
+	let c: i64 = 1;
+	let mut d: i64 = 1;
 ```
 
 - **#[derive(Debug)] for all structs and enums by default**
 
 	add #[derive(Debug)] for all structs and enums,
-    except when they have outer mark that is ***\"no-derive-debug"***
+    except when they have outer mark that is ***$"no-derive-debug"***
 
 	pros: no need to add that to them, and almost all structs need Debug
 
@@ -258,7 +240,7 @@ example
 	Has-debug struct {
 	}
 
-    \"no-derive-debug"
+    $"no-derive-debug"
 	No-debug struct {
 	}
 ```
@@ -515,7 +497,7 @@ example
 	if you really need that, add a destructuring assignment at the start of the function body
 
 ```
-f func(\"pat"mut a: i32, b i32) {}
+f func($"pat"mut a: i32, b i32) {}
 ```
 
 - **doc comment**
@@ -1409,9 +1391,6 @@ statement and expression
 - Cargo configuration for README.md and other static files
 
 - a new u-analyzer: a wrapper around rust-analyzer, being both a server and a client
-
-- maybe rm .u/, instead put .user.rs file along with user.u file. that way I can remove u-path"string",
-  u commands would be easy to write
 
 ## Fantasy
 

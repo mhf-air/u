@@ -190,8 +190,6 @@ impl ToLang for Package {
             p.push_raw("\n");
         }
 
-        p.push_raw("#![allow(unused_mut)]\n");
-
         p.push_rust(&s.inner_attrs);
         if !p.is_main {
             p.push_raw("use super::*;\n\n");
