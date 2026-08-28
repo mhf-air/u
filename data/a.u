@@ -100,7 +100,6 @@ call,,[stmt]{
     a..r#match() as i32
     a..b() as i32
 
-    a let (i32, ) = (1, )
     a -> (1, )
 
     continue
@@ -147,8 +146,8 @@ f func() {
         b
     )
 
-    a let {{i32: 1}}
-
+    f func(a {{i32: 1}}) {
+    }
     {{0: 1}}
     {{0, 1}}
     {{
@@ -162,7 +161,6 @@ f func() {
     {{
         a,
     }}
-    a let func(i32, ...)
 
     f(a, b)
     a.b(
@@ -220,12 +218,13 @@ name--c+ const &str = "hello"
 num--c static i32 = 0
 num--c static mut i32 = 0
 
+// use fn() for function type, not func
+Point[T] type = fn(T, T) T
 Point+[T Copy + Default] type = (T, T)
-Point[N const usize] type = {{i32: N}}
-Point[T] type where { T Copy } = (T, T)
-Point[T] type where { T Iterator } = T
+Point[N const usize] type Copy + Clone = {{i32: N}}
+Point[T] type = (T, T) where { T Copy }
+Point[T] type = T where { T Iterator }
 Point['a 'b + 'c, 'd 'e] type = &'a i32
-Point[T] type = func(T, T) T
 Point[T] type = std..boxed..Box[dyn std..ops..Fn-once(isize) isize]
 Point[T] type = impl Iterator[Item = ops..Example[T]]
 Point[T] type = impl Iterator[Item ops..Example[T]]
@@ -237,7 +236,7 @@ foo['a, 'b, T] func[async, unsafe](a i32, b i32) i32 where {
     T..Item     Copy
     String      Partial-eq[T]
     T           Iterator[Item Copy]
-    (func(T))   Iterator
+    fn(T)       Iterator
     f           Box[dyn Fn-mut(&mut T) + 'a]
     'a          'b
 }{}
@@ -256,17 +255,13 @@ f func(
         a
         b
     )
-    a let func(
-        i32
-        i32
-    )
     vec,,(
         a
         b
     )
 }
 
-f func(a func(&mut App), b i32) {
+f func(a fn(&mut App), b i32) {
     list.collect[Vec[-]]()
 
     id := 1
@@ -282,7 +277,6 @@ f func(a func(&mut App), b i32) {
 }
 
 const-c-void[T] func(r &T) *const c-void {
-    a let = b as (for['a] func(&'a str))
     ret r as *const T as *const c-void
 }
 
@@ -394,7 +388,7 @@ Point[f32] impl {
 }
 
 {{T: N}} [T, N const usize] impl[unsafe] My-trait {}
-(func(i32) impl Copy) impl {}
+(fn(i32) impl Copy) impl {}
 (str) [I] impl ops..Index[I] {}
 
 crate..Person impl {
@@ -495,13 +489,17 @@ f func() {
 }
 
 f func() {
+    a :=;
+    a i32 :=;
     a := 1
-    a let
-    a let i32
-    a let = 1
-    a let mut
-    a let mut i32
-    a let mut i32 = 1
+    a i32 := 1
+
+    a mut :=;
+    a mut i32 :=;
+    a mut := 1
+    a mut i32 := 1
+
+    a fn(i32, ...) :=;
 }
 
 f func() {
@@ -567,7 +565,7 @@ f func() {
 }
 
 f func() {
-    b let = if a < 2 {
+    b := if a < 2 {
         < ~1
     } else {
         < 1
@@ -662,13 +660,13 @@ b
 */
 /// a
 f func() {
-    sum let u32 = (0``)
+    sum u32 := (0``)
         .map(|n u32| -> u32 { < n * n })
         .take-while(|n &u32| -> bool { < *n < 1000 })
         .filter(|n &u32| -> bool { < *n % 2 == 1 })
         .fold(0, |acc u32, n u32| { < acc + n } )
 
-    sum let u32 = (0``)
+    sum u32 := (0``)
         .map(|n| n * n)
         .take-while(|n| *n < 1000)
         .filter(|n| *n % 2 == 1)
@@ -678,7 +676,7 @@ f func() {
 vec macro {
     ( $( $x:expr ),* ) => {
         {
-            let mut temp-vec = Vec..new();
+            temp-vec mut := Vec..new();
             $(
                 temp-vec.push($x);
             )*

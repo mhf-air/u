@@ -88,7 +88,7 @@ turbofish becomes
 
 	Type [Generics]? impl Trait? where? {}
 
-	if Type contains func or Type and [Generics] are ambiguous, wrap Type in parentheses
+	if Type and [Generics] are ambiguous, wrap Type in parentheses
 	(because such cases are rare, so most other cases requires less typing)
 
 ```
@@ -471,6 +471,8 @@ the following two expressions are the same
 	exception: if you need to annotate closure expression's return type, then it has to be |n| -> i32 { < 1 }
 
 - **use func, interface, import instead of fn, trait, use**
+
+    use fn() for function type, not func()
 
 - **use ret instead of return**
 

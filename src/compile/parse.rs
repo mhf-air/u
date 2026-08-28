@@ -2083,12 +2083,21 @@ impl Parse {
         // possible type
         let token = s.current();
         if matches!(&token.code, T![=]) {
-            r.span_eq = Some(s.current().span);
+            r.span_eq = Some(token.span);
             s.plusplus();
             let type_ = s.parse_type()?;
-            s.expect(T![;])?;
             r.type_ = Some(type_);
+
+            // possible where clause
+            let token = s.current();
+            if matches!(&token.code, T![where]) {
+                s.plusplus();
+                let mut where_ = s.parse_where()?;
+                where_.span_where = token.span;
+                r.type_where = Some(where_);
+            }
         }
+        s.expect(T![;])?;
 
         Ok(r)
     }
@@ -4795,7 +4804,7 @@ impl Parse {
                     Box::new(f),
                 ))));
             }
-            T![func] => {
+            T![fn] => {
                 let f = s.parse_func_type(FuncType::Func(token.span))?;
                 return Ok(Type::TypeNoBounds(Box::new(TypeNoBounds::BareFunction(
                     Box::new(f),
@@ -5033,15 +5042,6 @@ impl Parse {
                     item.for_lifetimes = Some(f);
                 }
                 item.type_ = s.parse_type()?;
-                // if Type is parenthesized, unwrap it
-                if let Type::TypeNoBounds(a) = item.type_ {
-                    if let TypeNoBounds::Parenthesized(p) = *a {
-                        item.type_ = p.type_;
-                    } else {
-                        item.type_ = Type::TypeNoBounds(a);
-                    }
-                }
-
                 item.bounds = s.parse_type_param_bounds()?;
                 r.items.push(WhereItem::TypeBound(item));
             }

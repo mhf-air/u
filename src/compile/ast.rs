@@ -992,6 +992,7 @@ pub struct TypeAlias {
     pub bounds: TypeParamBounds,
     pub where_: Option<Where>,
     pub type_: Option<Type>,
+    pub type_where: Option<Where>,
 
     pub span_type: Span,
     pub span_eq: Option<Span>,
@@ -1018,6 +1019,9 @@ impl ToLang for TypeAlias {
             p.push_str("=", s.span_eq.unwrap());
             p.push_raw(" ");
             p.push_rust(type_);
+            if let Some(where_) = &s.type_where {
+                p.push_rust(where_);
+            }
         }
         p.push_raw(";");
     }
@@ -1039,6 +1043,9 @@ impl ToLang for TypeAlias {
         if let Some(type_) = &s.type_ {
             p.push_raw(" = ");
             p.push_u(type_);
+            if let Some(where_) = &s.type_where {
+                p.push_rust(where_);
+            }
         }
         p.push_raw(";");
     }
@@ -1908,16 +1915,6 @@ pub struct MacroCall {
 impl ToLang for MacroCall {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
-
-        match &s.body {
-            MacroCallBody::Token(_) => {}
-            MacroCallBody::Expr(_) => {
-                p.push_raw("/* u:expr */");
-            }
-            MacroCallBody::Stmt(_) => {
-                p.push_raw("/* u:stmt */");
-            }
-        }
 
         p.push_rust(&s.path);
         p.push_str("!", s.span_macro_call);
