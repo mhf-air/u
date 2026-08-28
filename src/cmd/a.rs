@@ -104,7 +104,7 @@ impl CmdNone {
             // CmdFmt::new(vec!["data/f.u".to_string()]).run()?;
 
             let filepath = "data/a.u";
-            let buf = compile_to_rust(filepath, false).unwrap();
+            let buf = compile_to_rust(filepath).unwrap();
             println!("{}", buf);
             Ok(())
         } else {
@@ -147,14 +147,14 @@ impl CmdCompile {
     fn to_rust(&self) -> io::Result<()> {
         let s = self;
 
-        let (rs_path, is_main) = s.get_rs_path()?;
+        let rs_path = s.get_rs_path()?;
 
         let dir = rs_path.parent().unwrap();
         io_func!(fs::create_dir_all(dir), || dir.to_string_lossy());
 
         if rs_path.file_name().unwrap() == "mod.rs" {
             // detect lex errors
-            let r = compile_to_rust(&s.src, is_main);
+            let r = compile_to_rust(&s.src);
             if let Err(err) = r {
                 println!("{}", err);
                 return Ok(());
@@ -163,7 +163,7 @@ impl CmdCompile {
             return Ok(());
         }
 
-        let r = compile_to_rust(&s.src, is_main);
+        let r = compile_to_rust(&s.src);
         if let Err(err) = r {
             println!("{}", err);
             return Ok(());
@@ -172,9 +172,7 @@ impl CmdCompile {
         io_func!(fs::write(&rs_path, buf), || rs_path.to_string_lossy());
 
         // must run this after writing the file, otherwise the file may not exist yet
-        if !is_main {
-            s.set_mod_rs(dir, false)?;
-        }
+        s.set_mod_rs(dir, false)?;
 
         Ok(())
     }
@@ -329,7 +327,7 @@ impl CmdCompile {
             }
 
             // to rust
-            match p.to_rust(true) {
+            match p.to_rust() {
                 Err(_) => {
                     return Err(io::Error::new(io::ErrorKind::Other, "to rust error"));
                 }
@@ -342,7 +340,7 @@ impl CmdCompile {
        from $ROOT/crates/some-path/some-name.u,
        to $ROOT/.u/crates/$CRATE/some-path/some-name.rs
     */
-    pub fn get_rs_path(&self) -> io::Result<(PathBuf, bool)> {
+    pub fn get_rs_path(&self) -> io::Result<PathBuf> {
         let s = self;
 
         let p = io_func!(fs::canonicalize(PathBuf::from(&s.src)), || &s.src);
@@ -360,28 +358,12 @@ impl CmdCompile {
                         format!("{:?} is not supported", a),
                     ));
                 }
-                let is_main = if buf.len() == 3 {
-                    // crates/$CRATE_ROOT/a.rs
-                    true
-                } else if file_name == "mod.u" {
-                    true
-                } else {
-                    match buf[2].to_str().unwrap() {
-                        "benches" | "bin" | "examples" | "tests" => {
-                            // prefix is crates/$CRATE_ROOT
-                            // bin/a.rs or bin/a/main.rs -> true
-                            // bin/a/src/a.rs -> false
-                            buf.len() == 4 || buf.len() == 5
-                        }
-                        _ => false,
-                    }
-                };
 
                 buf.insert(0, OsStr::new(U_LOCAL_ROOT));
                 buf.insert(0, dir.as_os_str());
                 let mut a: PathBuf = buf.iter().collect();
                 a.set_extension("rs");
-                return Ok((a, is_main));
+                return Ok(a);
             }
 
             if let Some(dir_name) = dir.file_name() {
@@ -801,12 +783,12 @@ path = "main.rs"
 
             let main_file = format!("../../../crates/{}/main.u", crate_name);
             if Path::new(&main_file).exists() {
-                let main = compile_to_rust(&main_file, true).unwrap();
+                let main = compile_to_rust(&main_file).unwrap();
                 io_func!(fs::write("main.rs", main), || "main.rs");
             }
             let lib_file = format!("../../../crates/{}/lib.u", crate_name);
             if Path::new(&lib_file).exists() {
-                let main = compile_to_rust(&lib_file, true).unwrap();
+                let main = compile_to_rust(&lib_file).unwrap();
                 io_func!(fs::write("lib.rs", main), || "lib.rs");
             } else {
                 io_func!(write_default_lib_rs("lib.rs"), || "lib.rs");
@@ -847,7 +829,7 @@ path = "main.rs"
                 if path.is_dir() {
                     visit_src(&CmdCompile { src: path_str }, &format!("{}/{}", dir, name))?;
                 } else if name != "mod" {
-                    let src = compile_to_rust(&path_str, false).unwrap();
+                    let src = compile_to_rust(&path_str).unwrap();
                     io_func!(fs::write(&format!("{}/{}.rs", dir, name), &src), || &src);
                 }
             }
@@ -875,7 +857,7 @@ path = "main.rs"
                         visit_src(compile, &dir_name)?;
                     }
                 } else {
-                    let src = compile_to_rust(&path_str, true).unwrap();
+                    let src = compile_to_rust(&path_str).unwrap();
                     io_func!(fs::write(&format!("{}/{}.rs", dir, name), &src), || &src);
                 }
             }
@@ -905,7 +887,7 @@ fn check_status(status: process::ExitStatus) -> io::Result<()> {
 }
 
 // --------------------------------------------------------------------------------
-fn compile_to_rust(filepath: &str, is_main: bool) -> Result<String, String> {
+fn compile_to_rust(filepath: &str) -> Result<String, String> {
     let data = cc::get_file_content(filepath).unwrap();
 
     let mut l = cc::Lex::new();
@@ -918,7 +900,7 @@ fn compile_to_rust(filepath: &str, is_main: bool) -> Result<String, String> {
         return Err(serde_json::to_string(&err).unwrap());
     }
 
-    match p.to_rust(is_main) {
+    match p.to_rust() {
         Err(err) => Err(serde_json::to_string(&err).unwrap()),
         Ok(f) => {
             Ok(f.buf())

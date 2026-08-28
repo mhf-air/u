@@ -10,7 +10,6 @@ match each comment with the token preceding it, a u span or comment
 pub struct LangFormatter {
     buf: String,
     indent: u8,
-    is_main: bool,
 
     span_pairs: Vec<SpanPair>,
     line: usize,
@@ -39,11 +38,10 @@ pub struct RustSpan {
 }
 
 impl LangFormatter {
-    pub fn new(is_main: bool, comments: Vec<Comment>) -> LangFormatter {
+    pub fn new(comments: Vec<Comment>) -> LangFormatter {
         LangFormatter {
             buf: String::new(),
             indent: 0,
-            is_main,
 
             span_pairs: Vec::new(),
             line: 1,
@@ -191,9 +189,6 @@ impl ToLang for Package {
         }
 
         p.push_rust(&s.inner_attrs);
-        if !p.is_main {
-            p.push_raw("use super::*;\n\n");
-        }
         for item in &s.items {
             p.push_rust(item);
         }
@@ -2226,7 +2221,7 @@ impl ToLang for Attr {
 }
 
 pub fn attr_to_text(tokens: &[Token]) -> String {
-    let mut p = LangFormatter::new(true, Vec::new());
+    let mut p = LangFormatter::new(Vec::new());
     for token in tokens {
         token.to_rust(&mut p)
     }

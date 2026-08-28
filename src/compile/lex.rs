@@ -1527,7 +1527,7 @@ impl LiteralString {
         if s.u_tokens.is_empty() {
             p.push_str(&s.text);
         } else {
-            let mut fmtter = LangFormatter::new(true, Vec::new());
+            let mut fmtter = LangFormatter::new(Vec::new());
             for token in &s.u_tokens {
                 fmtter.push_rust(token);
             }

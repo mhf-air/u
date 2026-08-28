@@ -158,17 +158,17 @@ impl Parse {
         Ok(s)
     } */
 
-    pub fn to_rust(self, is_main: bool) -> Result<LangFormatter, ParseError> {
+    pub fn to_rust(self) -> Result<LangFormatter, ParseError> {
         let s = self;
         // let s = s.to_rust_doc()?;
-        let mut p = LangFormatter::new(is_main, s.comments);
+        let mut p = LangFormatter::new(s.comments);
         s.pkg.to_rust(&mut p);
         Ok(p)
     }
 
     pub fn to_u(self) -> String {
         let s = self;
-        let mut p = LangFormatter::new(false, s.comments);
+        let mut p = LangFormatter::new(s.comments);
         s.pkg.to_u(&mut p);
         p.buf()
     }
