@@ -472,7 +472,20 @@ the following two expressions are the same
 
 - **use func, interface, import instead of fn, trait, use**
 
-    use fn() for function type, not func()
+- **new syntax for bare function type**
+
+    use : here instead of ->, because Type might appear before :=, which will
+    mistake a := statement into a -> statement
+
+```
+example
+
+    fn()
+    fn(i32, i32)
+    fn(i32, i32): T
+
+    dyn Fn-once(): T
+```
 
 - **use ret instead of return**
 

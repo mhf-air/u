@@ -274,11 +274,6 @@ impl Fmt {
                     s.fmt_item(b);
                 }
             }
-            cc::ItemPayload::Test(a) => {
-                for b in a.items {
-                    s.fmt_item(b);
-                }
-            }
             cc::ItemPayload::Func(a) => {
                 s.fmt_params(a.params, &a.span_paren_open);
                 if let Some(body) = a.body {

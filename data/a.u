@@ -106,24 +106,24 @@ call,,[stmt]{
     break
     ret
 
-    a := '😻'
-    a := 1_234.0E~18_f64
+    a = '😻'
+    a = 1_234.0E~18_f64
 
-    a := 1.0
-    a := a.0
-    a := a.0.0
+    a = 1.0
+    a = a.0
+    a = a.0.0
 
-    a := 'a'
-    a := b'a'
+    a = 'a'
+    a = b'a'
 
-    a := "foo\""
-    a := "foo
+    a = "foo\""
+    a = "foo
 bar"
-    a := r#"foo"#
-    a := r##"foo#"##
-    a := br##"foo#"##
-    a := b##"foo#"##
-    a := b#"package
+    a = r#"foo"#
+    a = r##"foo#"##
+    a = br##"foo#"##
+    a = b##"foo#"##
+    a = b#"package
 name = "foo"
 # see more
 "#
@@ -185,33 +185,33 @@ f func() {
 }
 
 identifier func() {
-    - := "-"
-    a := "a"
+    - = "-"
+    a = "a"
 
-    c- := "c-"
-    -c := "-c"
-    aa := "aa"
-    aA := "aA"
-    Aa := "Aa"
-    AA := "AA"
+    c- = "c-"
+    -c = "-c"
+    aa = "aa"
+    aA = "aA"
+    Aa = "Aa"
+    AA = "AA"
 
-    -- := "--"
-    --- := "---"
-    --r := "--r"
-    --c := "--c"
+    -- = "--"
+    --- = "---"
+    --r = "--r"
+    --c = "--c"
 
-    name--c := "name--c"
+    name--c = "name--c"
 
-    Order := "Order"
-    Order- := "Order-"
-    Order-item := "Order-item"
-    Order-item--r := "Order-item--r"
+    Order = "Order"
+    Order- = "Order-"
+    Order-item = "Order-item"
+    Order-item--r = "Order-item--r"
 
-    order := "order"
-    submit-order := "submit-order"
-    mut- := "mut-"
+    order = "order"
+    submit-order = "submit-order"
+    mut- = "mut-"
 
-    c-void := "c-void"
+    c-void = "c-void"
 }
 
 name--c+ const &str = "hello"
@@ -219,13 +219,13 @@ num--c static i32 = 0
 num--c static mut i32 = 0
 
 // use fn() for function type, not func
-Point[T] type = fn(T, T) T
+Point[T] type = fn(T, T): T
 Point+[T Copy + Default] type = (T, T)
 Point[N const usize] type Copy + Clone = {{i32: N}}
 Point[T] type = (T, T) where { T Copy }
-Point[T] type = T where { T Iterator }
+Point[T] type = fn(T) where { T Iterator }
 Point['a 'b + 'c, 'd 'e] type = &'a i32
-Point[T] type = std..boxed..Box[dyn std..ops..Fn-once(isize) isize]
+Point[T] type = std..boxed..Box[dyn std..ops..Fn-once(isize): isize]
 Point[T] type = impl Iterator[Item = ops..Example[T]]
 Point[T] type = impl Iterator[Item ops..Example[T]]
 Point type = [S]..f
@@ -264,19 +264,20 @@ f func(
 f func(a fn(&mut App), b i32) {
     list.collect[Vec[-]]()
 
-    id := 1
-    a := &id
-    a := &mut id
-    a := &[raw] id
-    a := &[raw] mut id
+    id = 1
+    a = &id
+    a = &mut id
+    a = &[raw] id
+    a = &[raw] mut id
 
-    a := &&id
-    a := &&mut id
-    a := &&[raw] id
-    a := &&[raw] mut id
+    a = &&id
+    a = &&mut id
+    a = &&[raw] id
+    a = &&[raw] mut id
 }
 
 const-c-void[T] func(r &T) *const c-void {
+    ret r as fn() as i32
     ret r as *const T as *const c-void
 }
 
@@ -428,37 +429,37 @@ f func() {
         dangerous()
     }
 
-    a := unsafe {
+    a = unsafe {
     }
 
     async {
     }
 
-    a := async[move] {
+    a = async[move] {
     }
 
     const {
         < 1
     }
 
-    a := const {
+    a = const {
         < 1
     }
 }
 
 f func() {
-    a := match c {
+    a = match c {
         ``5: "a"
         5``6: "b"
         6``=7: "c"
         8: "d"
         9``: "e"
     }
-    a := match c {
+    a = match c {
         ``=6: "a"
         -: "b"
     }
-    a := match c {
+    a = match c {
         ``a: "a"
         b``c: "b"
         d``=e: "c"
@@ -470,6 +471,8 @@ f func() {
 f func() {
     parse -> (a, b)
 
+    parse -> (a, b) let (i32, i32)
+
     parse -> (a, b) else {
         ret
     }
@@ -480,12 +483,16 @@ f func() {
 
     a * b + c
 
-    a(|[move]| { ret 1 })
-    a(|[move] a, b| { ret 1 })
-    a(|-| { p -> (a, b) })
-    a(|| { {} -> (a, b) })
-    a(|[async]| { ret 1 })
-    a(|[async, move]| { ret 1 })
+    a(|[move]| { ret 1; })
+    a(|[move] a, b| 1)
+    a(|-| { p -> (a, b); })
+    a(|| {
+        {} -> (a, b)
+    })
+    a(|[async]| {
+        ret 1
+    })
+    a(|[async, move]| 1)
 }
 
 f func() {
@@ -565,7 +572,7 @@ f func() {
 }
 
 f func() {
-    b := if a < 2 {
+    b = if a < 2 {
         < ~1
     } else {
         < 1
@@ -632,7 +639,7 @@ f func() {
 }
 
 f func() {
-    a := 'x: {
+    a = 'x: {
         break 'x 1
     }
 }

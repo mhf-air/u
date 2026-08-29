@@ -888,7 +888,7 @@ fn check_status(status: process::ExitStatus) -> io::Result<()> {
 
 // --------------------------------------------------------------------------------
 fn compile_to_rust(filepath: &str) -> Result<String, String> {
-    let data = cc::get_file_content(filepath).unwrap();
+    let data = fs::read_to_string(&filepath).unwrap();
 
     let mut l = cc::Lex::new();
     if let Err(err) = l.lex(data) {

@@ -317,10 +317,6 @@ impl ToLang for Item {
                     p.push_raw("#[derive(Debug)]\n");
                 }
             }
-            ItemPayload::Test(_) => {
-                p.indent();
-                p.push_raw("#[cfg(test)]\n");
-            }
             _ => {}
         }
         p.push_rust(&s.outer_attrs);
@@ -328,8 +324,7 @@ impl ToLang for Item {
         p.indent();
         if !matches!(
             &s.payload,
-            ItemPayload::Test(_)
-                | ItemPayload::Crate(_)
+                ItemPayload::Crate(_)
                 | ItemPayload::Import(_)
                 | ItemPayload::Impl(_)
                 | ItemPayload::Extern(_)
@@ -341,7 +336,6 @@ impl ToLang for Item {
 
         match &s.payload {
             ItemPayload::Mod(a) => p.push_rust(a),
-            ItemPayload::Test(a) => p.push_rust(a),
             ItemPayload::Crate(a) => p.push_rust(a),
             ItemPayload::Extern(a) => p.push_rust(a),
             ItemPayload::Import(a) => p.push_rust(a),
@@ -373,8 +367,7 @@ impl ToLang for Item {
         p.indent();
         if !matches!(
             &s.payload,
-            ItemPayload::Test(_)
-                | ItemPayload::Crate(_)
+                ItemPayload::Crate(_)
                 | ItemPayload::Import(_)
                 | ItemPayload::Impl(_)
                 | ItemPayload::Macro(_)
@@ -385,7 +378,6 @@ impl ToLang for Item {
 
         match &s.payload {
             ItemPayload::Mod(a) => p.push_u(a),
-            ItemPayload::Test(a) => p.push_u(a),
             ItemPayload::Crate(a) => p.push_u(a),
             ItemPayload::Extern(a) => p.push_u(a),
             ItemPayload::Import(a) => p.push_u(a),
@@ -408,7 +400,6 @@ impl ToLang for Item {
 #[derive(Debug)]
 pub enum ItemPayload {
     Mod(Mod),
-    Test(Test),
     Crate(Crate),
     Extern(ExternalBlock),
     Import(Import),
@@ -474,55 +465,6 @@ impl ToLang for Mod {
 
         p.inc_indent();
         p.push_u(&s.inner_attrs);
-        for item in &s.items {
-            p.push_u(item);
-        }
-        p.dec_indent();
-        p.indent();
-        p.push_raw("}");
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct Test {
-    pub inner_attrs: Attrs,
-    pub items: Vec<Item>,
-
-    pub span_test: Span,
-    pub span_brace_open: Span,
-    pub span_brace_close: Span,
-}
-impl ToLang for Test {
-    fn to_rust(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.indent();
-        p.push_str("mod __ ", s.span_test);
-        p.push_str("{", s.span_brace_open);
-        p.push_raw("\n");
-
-        p.inc_indent();
-        p.push_rust(&s.inner_attrs);
-
-        p.indent();
-        p.push_raw("use super::*;\n\n");
-
-        for item in &s.items {
-            p.push_rust(item);
-        }
-        p.dec_indent();
-        p.indent();
-        p.push_str("}", s.span_brace_close);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.indent();
-        p.push_raw("test {\n");
-
-        p.inc_indent();
-        p.push_u(&s.inner_attrs);
-
         for item in &s.items {
             p.push_u(item);
         }
@@ -1954,16 +1896,6 @@ impl ToLang for MacroCall {
     }
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
-
-        match &s.body {
-            MacroCallBody::Token(_) => {}
-            MacroCallBody::Expr(_) => {
-                p.push_raw("/* u:expr */");
-            }
-            MacroCallBody::Stmt(_) => {
-                p.push_raw("/* u:stmt */");
-            }
-        }
 
         p.push_u(&s.path);
         p.push_raw("!");
@@ -4243,8 +4175,7 @@ pub struct StmtLet {
     pub expr: Option<Expr>,
     pub else_: Option<BlockExpr>,
 
-    pub span_let: Span,
-    pub span_eq: Option<Span>,
+    pub span_eq: Span,
     pub span_else: Option<Span>,
 }
 impl ToLang for StmtLet {
@@ -4253,8 +4184,7 @@ impl ToLang for StmtLet {
 
         p.push_rust(&s.outer_attrs);
         p.indent();
-        p.push_str("let", s.span_let);
-        p.push_raw(" ");
+        p.push_raw("let ");
         p.push_rust(&s.pattern);
         if let Some(type_) = &s.type_ {
             p.push_raw(": ");
@@ -4262,7 +4192,7 @@ impl ToLang for StmtLet {
         }
         if let Some(expr) = &s.expr {
             p.push_raw(" ");
-            p.push_str("=", s.span_eq.unwrap());
+            p.push_str("=", s.span_eq);
             p.push_raw(" ");
             p.push_rust(expr);
         }
@@ -5070,13 +5000,6 @@ impl ToLang for ExprOperator {
             ExprOperator::TypeCast(a) => {
                 p.push_rust(&a.expr);
                 p.push_raw(" as ");
-                // NOTE can't do that, because in some cases parens are neccessary, like
-                //  a := b as (for['a] func(&'a str))
-                /* if let TypeNoBounds::Parenthesized(a) = &a.type_no_bounds {
-                    p.push_rust(&a.type_);
-                } else {
-                    p.push_rust(&a.type_no_bounds);
-                } */
                 p.push_rust(&a.type_no_bounds);
             }
             ExprOperator::Assignment(a) => {

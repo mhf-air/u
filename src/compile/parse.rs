@@ -25,27 +25,8 @@ pub fn compile_string(data: String) -> io::Result<Parse> {
 }
 
 pub fn compile_file(filepath: &str) -> io::Result<Parse> {
-    let data = get_file_content(filepath)?;
+    let data = fs::read_to_string(&filepath)?;
     compile_string(data)
-}
-
-pub fn get_file_content(filepath: &str) -> io::Result<String> {
-    let a = fs::read_to_string(&filepath)?;
-    let data = about_mod(a, filepath.ends_with("/mod.u"));
-    return Ok(data);
-}
-
-pub fn about_mod(a: String, is_mod: bool) -> String {
-    let mut data;
-    if is_mod {
-        // NOTE must not add newlines here, otherwise span will have larger line number,
-        // which lead to unmatching linters
-        data = String::from("#![allow(unused-imports)] ");
-        data.push_str(&a);
-    } else {
-        data = a;
-    }
-    return data;
 }
 
 // --------------------------------------------------------------------------------
@@ -265,6 +246,10 @@ impl Parse {
                 delim_open = Pair::SquareOpen;
                 delim_close = Pair::SquareClose;
             }
+            T!["{"] => {
+                delim_open = Pair::BraceOpen;
+                delim_close = Pair::BraceClose;
+            }
             T!["{{"] => {
                 delim_open = Pair::DoubleBraceOpen;
                 delim_close = Pair::DoubleBraceClose;
@@ -417,57 +402,11 @@ impl Parse {
         let first_special_token = s.get_first_special_token()?;
 
         if first_special_token.is_none() {
-            // parse test block
-            /* let token = s.current();
-            if let TokenCode::Identifier(identifier) = &token.code {
-                if identifier.id == "test" && matches!(&s.nth(1).code, T!["{"]) {
-                    s.plusplus();
-                    let mut a = s.parse_test()?;
-                    a.span_test = token.span;
-                    return Ok(Stmt::Item(Item {
-                        outer_attrs,
-                        public: Visibility::new_default(a.span_test.line),
-                        payload: ItemPayload::Test(a),
-                    }));
-                }
-            } */
-
             // parse expr
             let expr = s.parse_expr()?;
             let token = s.current();
             let macro_start_line = token.span.line;
-            if matches!(&token.code, T![->]) {
-                s.plusplus();
-                let mut a = StmtLet::default();
-                a.span_let = token.span;
-                a.span_eq = Some(token.span);
-                a.outer_attrs = outer_attrs;
-                a.expr = Some(expr);
-                a.pattern = s.parse_pattern()?;
-                if matches!(&s.current().code, T![let]) {
-                    s.plusplus();
-                    a.type_ = Some(s.parse_type()?);
-                }
-                let token = s.current();
-                match &token.code {
-                    T![;] => s.plusplus(),
-                    T!["}"] => {}
-                    _ => {
-                        return Err(
-                            s.panic(token, &format!("expected ; or }} but got {:?}", token))
-                        );
-                    }
-                }
-                return Ok(Stmt::Let(a));
-            }
-            let token = s.current();
-            match &token.code {
-                T![;] => s.plusplus(),
-                T!["}"] => {}
-                _ => {
-                    return Err(s.panic(token, &format!("expected ; or }} but got {:?}", token)));
-                }
-            }
+            s.expect(T![;])?;
 
             if let ExprPayload::WithoutBlock(b) = expr.payload {
                 if let ExprWithoutBlock::MacroCall(call) = *b {
@@ -491,42 +430,14 @@ impl Parse {
         let special_token = first_special_token.unwrap();
         match &special_token.code {
             T![:=] => {
-                let mut a = StmtLet::default();
-                a.span_let = special_token.span;
-                a.span_eq = Some(special_token.span);
+                let mut a = s.parse_let()?;
                 a.outer_attrs = outer_attrs;
-                let token = s.current();
-                if let TokenCode::Identifier(identifier) = &token.code {
-                    a.pattern = Pattern {
-                        items: vec![PatternNoTopAlt::WithoutRange(
-                            PatternWithoutRange::Identifier(PatternIdentifier {
-                                ref_: false,
-                                mut_: true,
-                                name: identifier.clone(),
-                                pattern: None,
-
-                                span_ref: None,
-                                span_mut: Some(identifier.span),
-                                span_at: None,
-                            }),
-                        )],
-                    };
-                } else {
-                    return Err(
-                        s.panic(token, &format!("expected identifier, but got {:?}", token))
-                    );
-                }
-                s.plusplus();
-                s.expect(T![:=])?;
-                a.expr = Some(s.parse_expr()?);
-                s.expect(T![;])?;
                 stmt = Stmt::Let(a);
             }
             // Expr -> Pattern (let Type)? (else)?
             T![->] => {
                 let mut a = StmtLet::default();
-                a.span_let = special_token.span;
-                a.span_eq = Some(special_token.span);
+                a.span_eq = special_token.span;
                 a.outer_attrs = outer_attrs;
                 a.expr = Some(s.parse_expr()?);
                 s.expect(T![->])?;
@@ -542,16 +453,7 @@ impl Parse {
                     s.expect(T!["{"])?;
                     a.else_ = Some(s.parse_block_expr()?);
                 } else {
-                    let token = s.current();
-                    match &token.code {
-                        T![;] => s.plusplus(),
-                        T!["}"] => {}
-                        _ => {
-                            return Err(
-                                s.panic(token, &format!("expected ; or }} but got {:?}", token))
-                            );
-                        }
-                    }
+                    s.expect(T![;])?;
                 }
                 stmt = Stmt::Let(a);
             }
@@ -642,47 +544,6 @@ impl Parse {
                         public: Visibility::new_default(special_token.span.line),
                         payload: ItemPayload::Impl(a),
                     });
-                }
-                Keyword::Let => {
-                    let name;
-                    let token = s.current();
-                    if let TokenCode::Identifier(identifier) = &token.code {
-                        name = identifier.clone();
-                    } else {
-                        return Err(
-                            s.panic(token, &format!("expected identifier, but got {:?}", token))
-                        );
-                    }
-                    s.plusplus();
-                    let span_let = s.current().span;
-                    s.expect(T![let])?;
-
-                    let mut mut_ = false;
-                    let mut span_mut = None;
-                    let token = s.current();
-                    if matches!(&token.code, T![mut]) {
-                        mut_ = true;
-                        span_mut = Some(name.span);
-                        s.plusplus();
-                    }
-                    let mut a = s.parse_let()?;
-                    a.span_let = span_let;
-                    a.pattern = Pattern {
-                        items: vec![PatternNoTopAlt::WithoutRange(
-                            PatternWithoutRange::Identifier(PatternIdentifier {
-                                ref_: false,
-                                mut_,
-                                name,
-                                pattern: None,
-
-                                span_ref: None,
-                                span_mut,
-                                span_at: None,
-                            }),
-                        )],
-                    };
-                    a.outer_attrs = outer_attrs;
-                    stmt = Stmt::Let(a);
                 }
                 Keyword::Interface => {
                     let n = s.parse_identifier_pub_generics()?;
@@ -796,7 +657,7 @@ impl Parse {
             let token = &s.tokens[start];
             start += 1;
             match &token.code {
-                T![;] | T!["{"] => {
+                T![;] => {
                     break;
                 }
                 T!["}"] => {
@@ -1461,60 +1322,6 @@ impl Parse {
                 return Err(s.panic(&s.tokens[s.tokens.len() - 1], "expected } for ending mod"));
             }
         }
-
-        Ok(r)
-    }
-
-    fn _parse_test(&self) -> ParseResult<Test> {
-        let s = self;
-
-        let mut r = Test::default();
-
-        let start_token = s.current();
-        let mut mod_ = s.parse_mod()?;
-        if mod_.items.is_empty() {
-            return Err(s.panic(start_token, "test {} cannot be empty"));
-        }
-
-        for item in mod_.items.iter_mut() {
-            if let ItemPayload::Func(f) = &item.payload {
-                if f.name.id.starts_with("test-") {
-                    let tokens = vec![Token {
-                        code: TokenCode::Identifier(Identifier::new(
-                            "test".to_string(),
-                            f.name.span.line,
-                            f.name.span.column,
-                        )),
-                        span: Span {
-                            line: f.name.span.line,
-                            column: 0,
-                            width: 4,
-                        },
-                    }];
-                    let text = attr_to_text(&tokens);
-                    item.outer_attrs.items.push(Attr {
-                        span_start: Span {
-                            line: f.name.span.line,
-                            column: 0,
-                            width: 2,
-                        },
-                        span_end: Span {
-                            line: f.name.span.line,
-                            column: 0,
-                            width: 1,
-                        },
-                        tokens,
-                        text,
-                        ..Default::default()
-                    });
-                }
-            }
-        }
-
-        r.inner_attrs = mod_.inner_attrs;
-        r.items = mod_.items;
-        r.span_brace_open = mod_.span_brace_open.unwrap();
-        r.span_brace_close = mod_.span_brace_close.unwrap();
 
         Ok(r)
     }
@@ -3201,45 +3008,54 @@ impl Parse {
         }
     }
 
-    // after let or let mut
-    // Identifier := Expr
-    // Identifier let (mut)? (Type)? (= Expr)?
+    // NAME mut? Type? := [;|Expr]?
     fn parse_let(&self) -> ParseResult<StmtLet> {
         let s = self;
 
-        let mut r = StmtLet::default();
+        let token = s.current();
+        let TokenCode::Identifier(identifier) = &token.code else {
+            return Err(s.panic(token, &format!("expected identifier, but got {:?}", token)));
+        };
+        s.plusplus();
 
         let token = s.current();
-        match &token.code {
-            T![;] => {
-                s.plusplus();
-            }
-            T![=] => {
-                r.span_eq = Some(token.span);
-                s.plusplus();
-                r.expr = Some(s.parse_expr()?);
-                s.expect(T![;])?;
-            }
-            _ => {
-                r.type_ = Some(s.parse_type()?);
+        let mut_ = if matches!(token.code, T![mut]) {
+            s.plusplus();
+            true
+        } else {
+            false
+        };
 
-                let token = s.current();
-                match &token.code {
-                    T![;] => {}
-                    T![=] => {
-                        r.span_eq = Some(token.span);
-                        s.plusplus();
-                        r.expr = Some(s.parse_expr()?);
-                        s.expect(T![;])?;
-                    }
-                    _ => {
-                        return Err(s.panic(token, &format!("expected ; or = but got {:?}", token)));
-                    }
-                }
-            }
+        let mut a = StmtLet::default();
+        a.pattern = Pattern {
+            items: vec![PatternNoTopAlt::WithoutRange(
+                PatternWithoutRange::Identifier(PatternIdentifier {
+                    mut_,
+                    ref_: false,
+                    name: identifier.clone(),
+                    pattern: None,
+
+                    span_ref: None,
+                    span_mut: Some(token.span),
+                    span_at: None,
+                }),
+            )],
+        };
+
+        let token = s.current();
+        if !matches!(token.code, T![:=]) {
+            a.type_ = Some(s.parse_type()?);
         }
+        a.span_eq = token.span;
+        s.expect(T![:=])?;
 
-        Ok(r)
+        let token = s.current();
+        if matches!(token.code, T![;]) {
+            return Ok(a);
+        }
+        a.expr = Some(s.parse_expr()?);
+        s.expect(T![;])?;
+        Ok(a)
     }
 
     // --------------------------------------------------------------------------------
@@ -4848,6 +4664,7 @@ impl Parse {
         unreachable!("not a type");
     }
 
+    // (params) (: Type)?
     fn parse_func_type(&self, func_type: FuncType) -> ParseResult<TypeBareFunction> {
         let s = self;
 
@@ -4978,16 +4795,14 @@ impl Parse {
         }
 
         let token = s.current();
-        match &token.code {
-            T![+] | T![;] | T![:] | T![=] | T!["{"] | T!["}"] | T![")"] | T!["]"] | T![,] => {}
-            _ => {
-                // return type
-                let type_ = s.parse_type()?;
-                if let Type::TypeNoBounds(a) = type_ {
-                    r.return_type = Some(BareFunctionReturnType(a));
-                } else {
-                    return Err(s.panic(token, "expected TypeNoBounds but got {:?}"));
-                }
+        if matches!(token.code, T![:]) {
+            s.plusplus();
+            // return type
+            let type_ = s.parse_type()?;
+            if let Type::TypeNoBounds(a) = type_ {
+                r.return_type = Some(BareFunctionReturnType(a));
+            } else {
+                return Err(s.panic(token, "expected TypeNoBounds but got {:?}"));
             }
         }
 
