@@ -514,6 +514,11 @@ f func($"pat"mut a: i32, b i32) {}
 
     TODO: maybe generating rust doc in the future
 
+### caveats
+- vim-u offers the following, you can use '.' to repeat
+    - <leader>+ to add + at the current line
+    - <leader>^ to add ^ at the current line
+
 ### for more examples, check [a.u file](./data/a.u)
 
 

@@ -227,6 +227,7 @@ num--c static mut i32 = 0
 // use fn() for function type, not func
 Point[T] type = fn(T, T): T
 Point+[T Copy + Default] type = (T, T)
+Point^[T Copy + Default] type = (T, T)
 Point[N const usize] type Copy + Clone = {{i32: N}}
 Point[T] type = (T, T) where { T Copy }
 Point[T] type = fn(T) where { T Iterator }
