@@ -762,7 +762,7 @@ impl Parse {
 
     fn parse_pub(&self) -> ParseResult<Visibility> {
         let s = self;
-        s.parse_pub_with_default(VisibilityPayload::Crate)
+        s.parse_pub_with_default(VisibilityPayload::Private)
     }
 
     fn parse_pub_with_default(&self, payload: VisibilityPayload) -> ParseResult<Visibility> {
@@ -770,20 +770,31 @@ impl Parse {
 
         // default
         let plus_token = s.current();
-        if !matches!(&plus_token.code, T![+]) {
-            let r = Visibility {
-                span: Span {
-                    line: plus_token.span.line,
-                    column: 0,
-                    width: 0,
-                },
-                payload,
-                is_default: true,
-            };
-            return Ok(r);
+        match &plus_token.code {
+            T![+] => {
+                s.plusplus();
+            }
+            T![^] => {
+                s.plusplus();
+                return Ok(Visibility {
+                    span: plus_token.span,
+                    payload: VisibilityPayload::Crate,
+                    is_default: false,
+                });
+            }
+            _ => {
+                return Ok(Visibility {
+                    span: Span {
+                        line: plus_token.span.line,
+                        column: 0,
+                        width: 0,
+                    },
+                    payload,
+                    is_default: true,
+                });
+            }
         }
 
-        s.plusplus();
         // +
         if !matches!(s.current().code, T!["("]) {
             return pub_vis(&plus_token);

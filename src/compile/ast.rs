@@ -2778,6 +2778,21 @@ impl ToLang for PathInExpr {
         }
     }
 }
+/* NOTE
+MethodCallExpression →  Expression . PathExprSegment ( CallParams? )
+
+PathExprSegment →  PathIdentSegment ( :: GenericArgs )?
+
+GenericArgs →
+    < GenericArgList? >
+    | ( TypeList? ) ( -> TypeNoBounds )?
+
+but, it's very rare to write code like
+    a.b(i32)(1)
+    a.b::(i32) -> i32(1)
+even thougn they are correct.
+so don't consider such cases for now.
+*/
 #[derive(Debug, Default)]
 pub struct PathExprSegment {
     pub name: PathIdentSegment,

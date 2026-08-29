@@ -1,11 +1,7 @@
-# Compile U to Rust
+# Another syntax for Rust
 
 ## Summary
-A new syntax that compiles to Rust code
-
-The semantics are the same as that of Rust(like borrow checker, etc.) and it can use all the rust libararies
-
-Basically, it's just Rust with another syntax, but easier to read and write
+A new syntax that maps to Rust's syntax one by one, which is easier to read and write
 
 ## Motivation
 I like Rust's semantics, but dislike some of its syntax
@@ -14,191 +10,191 @@ I like Rust's semantics, but dislike some of its syntax
 
 - **allow dash(-) in identifiers**
 
-	change snake_case, UpperCamelCase, SCREAMING_SNAKE_CASE to **dash-case** because it's the best way to separate words
+    change snake_case, UpperCamelCase, SCREAMING_SNAKE_CASE to **dash-case** because it's the best way to separate words
 
-	- Upper-camel-case for UpperCamelCase
-	- set-name for set_name
-	- name--c for NAME(which is a const or static)
-	- anYThInGcUsTom--r for anYThInGcUsTom
+    - Upper-camel-case for UpperCamelCase
+    - set-name for set_name
+    - name--c for NAME(which is a const or static)
+    - anYThInGcUsTom--r for anYThInGcUsTom
 
-	as for identifiers containing digit, forbid '-' followed by a digit, and consider digits as lower-case letters.
+    as for identifiers containing digit, forbid '-' followed by a digit, and consider digits as lower-case letters.
 
-	for example, Point2d, Mat4x4 are fine, but Point-2d is not.
+    for example, Point2d, Mat4x4 are fine, but Point-2d is not.
 
-	side effect: all minus related operators have to be changed with ~.
+    side effect: all minus related operators have to be changed with ~.
 
-	possible future conflict: when ~ is used in Rust
+    possible future conflict: when ~ is used in Rust
 
-	this needs some adaptation, but the good news is that these operators are not frequently used
+    this needs some adaptation, but the good news is that these operators are not frequently used
 
 ```
 example
 
-	Order-item, order-name, dir-path--c
+    Order-item, order-name, dir-path--c
 
 and minus becomes
-	~1, ~~
+    ~1, ~~
 ```
 
 - **use [ ] for generics**
 
-	use [T] because [ ] are easier to type(no Shift)
+    use [T] because [ ] are easier to type(no Shift)
 
-	side effect: have to use {{ }} for array related places to avoid parsing ambiguity.
-	It's worth it, because generics are used more often than arrays
+    side effect: have to use {{ }} for array related places to avoid parsing ambiguity.
+    It's worth it, because generics are used more often than arrays
 
-	so turbofish is unneccesary, since [ ] are solely used for generics, all the [ ] in expressions can be transformed to turbofish in Rust
+    so turbofish is unneccesary, since [ ] are solely used for generics, all the [ ] in expressions can be transformed to turbofish in Rust
 
-	possible future conflict: when {{ }} is used in Rust
+    possible future conflict: when {{ }} is used in Rust
 
 ```
 example
 
-	User struct {
-		desc       Option[string]
-		tags       Vec[string]
-		an-array   {{i32: 10}}
-	}
+    User struct {
+        desc       Option[string]
+        tags       Vec[string]
+        an-array   {{i32: 10}}
+    }
 
 and array becomes
-	a{{0}} = 1
+    a{{0}} = 1
 
-	{{u32: 1}}
+    {{u32: 1}}
 
-	{{0: 10}}
-	{{0, 1}}
+    {{0: 10}}
+    {{0, 1}}
 
 vec usages
-	vec,,(0, 1, 2)
+    vec,,(0, 1, 2)
 
-	vec,,{0; 10}
-	// exception: not vec,,{0: 10}
+    vec,,{0; 10}
+    // exception: not vec,,{0: 10}
 
 turbofish becomes
-	list.iter().collect[Vec[-]]()
+    list.iter().collect[Vec[-]]()
 
 ```
 
 - **for all declarations, put the symbol name first**
 
-	it fits my thought process. Whenever I think of something, the name is the first thing that pops up, and it's the most important,
-	all other stuff are complimentary information
+    it fits my thought process. Whenever I think of something, the name is the first thing that pops up, and it's the most important,
+    all other stuff are complimentary information
 
-	**use new syntex for Trait implementation**
+    **use new syntex for Trait implementation**
 
-	Type [Generics]? impl Trait? where? {}
+    Type [Generics]? impl Trait? where? {}
 
-	if Type and [Generics] are ambiguous, wrap Type in parentheses
-	(because such cases are rare, so most other cases requires less typing)
+    if Type and [Generics] are ambiguous, wrap Type in parentheses
+    (because such cases are rare, so most other cases requires less typing)
 
 ```
 example
 
-	dir-path--c const &str = "/tmp"
-	server--c static Option[Server] = None
+    dir-path--c const &str = "/tmp"
+    server--c static Option[Server] = None
 
-	User+['a] struct {
-		name+   &'a str
-		age     i32
-	}
+    User+['a] struct {
+        name+   &'a str
+        age     i32
+    }
 
-	private-func+ func(id string, count i32) i32 {
-		ret 0
-	}
+    private-func+ func(id string, count i32) i32 {
+        ret 0
+    }
 
-	Point[T, U] [T, U] impl[unsafe] ops..My-trait where {T Copy + Default} {
-		Output type = usize
+    Point[T, U] [T, U] impl[unsafe] ops..My-trait where {T Copy + Default} {
+        Output type = usize
 
-		new func()
+        new func()
 
-		mixup[V, W] (&) func[unsafe, async](other Point[V, W]) Point[T, W]
-		mixup[V, W] (&mut) func[unsafe, async](other Point[V, W]) Point[T, W]
-		mixup[V, W] () func[unsafe, async](other Point[V, W]) Point[T, W]
-		mixup[V, W] (Box[Self]) func[unsafe, async](other Point[V, W]) Point[T, W]
-		mixup[V, W] (Pin[Box[Self]]) func[unsafe, async](other Point[V, W]) Point[T, W]
-	}
+        mixup[V, W] (&) func[unsafe, async](other Point[V, W]) Point[T, W]
+        mixup[V, W] (&mut) func[unsafe, async](other Point[V, W]) Point[T, W]
+        mixup[V, W] () func[unsafe, async](other Point[V, W]) Point[T, W]
+        mixup[V, W] (Box[Self]) func[unsafe, async](other Point[V, W]) Point[T, W]
+        mixup[V, W] (Pin[Box[Self]]) func[unsafe, async](other Point[V, W]) Point[T, W]
+    }
 ```
 
 - **move method receiver to a different place, and use s as self**
 
 ```
-	implementation: add
-		let mut s = self;
-	or
+    implementation: add
+        let mut s = self;
+    or
         let s = self;
-	at the start of method body, except when there's
+    at the start of method body, except when there's
         $"no-s"
     before method's signature
 
-	pros: it's clearer and shorter
+    pros: it's clearer and shorter
 
 example
 
-	User impl {
+    User impl {
         $"no-s"
-		get-age+ (&) func i32 {
-			< self.age
-		}
+        get-age+ (&) func i32 {
+            < self.age
+        }
 
-		get-age+ (&) func i32 {
-			< s.age
-		}
+        get-age+ (&) func i32 {
+            < s.age
+        }
 
-		set-age (&mut) func(new-age i32) {
-			s.age = new-age
-		}
+        set-age (&mut) func(new-age i32) {
+            s.age = new-age
+        }
 
-		move () func() {
-			s.age = 0
-		}
-	}
+        move () func() {
+            s.age = 0
+        }
+    }
 ```
 
 - **drop trailling semicolon**
 
-	use Go's method, automatically insert semicolons where possible(if the last token in a line is identifiers, most operators, ...)
+    use Go's method, automatically insert semicolons where possible(if the last token in a line is identifiers, most operators, ...)
 
-	note: semicolons are also inserted after line-ending . or ..
+    note: semicolons are also inserted after line-ending . or ..
 
-	note: write semicolons in macro definitions, as in regular Rust code
+    note: write semicolons in macro definitions, as in regular Rust code
 
-	side effect: use < Expr as the result expression
+    side effect: use < Expr as the result expression
 
 ```
 example
 
-	a++
-	a := if b > 0 { < b } else { < -b }
+    a++
+    a := if b > 0 { < b } else { < -b }
 
-	a := some-func()
-		.some-method()
-		.b
-		.c
+    a := some-func()
+        .some-method()
+        .b
+        .c
 ```
 
 - **use .. instead of :: for path separator**
 
-	because it's easier to type and distinguishes path segments better
+    because it's easier to type and distinguishes path segments better
 
-	side effect: have to use `` for Rust's .. operator, etc.
+    side effect: have to use `` for Rust's .. operator, etc.
 
-	possible future conflict: when `` is used in Rust
+    possible future conflict: when `` is used in Rust
 
 ```
 example
 
-	import {
-		std..io
-		std..fs
-	}
+    import {
+        std..io
+        std..fs
+    }
 
-	compile-file func(filepath &str) io..Result[Parse] {
-		data := fs..read-to-string(&filepath)?
-		compile-string(data)
-	}
+    compile-file func(filepath &str) io..Result[Parse] {
+        data := fs..read-to-string(&filepath)?
+        compile-string(data)
+    }
 
-	for i in 0``10 {
-	}
+    for i in 0``10 {
+    }
 ```
 
 - **new syntax for leading :: of a path**
@@ -207,83 +203,80 @@ example
 
 - **add another syntax for let
 
-	possible future conflict: when := is used in Rust
+    possible future conflict: when := is used in Rust
 
 ```
 example
 
-	a := 1
-	b mut := 1
-	c i64 := 1
-	d mut i64 := 1
+    a :=;
+    a i32 :=;
+    a := 1
+    a i32 := 1
+
+    a mut :=;
+    a mut i32 :=;
+    a mut := 1
+    a mut i32 := 1
+
+    a fn(i32, ...) :=;
 
 becomes
 
-	let a = 1;
-	let mut b = 1;
-	let c: i64 = 1;
-	let mut d: i64 = 1;
+    let a;
+    let a: i32;
+    let a = 1;
+    let a: i32 = 1;
+
+    let mut a;
+    let mut a: i32;
+    let mut a = 1;
+    let mut a: i32 = 1;
+
+    let a: fn(i32, ...);
+
 ```
 
 - **#[derive(Debug)] for all structs and enums by default**
 
-	add #[derive(Debug)] for all structs and enums,
+    add #[derive(Debug)] for all structs and enums,
     except when they have outer mark that is ***$"no-derive-debug"***
 
-	pros: no need to add that to them, and almost all structs need Debug
+    pros: no need to add that to them, and almost all structs need Debug
 
-	cons: increased compilation time and binary size (but I think this is a good trade-off)
+    cons: increased compilation time and binary size (but I think this is a good trade-off)
 
 ```
 example
 
-	Has-debug struct {
-	}
+    Has-debug struct {
+    }
 
     $"no-derive-debug"
-	No-debug struct {
-	}
+    No-debug struct {
+    }
 ```
 
 - **use + instead of pub for exporting symbols**
 
-	use + after symbol name. + to pub, no + to pub(crate) (in Rust, Associated items in a pub Trait are public by default;
-	Enum variants in a pub enum are also public by default)
+    use + or ^ after symbol name
+    + to pub, ^ to pub(crate)
 
 ```
 example
 
-	Num struct(i32)
-	Num+ struct(i32)
-	Num+(self) struct(i32)
-	Num+(super) struct(i32)
-	Num+(crate) struct(i32)
-	Num+(in crate..util) struct(i32)
+    Num struct(i32)
+    Num+ struct(i32)
+    Num+(self) struct(i32)
+    Num+(super) struct(i32)
+    Num+(crate) struct(i32)
+    Num+(in crate..util) struct(i32)
 
-	Num+ struct(+ i32)
+    Num+ struct(+ i32)
 
-	User+ struct {
-		name+ string
-		age   i32
-	}
-```
-
-- **pub(crate) by default instead of pub(self) by default**
-
-	having to write mod.rs files is very annoying.
-	Instead, use Go's method, pub(crate) by default, and automatically generate mod.rs files.
-	but you can add a mod.u file to customize visibility for items and write module level documentations
-
-```
-unmentioned items are like this
-
-	#[path = "a.rs"]
-	mod _a;
-	pub use _a::*;
-
-or if util is a directory
-
-	pub mod util;
+    User^ struct {
+        name^ string
+        age   i32
+    }
 ```
 
 - **use unified for syntax instead of loop, while, for**
@@ -291,77 +284,77 @@ or if util is a directory
 ```
 example
 
-	for {
-		if can-close {
-			break
-		}
-	}
+    for {
+        if can-close {
+            break
+        }
+    }
 
-	for i < 10 {
-		do-sth()
-	}
+    for i < 10 {
+        do-sth()
+    }
 
-	for item in list {
-		println,,("{}", item.name)
-	}
+    for item in list {
+        println,,("{}", item.name)
+    }
 
 ```
 
 - **use new syntax for destructive binding(including if let, while let), but don't support destructive assignment**
 
-	use Expr -> Pattern instead of let Pattern = Expr
+    use Expr -> Pattern instead of let Pattern = Expr
 
-	use if Expr -> Pattern { }, as I always believe that the order should be reversed
+    use if Expr -> Pattern { }, as I always believe that the order should be reversed
 
-	if Expr is too long, you can use
-	```
-	a := Expr
-	a -> Pattern
-	```
+    if Expr is too long, you can use
+    ```
+    a := Expr
+    a -> Pattern
+    ```
 
-	destructive assignment is not supported, because using a pattern as lvalue is very confusing,
-	and destructive declaration is already sufficient to use
+    destructive assignment is not supported, because using a pattern as lvalue is very confusing,
+    and destructive declaration is already sufficient to use
 
-	possible future conflict: when -> is used in Rust as part of an expression
+    possible future conflict: when -> is used in Rust as part of an expression
 
 ```
 example
 
-	get-point() -> (a, b)
-	get-point() -> (a, b) let (i32, i32)
+    get-point() -> (a, b)
+    get-point() -> (a, b) let (i32, i32)
 
-	if &token.code -> Token-code..Identifier(identifier) {
-		println,,("{:?}", identifier)
-	}
+    if &token.code -> Token-code..Identifier(identifier) {
+        println,,("{:?}", identifier)
+    }
 
-	for &token.code -> Token-code..Identifier(identifier) {
-		println,,("{:?}", identifier)
-	}
+    for &token.code -> Token-code..Identifier(identifier) {
+        println,,("{:?}", identifier)
+    }
 ```
 
 - **use , instead of && as separators between chains of conditions in if and while statements**
 ```
 example
 
-	// use , instead of && as separators between chains of conditions,
-	// because && can be regarded as part of the expr
-	if a == b, c && d, #[some-attr] outer -> Some(inner),
-			inner -> Some(number),
-			number == 1 {
-	}
-	if a == b, c -> Some(n), n > 0 {
-	}
+    // use , instead of && as separators between chains of conditions,
+    // because && can be regarded as part of the expr
+    if a == b, c && d, #[some-attr] outer -> Some(inner),
+            inner -> Some(number),
+            number == 1 {
+    }
+    if a == b, c -> Some(n), n > 0 {
+    }
 
-	for v -> E..X(n) | E..Y(n) {
-	}
-	for a -> Some(b) {
-	}
-	for a == b, c && d, #[some-attr] outer -> Some(inner),
-			inner -> Some(number),
-			number == 1 {
-	}
-	for a == b, c -> Some(n), n > 0 {
-	}
+    for v -> E..X(n) | E..Y(n) {
+    }
+    for a -> Some(b) {
+    }
+    for a == b, c && d, #[some-attr] outer -> Some(inner),
+            inner -> Some(number),
+            number == 1 {
+    }
+    for a == b, c -> Some(n), n > 0 {
+    }
 
 ```
 
@@ -370,87 +363,87 @@ example
 ```
 example
 
-	tuple = (a, b)
-	tuple = (
-		a
-		b
-	)
-	f func(
-		a
-		b
-	)
-	f(
-		a
-		b
-	)
-	array := {{
-		a
-		b
-	}}
-	vec,,(
-		a
-		b
-	)
-	a := Person {
-		name: "a"
-		age: 20
-	}
-	match a {
-		Person {
-			name
-			...
-		}: {}
-	}
+    tuple = (a, b)
+    tuple = (
+        a
+        b
+    )
+    f func(
+        a
+        b
+    )
+    f(
+        a
+        b
+    )
+    array := {{
+        a
+        b
+    }}
+    vec,,(
+        a
+        b
+    )
+    a := Person {
+        name: "a"
+        age: 20
+    }
+    match a {
+        Person {
+            name
+            ...
+        }: {}
+    }
 
-	NOTE: tuple type must be
-		a func() (i32, i32) {}
-	or
-		a func() (
-			i32,
-			i32
-		) {}
-	not
-		a func() (
-			i32
-			i32
-		) {}
+    NOTE: tuple type must be
+        a func() (i32, i32) {}
+    or
+        a func() (
+            i32,
+            i32
+        ) {}
+    not
+        a func() (
+            i32
+            i32
+        ) {}
 ```
 
 - **use ,, for macro invocations**
 
-	because it's easier to type(at least in my keyboard layout, where ! is located in "-" in QUERTY keyboard)
+    because it's easier to type(at least in my keyboard layout, where ! is located in "-" in QUERTY keyboard)
 
-	possible future conflict: when ,, is used in Rust
+    possible future conflict: when ,, is used in Rust
 
 ```
 example
 
-	custom,,()
-		anything in () are treated as expressions. like
-			vec,,(1, 2, 3)
+    custom,,()
+        anything in () are treated as expressions. like
+            vec,,(1, 2, 3)
 
-	custom,,[stmt]{}
-		anything in {} are treated as declarations or statements. like
-			thread-local,,[stmt]{
-				foo--g+ static Ref-cell[u32] = Ref-cell..new()
-			}
+    custom,,[stmt]{}
+        anything in {} are treated as declarations or statements. like
+            thread-local,,[stmt]{
+                foo--g+ static Ref-cell[u32] = Ref-cell..new()
+            }
 
-	custom,,{}
-		anything in {} are U tokens. like
-			clap..arg,,{ {{name}} "Optional name" }
-			clap..arg,,{ ~ c ~ ~ config [file--c] "Sets a file" }
-		they become
-			clap::arg!{ [name] "Optional name" }
-			clap::arg!{ - c - - config < FILE > "Sets a file" }
+    custom,,{}
+        anything in {} are U tokens. like
+            clap..arg,,{ {{name}} "Optional name" }
+            clap..arg,,{ ~ c ~ ~ config [file--c] "Sets a file" }
+        they become
+            clap::arg!{ [name] "Optional name" }
+            clap::arg!{ - c - - config < FILE > "Sets a file" }
 
-		dev note(for myself)
-			custom,,{} always translates to custom!{}, so there's no need to add a trailling semicolon
-			even if it stands alone as a stmt. (as the Rust spec states,
-				MacroInvocationSemi:
-					SimplePath ! ( TokenTree* ) ;
-					SimplePath ! [ TokenTree* ] ;
-					SimplePath ! { TokenTree* }
-			see https://doc.rust-lang.org/nightly/reference/macros.html#macro-invocation)
+        dev note(for myself)
+            custom,,{} always translates to custom!{}, so there's no need to add a trailling semicolon
+            even if it stands alone as a stmt. (as the Rust spec states,
+                MacroInvocationSemi:
+                    SimplePath ! ( TokenTree* ) ;
+                    SimplePath ! [ TokenTree* ] ;
+                    SimplePath ! { TokenTree* }
+            see https://doc.rust-lang.org/nightly/reference/macros.html#macro-invocation)
 
 ```
 
@@ -460,15 +453,15 @@ example
 example
 
 the following two expressions are the same
-	a{ name: "", ...Default..default() }
-	a{ name: "", ... }
+    a{ name: "", ...Default..default() }
+    a{ name: "", ... }
 ```
 
 ## Other Changes
 
 - **drop colon and -> in declarations**
 
-	exception: if you need to annotate closure expression's return type, then it has to be |n| -> i32 { < 1 }
+    exception: if you need to annotate closure expression's return type, then it has to be |n| -> i32 { < 1 }
 
 - **use func, interface, import instead of fn, trait, use**
 
@@ -491,25 +484,25 @@ example
 
 - **use : instead of => in match**
 
-	because it's easier to type
+    because it's easier to type
 
 ```
 example
 
-	match r {
-		Ok(a): a
-		Err(err): {
-			do-sth(err)
-		}
-	}
+    match r {
+        Ok(a): a
+        Err(err): {
+            do-sth(err)
+        }
+    }
 ```
 
 - **use ... instead of .. as rest pattern**
 
 - **patterns in function parameters**
 
-	it's bad to have that in function parameters.
-	if you really need that, add a destructuring assignment at the start of the function body
+    it's bad to have that in function parameters.
+    if you really need that, add a destructuring assignment at the start of the function body
 
 ```
 f func($"pat"mut a: i32, b i32) {}
@@ -517,9 +510,9 @@ f func($"pat"mut a: i32, b i32) {}
 
 - **doc comment**
 
-	write doc comment in u's format, and generate the same format doc in rust
+    write doc comment in u's format, and generate the same format doc in rust
 
-	TODO: maybe generating rust doc in the future
+    TODO: maybe generating rust doc in the future
 
 ### for more examples, check [a.u file](./data/a.u)
 
@@ -527,78 +520,78 @@ f func($"pat"mut a: i32, b i32) {}
 ## Project Structure
 ```
 $ROOT/
-	.git/
-	.gitignore(./u)
+    .git/
+    .gitignore(./u)
 
-	u.lock
-	u.toml
+    u.lock
+    u.toml
 
-	crates/
-		$ROOT/
-			benches/
-			bin/
-			examples/
-			src/
-				a.u
-				b.u
-				sub/
-					a.u
-			tests/
-			main.u
-			u.toml
+    crates/
+        $ROOT/
+            benches/
+            bin/
+            examples/
+            src/
+                a.u
+                b.u
+                sub/
+                    a.u
+            tests/
+            main.u
+            u.toml
 
-		crate-a/
+        crate-a/
 
-	.u/
-		Cargo.lock
-		Cargo.toml
+    .u/
+        Cargo.lock
+        Cargo.toml
 
-		crates/
-			$ROOT/
-				benches/
-				bin/
-					multiple/
-						src/
-							mod.rs
-						main.rs
-					single.rs
-				examples/
-				src/
-					sub/
-						a.rs
-							#![allow(unused_mut)]
-							use super::*;
-							...
-						mod.rs
-							#![allow(unused_imports)]
-							mod a;
-							pub use self::a::*;
-					a.rs
-						#![allow(unused_mut)]
-						use super::*;
-						...
-					b.rs
-						#![allow(unused_mut)]
-						use super::*;
-						...
-					mod.rs
-						#[allow(unused_imports)]
-						pub mod sub;
+        crates/
+            $ROOT/
+                benches/
+                bin/
+                    multiple/
+                        src/
+                            mod.rs
+                        main.rs
+                    single.rs
+                examples/
+                src/
+                    sub/
+                        a.rs
+                            #![allow(unused_mut)]
+                            use super::*;
+                            ...
+                        mod.rs
+                            #![allow(unused_imports)]
+                            mod a;
+                            pub use self::a::*;
+                    a.rs
+                        #![allow(unused_mut)]
+                        use super::*;
+                        ...
+                    b.rs
+                        #![allow(unused_mut)]
+                        use super::*;
+                        ...
+                    mod.rs
+                        #[allow(unused_imports)]
+                        pub mod sub;
 
-						mod a;
-						pub use self::a::*;
-						mod b;
-						pub use self::b::*;
-				tests/
-				lib.rs
-					mod src;
-					pub use self::src::*;
-				main.rs
-					#[allow(unused-imports)]
-					use ${pkg-name}::*;
-				Cargo.toml
+                        mod a;
+                        pub use self::a::*;
+                        mod b;
+                        pub use self::b::*;
+                tests/
+                lib.rs
+                    mod src;
+                    pub use self::src::*;
+                main.rs
+                    #[allow(unused-imports)]
+                    use ${pkg-name}::*;
+                Cargo.toml
 
-			crate-a/
+            crate-a/
 ```
 
 
@@ -607,52 +600,52 @@ $ROOT/
 NOTE: only tested on Linux
 
 install u
-	git clone https://github.com/mhf-air/u.git
+    git clone https://github.com/mhf-air/u.git
 
 install vim-u
 
-	Plug 'mhf-air/vim-u'
+    Plug 'mhf-air/vim-u'
 
 modify dense-analysis/ale
-	cd ~/.vim/bundle/ale/ale_linters
-	mkdir u
-	cp ~/a/rust/third/rust/u/data/u.vim .
+    cd ~/.vim/bundle/ale/ale_linters
+    mkdir u
+    cp ~/a/rust/third/rust/u/data/u.vim .
 
 install modified rust-analyzer
 
-	implementation
-		cd ../u (u/ and rust-analyzer/ must live in the same directory)
-		git clone https://github.com/mhf-air/rust-analyzer.git
-		cd rust-analyzer
-		git remote add upstream https://github.com/rust-analyzer/rust-analyzer.git
-		git checkout u
-		./u-install.sh
+    implementation
+        cd ../u (u/ and rust-analyzer/ must live in the same directory)
+        git clone https://github.com/mhf-air/rust-analyzer.git
+        cd rust-analyzer
+        git remote add upstream https://github.com/rust-analyzer/rust-analyzer.git
+        git checkout u
+        ./u-install.sh
 
-	sync from upstream
-		git checkout master
-		git pull upstream master
-		git push
+    sync from upstream
+        git checkout master
+        git pull upstream master
+        git push
 
-		git checkout u
-		git merge master
-		git push
+        git checkout u
+        git merge master
+        git push
 
 modify .vimrc
-	from my .vimrc, copy the part
-		augroup u
-		augroup END
-	and
-		function! Format(arg)
-		endfunction
-	to your .vimrc for .u file format on save and auto hide import
+    from my .vimrc, copy the part
+        augroup u
+        augroup END
+    and
+        function! Format(arg)
+        endfunction
+    to your .vimrc for .u file format on save and auto hide import
 
 allow - in identifier for .u files
-	edit ~/.vim/bundle/YouCompleteMe/third-party/ycmd/ycmd/identifier_utils.py
+    edit ~/.vim/bundle/YouCompleteMe/third-party/ycmd/ycmd/identifier_utils.py
 
-	add
-		'u': re.compile(r"[a-zA-Z-][a-zA-Z0-9-]*", re.UNICODE),
-	after
-		'css': re.compile(r"-?[^\W\d][\w-]*", re.UNICODE),
+    add
+        'u': re.compile(r"[a-zA-Z-][a-zA-Z0-9-]*", re.UNICODE),
+    after
+        'css': re.compile(r"-?[^\W\d][\w-]*", re.UNICODE),
 
 ```
 
@@ -661,39 +654,39 @@ allow - in identifier for .u files
 for a .u file, output a .rs file, without need to do cross file analysis and type analysis
 
 write to a .u file
-	automatically run `u u-compile ${file-path}` to output a .rs file.
-	rewrite ./mod.rs (no need to rewrite ../mod.rs, because it's only
-	affected when the directory is added, removed or renamed)
+    automatically run `u u-compile ${file-path}` to output a .rs file.
+    rewrite ./mod.rs (no need to rewrite ../mod.rs, because it's only
+    affected when the directory is added, removed or renamed)
 
 write to a u.toml file
-	run `u u-sync ${u-toml-path}` to sync the Cargo.toml file
-	in vim plugin "mhf-air/vim-u", there are already settings to make this happen automatically
-		au BufWritePost */u.toml call u#ToCargoToml()
+    run `u u-sync ${u-toml-path}` to sync the Cargo.toml file
+    in vim plugin "mhf-air/vim-u", there are already settings to make this happen automatically
+        au BufWritePost */u.toml call u#ToCargoToml()
 
 remove a .u file
 add a directory
 remove a directory
 rename a directory
-	might lead to "not found" error
-	when that happens, manually edit a sibling .u file, it will rewrite the mod.rs file.
-	or cd .u to find the corresponding file and work on it
+    might lead to "not found" error
+    when that happens, manually edit a sibling .u file, it will rewrite the mod.rs file.
+    or cd .u to find the corresponding file and work on it
 
 create a new U project
-	u new my-project
+    u new my-project
 
 init a fresh U project
-	cd my-project
-	u init
+    cd my-project
+    u init
 
 other commands are the same as Cargo's, for example
-	u run
-	u build
-	u install
+    u run
+    u build
+    u install
 
 if something goes wrong, and you don't know how to fix it
-	u clean
-	u init
-	u run
+    u clean
+    u init
+    u run
 ```
 
 ## Naming Convention
@@ -716,121 +709,121 @@ if something goes wrong, and you don't know how to fix it
 | other         | Order--Item--r    | Order__Item   |
 ```
 note
-	reject UpperCamelCase names like Point-2d, but accept UpperCamelCase Point2d and snake_case move-2d
+    reject UpperCamelCase names like Point-2d, but accept UpperCamelCase Point2d and snake_case move-2d
 
 rule
-	pub fn id_to_rust(id: &str) -> String {
-		let mut p = String::new();
-		if id.is_empty() {
-			return "".to_string();
-		}
-		if id == "string" {
-			return "String".to_string();
-		}
+    pub fn id_to_rust(id: &str) -> String {
+        let mut p = String::new();
+        if id.is_empty() {
+            return "".to_string();
+        }
+        if id == "string" {
+            return "String".to_string();
+        }
 
-		let chars: Vec<char> = id.chars().collect();
-		let len = chars.len();
+        let chars: Vec<char> = id.chars().collect();
+        let len = chars.len();
 
-		if len > 2 {
-			if chars[len - 3] == '-' && chars[len - 2] == '-' {
-				match chars[len - 1] {
-					'c' | 'g' => {
-						if len == 3 {
-							p.push_str("__");
-							if chars[len - 1] == 'c' {
-								p.push('c');
-							} else {
-								p.push('g');
-							}
-							return p;
-						}
-						let r = &chars[..len - 3];
-						for c in r {
-							if *c == '-' {
-								p.push('_');
-							} else {
-								let a = c.to_uppercase().to_string();
-								p.push_str(&a);
-							}
-						}
-						return p;
-					}
-					'r' => {
-						if len == 3 {
-							return "__r".to_string();
-						}
-						let r = &chars[..len - 3];
-						for c in r {
-							if *c == '-' {
-								p.push('_');
-							} else {
-								let a = c.to_string();
-								p.push_str(&a);
-							}
-						}
-						return p;
-					}
-					_ => {}
-				}
-			}
-		}
+        if len > 2 {
+            if chars[len - 3] == '-' && chars[len - 2] == '-' {
+                match chars[len - 1] {
+                    'c' | 'g' => {
+                        if len == 3 {
+                            p.push_str("__");
+                            if chars[len - 1] == 'c' {
+                                p.push('c');
+                            } else {
+                                p.push('g');
+                            }
+                            return p;
+                        }
+                        let r = &chars[..len - 3];
+                        for c in r {
+                            if *c == '-' {
+                                p.push('_');
+                            } else {
+                                let a = c.to_uppercase().to_string();
+                                p.push_str(&a);
+                            }
+                        }
+                        return p;
+                    }
+                    'r' => {
+                        if len == 3 {
+                            return "__r".to_string();
+                        }
+                        let r = &chars[..len - 3];
+                        for c in r {
+                            if *c == '-' {
+                                p.push('_');
+                            } else {
+                                let a = c.to_string();
+                                p.push_str(&a);
+                            }
+                        }
+                        return p;
+                    }
+                    _ => {}
+                }
+            }
+        }
 
-		if chars[0].is_uppercase() {
-			let list = chars.split(|c| *c == '-');
-			for word in list {
-				for (i, c) in word.iter().enumerate() {
-					if i == 0 {
-						p.push_str(&c.to_uppercase().to_string());
-					} else {
-						p.push_str(&c.to_string());
-					}
-				}
-				if word.is_empty() {
-					p.push('_');
-				}
-			}
-			return p;
-		}
+        if chars[0].is_uppercase() {
+            let list = chars.split(|c| *c == '-');
+            for word in list {
+                for (i, c) in word.iter().enumerate() {
+                    if i == 0 {
+                        p.push_str(&c.to_uppercase().to_string());
+                    } else {
+                        p.push_str(&c.to_string());
+                    }
+                }
+                if word.is_empty() {
+                    p.push('_');
+                }
+            }
+            return p;
+        }
 
-		for c in &chars {
-			if *c == '-' {
-				p.push('_');
-			} else {
-				let a = c.to_string();
-				p.push_str(&a);
-			}
-		}
-		return p;
-	}
+        for c in &chars {
+            if *c == '-' {
+                p.push('_');
+            } else {
+                let a = c.to_string();
+                p.push_str(&a);
+            }
+        }
+        return p;
+    }
 ```
 
 ## Compiler
 ```
-	.u file
+    .u file
 ->  token list
-		identifier containing - to identifier containing _
-			- to "_"
-			a-b to "a_b"
+        identifier containing - to identifier containing _
+            - to "_"
+            a-b to "a_b"
 
-		~ to "-"
-		~= to " -= "
-		~~ to " -= 1"
-		++ to " += 1"
+        ~ to "-"
+        ~= to " -= "
+        ~~ to " -= 1"
+        ++ to " += 1"
 
-		[ to "<" (if in expressions, to "::<")
-		] to ">"
-		{{ to "["
-		}} to "]"
-		`` to ".."
-		``= to "..="
+        [ to "<" (if in expressions, to "::<")
+        ] to ">"
+        {{ to "["
+        }} to "]"
+        `` to ".."
+        ``= to "..="
 
-		.. to "::"
-		,, to "!"
-		.(Type) to "as Type"
+        .. to "::"
+        ,, to "!"
+        .(Type) to "as Type"
 
-		note:
-			all these transformations are also done in macro invocations except for "[".
-			so in macro invocations, one might need to use "..[" for ::<>
+        note:
+            all these transformations are also done in macro invocations except for "[".
+            so in macro invocations, one might need to use "..[" for ::<>
 ->  U's ast
 ->  .rs file
 ```
@@ -838,561 +831,561 @@ rule
 ## Examples
 ```
 declaration
-	# --------------------------------------------------
-	# visibility
-	sub mod
-	sub+ mod
-	sub+(self) mod
-	sub+(super) mod
-	sub+(crate) mod
-	sub+(in crate..a) mod
-
-	Count struct(i64)
-	Count+ struct(+ i64)
-
-	->
-
-	pub(crate) mod sub;
-	pub mod sub;
-	mod sub;
-	pub(super) mod sub;
-	pub(crate) mod sub;
-	pub(in crate::a) mod sub;
-
-	pub(crate) struct Count(pub(crate) i64)
-	pub struct Count(pub i64)
-
-	# --------------------------------------------------
-	# built-in macros
-	d,,(a)
-
-	->
-	dbg!(a)
-
-	# --------------------------------------------------
-	# minus
-	add(~1, 1)
-	num~~
-
-	->
-
-	add(-1, 1)
-	num -= 1
-
-	# --------------------------------------------------
-	# struct expression
-	Person{ name: "", ...b }
-	Person{
-		name: ""
-		...b
-	}
-
-	->
-
-	Person { name: "", ..b }
-	Person {
-		name: "",
-		..b
-	}
-
-	# --------------------------------------------------
-	# mod
-	sub mod {
-	}
-
-	->
-
-	mod sub {
-	}
-
-	# --------------------------------------------------
-	# extern crate
-	# (as of rust 2024, this is rarely used)
-	crate {
-		std
-		ruststd std
-		- foo
-	}
-
-	->
-
-	extern crate std;
-	extern crate std as ruststd;
-	extern crate foo as _;
-
-	# --------------------------------------------------
-	# import
-	import {
-		+ std
-		* std..env
-		+ * std..env
-		env-consts std..env..consts
-		std..option..Option{self, Some, nil None}
-		std..option{Option, Option..Some, nil Option..None}
-	}
-
-	->
-
-	pub use std;
-	use std::env::*;
-	pub use std::env::*;
-	use std::env::consts as env-consts;
-	use std::option::Option::{self, Some, None as nil};
-	use std::option::{Option, Option::Some, Option::None as nil};
-
-	# --------------------------------------------------
-	# mod
-	sub+ mod {
-	}
-
-	another mod {
-	}
-
-	->
-
-	pub mod sub {
-	}
-
-	pub(super) mod another {
-	}
-
-	# --------------------------------------------------
-	# extern
-	extern "C" {
-		abs func(input i32) i32
-	}
-	#[no-mangle]
-	call-from-c func[extern "C"]() {
-	}
-
-	->
-
-	extern "C" {
-		fn abs(input: i32) -> i32;
-	}
-	#[no-mangle]
-	extern "C" fn call_from_c() {
-	}
-
-	# --------------------------------------------------
-	# unsafe
-	unsafe {
-		dangerous()
-	}
-	dangerous func[unsafe]() {
-	}
-
-	->
-
-	unsafe {
-		dangerous();
-	}
-	unsafe fn dangerous() {
-	}
-
-	# --------------------------------------------------
-	# func
-	foo func[const](a i32, b i32) {
-	}
-	foo[T] func[async, unsafe]() i32 where {T Clone} {
-	}
-	foo[T] func() where {T Clone} {
-	}
-
-	->
-
-	const fn foo(mut a i32, mut b i32) {
-	}
-	unsafe async fn foo[T]() i32 where T: Clone {
-	}
-	fn foo[T]() i32 where T: Clone {
-	}
-
-	# --------------------------------------------------
-	# type alias
-
-	Point[T] type where {T Clone} = (T, T)
-
-	->
-
-	type Point<T> where T: Clone = (T, T)
-
-	# --------------------------------------------------
-	# struct
-	Person['a] struct where {} {
-		name+   &'a str
-		age     i32
-		address string
-	}
-
-	Pair[T, U] struct(+ T, U) where {}
-
-	->
-
-	struct Person<'a> where {
-		pub         name:       &'a str,
-		pub(crate)  age:        i32,
-		pub(crate)  address:    String,
-	}
-
-	struct Point<T, U>(pub T, pub(crate) U) where ;
-
-	# --------------------------------------------------
-	# enum
-	#[repr(u8)]
-	Color enum {
-		Red = 1
-		Green
-		Blue
-	}
-	Color impl {
-		red-2--c const Color = Color..Red
-	}
-
-	Animal[T, E] enum where {} {
-		Dog(string, f64)
-		Cat {
-			name    string
-			weight  f64
-		}
-	}
-
-	->
-
-	#[repr(u8)]
-	enum Color {
-		Red = 1,
-		Green,
-		Blue,
-	}
-	impl Color {
-		const RED_2: Color = Color::red;
-	}
-
-	enum Animal[T, E] where {
-		Dog(String, f64),
-		Cat {
-			name:   String,
-			weight: f64,
-		},
-	}
-
-	# --------------------------------------------------
-	# union
-	My-union[T] union where {} {
-		name+   string
-		age     i32
-	}
-
-	->
-
-	union MyUnion[T] where {
-		pub         name:   String,
-		pub(crate)  age:    i32,
-	}
-
-	# --------------------------------------------------
-	# const, static
-	name--c const &str = "hello"
-	num--g static mut i32 = 0
-	num--g static i32 = 0
-
-	->
-
-	const NAME: &str = "hello";
-	static mut NUM: i32 = 0;
-	static NUM: i32 = 0;
-
-	# --------------------------------------------------
-	# interface
-	Seq[T Copy = Self] interface[unsafe] Display + Debug where {} {
-		name--c const &str = "hello"
-		Item type = ()
-
-		foo func() where { Self Sized } {
-		}
-
-		len (&) func() u32
-		elt-at (&) func(n u32) T
-		iter[F] (&) func(f F) where { F Fn(T) }
-	}
-
-	->
-
-	unsafe trait Seq<T: Copy = Self> : Display + Debug where {
-		const NAME: &str = "hello";
-		type Item = ()
-
-		fn foo() where Self: Sized {
-		}
-
-		fn len(&self) -> u32;
-		fn elt_at(&self, n: u32) -> T;
-		fn iter<F>(&self, f: F) where F: Fn(T);
-	}
-
-	# --------------------------------------------------
-	# impl(method, associated items, trait)
-	Person impl {
-		test+ (&mut) func(a &str) {}
-	}
-
-	Point[f32] impl {
-		distance (&) func() f32 {}
-	}
-
-	Person impl Error {}
-
-	(T) [T Copy] impl[unsafe] My-trait {}
-
-	Point[T, U] [T, U] impl[unsafe] ops..My-trait where {} {
-		Output type = usize
-
-		new func()
-
-		mixup[V, W] (&) func[unsafe, async](other Point[V, W]) Point[T, W]
-		mixup[V, W] (&mut) func[unsafe, async](other Point[V, W]) Point[T, W]
-		mixup[V, W] (Self) func[unsafe, async](other Point[V, W]) Point[T, W]
-		mixup[V, W] (Box[Self]) func[unsafe, async](other Point[V, W]) Point[T, W]
-		mixup[V, W] (Pin[Box[Self]]) func[unsafe, async](other Point[V, W]) Point[T, W]
-	}
-
-	->
-
-	impl Person {
-		pub fn test(&self, mut a: &str) {}
-	}
-
-	impl Point<f32> {
-		fn distance(&self) -> f32 {}
-	}
-
-	impl Error for Person {}
-
-	unsafe impl<T: Copy> MyTrait for T {}
-
-	unsafe impl<T, U> ops..MyTrait<T> for Point<T, U> where {
-		type Output = usize
-		fn new() {}
-		unsafe async fn mixup<V, W>(self, other: Point<V, W>) -> Point(T, W)
-	}
-
-	# rule
-	receiver type
-		&(&self), &mut(&mut self), &'a(&'a self), &'a mut(&'a mut self)
-		Box[Self], Rc[Self], Arc[Self],
-		Pin[Box[Self]],
-
-		[Type-a, Type-b, Type-c](self: Type-a[Type-b[Type-c[Self]]])
-		Type could be
-			Box, Rc, Arc
-			Pin
-
-	# --------------------------------------------------
-	# where clause
-
-	where { T Copy }
-	where {
-		T           Iterator
-		T..Item     Copy
-		string      PartialEq[T]
-		(func(T))   Iterator
-	}
-
-	->
-
-	where T: Copy
-	where
-		T:          Iterator,
-		T::Item:    Copy,
-		String:     PartialEq<T>,
-		(fn(T)):    Iterator,
-
-	# --------------------------------------------------
-	# unit test, benchmark
-	test {
-		test-it-works func() {
-		}
-	}
-
-	->
-
-	#[cfg(test)]
-	mod __ {
-		use super::*;
-
-		#[test]
-		fn test_it_works() {
-		}
-	}
-
-	# best practice
-	for unit test, just put the test block in the same file as the source code.
-		pros
-			easy to edit test
-		cons
-
-	# note
-	each file can have only one test block.
-	run `cargo test --lib` to only run unit tests, avoiding integration tests.
-
-	# --------------------------------------------------
-	# macro
-	vec macro {
-		( $( $x:expr ),* ) => {
-			{
-				let mut temp-vec = Vec..new();
-				$(
-					temp-vec.push($x);
-				)*
-				temp-vec
-			}
-		};
-	}
-
-	->
-
-	#[macro_export]
-	macro-rules! vec {
-		( $( $x:expr ),* ) => {
-			{
-				let mut temp_vec = Vec::new();
-				$(
-					temp_vec.push($x);
-				)*
-				temp_vec
-			}
-		};
-	}
-
-	# --------------------------------------------------
-	# doc comment
-	/** title
-	desc `set-name`
-
-	```
-	a := 1
-	```
-	*/
-
-	->
-
-	/** title
-	desc `set_name`
-
-	```u
-	a := 1
-	```
-	*/
+    # --------------------------------------------------
+    # visibility
+    sub mod
+    sub+ mod
+    sub+(self) mod
+    sub+(super) mod
+    sub+(crate) mod
+    sub+(in crate..a) mod
+
+    Count struct(i64)
+    Count+ struct(+ i64)
+
+    ->
+
+    pub(crate) mod sub;
+    pub mod sub;
+    mod sub;
+    pub(super) mod sub;
+    pub(crate) mod sub;
+    pub(in crate::a) mod sub;
+
+    pub(crate) struct Count(pub(crate) i64)
+    pub struct Count(pub i64)
+
+    # --------------------------------------------------
+    # built-in macros
+    d,,(a)
+
+    ->
+    dbg!(a)
+
+    # --------------------------------------------------
+    # minus
+    add(~1, 1)
+    num~~
+
+    ->
+
+    add(-1, 1)
+    num -= 1
+
+    # --------------------------------------------------
+    # struct expression
+    Person{ name: "", ...b }
+    Person{
+        name: ""
+        ...b
+    }
+
+    ->
+
+    Person { name: "", ..b }
+    Person {
+        name: "",
+        ..b
+    }
+
+    # --------------------------------------------------
+    # mod
+    sub mod {
+    }
+
+    ->
+
+    mod sub {
+    }
+
+    # --------------------------------------------------
+    # extern crate
+    # (as of rust 2024, this is rarely used)
+    crate {
+        std
+        ruststd std
+        - foo
+    }
+
+    ->
+
+    extern crate std;
+    extern crate std as ruststd;
+    extern crate foo as _;
+
+    # --------------------------------------------------
+    # import
+    import {
+        + std
+        * std..env
+        + * std..env
+        env-consts std..env..consts
+        std..option..Option{self, Some, nil None}
+        std..option{Option, Option..Some, nil Option..None}
+    }
+
+    ->
+
+    pub use std;
+    use std::env::*;
+    pub use std::env::*;
+    use std::env::consts as env-consts;
+    use std::option::Option::{self, Some, None as nil};
+    use std::option::{Option, Option::Some, Option::None as nil};
+
+    # --------------------------------------------------
+    # mod
+    sub+ mod {
+    }
+
+    another mod {
+    }
+
+    ->
+
+    pub mod sub {
+    }
+
+    pub(super) mod another {
+    }
+
+    # --------------------------------------------------
+    # extern
+    extern "C" {
+        abs func(input i32) i32
+    }
+    #[no-mangle]
+    call-from-c func[extern "C"]() {
+    }
+
+    ->
+
+    extern "C" {
+        fn abs(input: i32) -> i32;
+    }
+    #[no-mangle]
+    extern "C" fn call_from_c() {
+    }
+
+    # --------------------------------------------------
+    # unsafe
+    unsafe {
+        dangerous()
+    }
+    dangerous func[unsafe]() {
+    }
+
+    ->
+
+    unsafe {
+        dangerous();
+    }
+    unsafe fn dangerous() {
+    }
+
+    # --------------------------------------------------
+    # func
+    foo func[const](a i32, b i32) {
+    }
+    foo[T] func[async, unsafe]() i32 where {T Clone} {
+    }
+    foo[T] func() where {T Clone} {
+    }
+
+    ->
+
+    const fn foo(mut a i32, mut b i32) {
+    }
+    unsafe async fn foo[T]() i32 where T: Clone {
+    }
+    fn foo[T]() i32 where T: Clone {
+    }
+
+    # --------------------------------------------------
+    # type alias
+
+    Point[T] type where {T Clone} = (T, T)
+
+    ->
+
+    type Point<T> where T: Clone = (T, T)
+
+    # --------------------------------------------------
+    # struct
+    Person['a] struct where {} {
+        name+   &'a str
+        age     i32
+        address string
+    }
+
+    Pair[T, U] struct(+ T, U) where {}
+
+    ->
+
+    struct Person<'a> where {
+        pub         name:       &'a str,
+        pub(crate)  age:        i32,
+        pub(crate)  address:    String,
+    }
+
+    struct Point<T, U>(pub T, pub(crate) U) where ;
+
+    # --------------------------------------------------
+    # enum
+    #[repr(u8)]
+    Color enum {
+        Red = 1
+        Green
+        Blue
+    }
+    Color impl {
+        red-2--c const Color = Color..Red
+    }
+
+    Animal[T, E] enum where {} {
+        Dog(string, f64)
+        Cat {
+            name    string
+            weight  f64
+        }
+    }
+
+    ->
+
+    #[repr(u8)]
+    enum Color {
+        Red = 1,
+        Green,
+        Blue,
+    }
+    impl Color {
+        const RED_2: Color = Color::red;
+    }
+
+    enum Animal[T, E] where {
+        Dog(String, f64),
+        Cat {
+            name:   String,
+            weight: f64,
+        },
+    }
+
+    # --------------------------------------------------
+    # union
+    My-union[T] union where {} {
+        name+   string
+        age     i32
+    }
+
+    ->
+
+    union MyUnion[T] where {
+        pub         name:   String,
+        pub(crate)  age:    i32,
+    }
+
+    # --------------------------------------------------
+    # const, static
+    name--c const &str = "hello"
+    num--g static mut i32 = 0
+    num--g static i32 = 0
+
+    ->
+
+    const NAME: &str = "hello";
+    static mut NUM: i32 = 0;
+    static NUM: i32 = 0;
+
+    # --------------------------------------------------
+    # interface
+    Seq[T Copy = Self] interface[unsafe] Display + Debug where {} {
+        name--c const &str = "hello"
+        Item type = ()
+
+        foo func() where { Self Sized } {
+        }
+
+        len (&) func() u32
+        elt-at (&) func(n u32) T
+        iter[F] (&) func(f F) where { F Fn(T) }
+    }
+
+    ->
+
+    unsafe trait Seq<T: Copy = Self> : Display + Debug where {
+        const NAME: &str = "hello";
+        type Item = ()
+
+        fn foo() where Self: Sized {
+        }
+
+        fn len(&self) -> u32;
+        fn elt_at(&self, n: u32) -> T;
+        fn iter<F>(&self, f: F) where F: Fn(T);
+    }
+
+    # --------------------------------------------------
+    # impl(method, associated items, trait)
+    Person impl {
+        test+ (&mut) func(a &str) {}
+    }
+
+    Point[f32] impl {
+        distance (&) func() f32 {}
+    }
+
+    Person impl Error {}
+
+    (T) [T Copy] impl[unsafe] My-trait {}
+
+    Point[T, U] [T, U] impl[unsafe] ops..My-trait where {} {
+        Output type = usize
+
+        new func()
+
+        mixup[V, W] (&) func[unsafe, async](other Point[V, W]) Point[T, W]
+        mixup[V, W] (&mut) func[unsafe, async](other Point[V, W]) Point[T, W]
+        mixup[V, W] (Self) func[unsafe, async](other Point[V, W]) Point[T, W]
+        mixup[V, W] (Box[Self]) func[unsafe, async](other Point[V, W]) Point[T, W]
+        mixup[V, W] (Pin[Box[Self]]) func[unsafe, async](other Point[V, W]) Point[T, W]
+    }
+
+    ->
+
+    impl Person {
+        pub fn test(&self, mut a: &str) {}
+    }
+
+    impl Point<f32> {
+        fn distance(&self) -> f32 {}
+    }
+
+    impl Error for Person {}
+
+    unsafe impl<T: Copy> MyTrait for T {}
+
+    unsafe impl<T, U> ops..MyTrait<T> for Point<T, U> where {
+        type Output = usize
+        fn new() {}
+        unsafe async fn mixup<V, W>(self, other: Point<V, W>) -> Point(T, W)
+    }
+
+    # rule
+    receiver type
+        &(&self), &mut(&mut self), &'a(&'a self), &'a mut(&'a mut self)
+        Box[Self], Rc[Self], Arc[Self],
+        Pin[Box[Self]],
+
+        [Type-a, Type-b, Type-c](self: Type-a[Type-b[Type-c[Self]]])
+        Type could be
+            Box, Rc, Arc
+            Pin
+
+    # --------------------------------------------------
+    # where clause
+
+    where { T Copy }
+    where {
+        T           Iterator
+        T..Item     Copy
+        string      PartialEq[T]
+        (func(T))   Iterator
+    }
+
+    ->
+
+    where T: Copy
+    where
+        T:          Iterator,
+        T::Item:    Copy,
+        String:     PartialEq<T>,
+        (fn(T)):    Iterator,
+
+    # --------------------------------------------------
+    # unit test, benchmark
+    test {
+        test-it-works func() {
+        }
+    }
+
+    ->
+
+    #[cfg(test)]
+    mod __ {
+        use super::*;
+
+        #[test]
+        fn test_it_works() {
+        }
+    }
+
+    # best practice
+    for unit test, just put the test block in the same file as the source code.
+        pros
+            easy to edit test
+        cons
+
+    # note
+    each file can have only one test block.
+    run `cargo test --lib` to only run unit tests, avoiding integration tests.
+
+    # --------------------------------------------------
+    # macro
+    vec macro {
+        ( $( $x:expr ),* ) => {
+            {
+                let mut temp-vec = Vec..new();
+                $(
+                    temp-vec.push($x);
+                )*
+                temp-vec
+            }
+        };
+    }
+
+    ->
+
+    #[macro_export]
+    macro-rules! vec {
+        ( $( $x:expr ),* ) => {
+            {
+                let mut temp_vec = Vec::new();
+                $(
+                    temp_vec.push($x);
+                )*
+                temp_vec
+            }
+        };
+    }
+
+    # --------------------------------------------------
+    # doc comment
+    /** title
+    desc `set-name`
+
+    ```
+    a := 1
+    ```
+    */
+
+    ->
+
+    /** title
+    desc `set_name`
+
+    ```u
+    a := 1
+    ```
+    */
 
 
 
 statement and expression
-	# --------------------------------------------------
-	# variable declaration
-	a := &point{}
-	a let i32 = 1
-	a let mut = 1
-	a let mut i32 = 1
+    # --------------------------------------------------
+    # variable declaration
+    a := &point{}
+    a let i32 = 1
+    a let mut = 1
+    a let mut i32 = 1
 
-	get-point() -> (a, b)
-	get-point() -> (a, b) let (i32, i32)
+    get-point() -> (a, b)
+    get-point() -> (a, b) let (i32, i32)
 
-	some-var -> Some(a) else {
-		ret
-	}
+    some-var -> Some(a) else {
+        ret
+    }
 
-	->
+    ->
 
-	let mut a = &point{};
-	let a: i32 = 1;
-	let mut a = 1;
-	let mut a: i32 = 1;
+    let mut a = &point{};
+    let a: i32 = 1;
+    let mut a = 1;
+    let mut a: i32 = 1;
 
-	let (a, b) = get_point();
-	let (a, b): (i32, i32) = get_point();
+    let (a, b) = get_point();
+    let (a, b): (i32, i32) = get_point();
 
-	let Some(a) = some-var else {
-		return;
-	};
+    let Some(a) = some-var else {
+        return;
+    };
 
-	# --------------------------------------------------
-	# array
-	{{i32; 3}}
-	list{{0}}
-	list{{0``3}}
-	list{{0``=3}}
-	&{{T}}
+    # --------------------------------------------------
+    # array
+    {{i32; 3}}
+    list{{0}}
+    list{{0``3}}
+    list{{0``=3}}
+    &{{T}}
 
-	->
+    ->
 
-	[i32; 3]
-	list[0]
-	list[0..3]
-	list[0..=3]
-	&[T]
+    [i32; 3]
+    list[0]
+    list[0..3]
+    list[0..=3]
+    &[T]
 
-	# --------------------------------------------------
-	# if let, while let
-	if &token.code -> Token-code..Identifier(identifier) {
-	}
+    # --------------------------------------------------
+    # if let, while let
+    if &token.code -> Token-code..Identifier(identifier) {
+    }
 
-	for &token.code -> Token-code..Identifier(identifier) {
-	}
+    for &token.code -> Token-code..Identifier(identifier) {
+    }
 
-	->
+    ->
 
-	if let TokenCode::Identifier(identifier) = &token.code {
-	}
+    if let TokenCode::Identifier(identifier) = &token.code {
+    }
 
-	while let TokenCode::Identifier(identifier) = &token.code {
-	}
+    while let TokenCode::Identifier(identifier) = &token.code {
+    }
 
-	# --------------------------------------------------
-	# match
-	match message {
-		Message..Quit: println,,("Quit")
-		Message..Write-string(write): println,,("{}", &write)
-		Message..Move{ x, y: 0 }: println,,("move {} horizontally", x)
-		Message..Move{ ... }: println,,("other move")
-		Message..Change-color{ 0: red, 1: green, 2: - }:
-			println,,("color change, red: {}, green: {}", red, green)
-		-:
-	}
+    # --------------------------------------------------
+    # match
+    match message {
+        Message..Quit: println,,("Quit")
+        Message..Write-string(write): println,,("{}", &write)
+        Message..Move{ x, y: 0 }: println,,("move {} horizontally", x)
+        Message..Move{ ... }: println,,("other move")
+        Message..Change-color{ 0: red, 1: green, 2: - }:
+            println,,("color change, red: {}, green: {}", red, green)
+        -:
+    }
 
-	->
+    ->
 
-	match message {
-		Message::Quit => {
-			println!("Quit"),
-		}
-		Message::WriteString(write) => {
-			println!("{}", &write),
-		}
-		Message::Move{ x, y: 0 } => {
-			println!("move {} horizontally", x),
-		}
-		Message::Move{ .. } => {
-			println!("other move"),
-		}
-		Message::ChangeColor { 0: red, 1: green, 2: _ } => {
-			println!("color change, red: {}, green: {}", red, green);
-		}
-	}
+    match message {
+        Message::Quit => {
+            println!("Quit"),
+        }
+        Message::WriteString(write) => {
+            println!("{}", &write),
+        }
+        Message::Move{ x, y: 0 } => {
+            println!("move {} horizontally", x),
+        }
+        Message::Move{ .. } => {
+            println!("other move"),
+        }
+        Message::ChangeColor { 0: red, 1: green, 2: _ } => {
+            println!("color change, red: {}, green: {}", red, green);
+        }
+    }
 ```
 
 
 ## NOTE
 ```
 - some useless clippy lints
-	first type "cargo" or "u", then copy the following
-		clippy -- \
-		-A clippy::field_reassign_with_default \
-		-A clippy::needless_range_loop \
-		-A clippy::comparison_chain \
-		-A clippy::needless_return \
-		-A clippy::collapsible_else_if \
-		-A clippy::collapsible_if
+    first type "cargo" or "u", then copy the following
+        clippy -- \
+        -A clippy::field_reassign_with_default \
+        -A clippy::needless_range_loop \
+        -A clippy::comparison_chain \
+        -A clippy::needless_return \
+        -A clippy::collapsible_else_if \
+        -A clippy::collapsible_if
 
 ```
 
@@ -1410,8 +1403,8 @@ statement and expression
 ## Fantasy
 
 - What a Rust with GC is like?
-	- prior art: Go
+    - prior art: Go
 
 - What an interpreted scripting Rust is like?
-	- prior art: Lua, JavaScript
-	- answer: WASM
+    - prior art: Lua, JavaScript
+    - answer: WASM
