@@ -71,6 +71,8 @@ Param struct {
     default-limit   i32
 }
 
+f func(:mut a: i32, b i32) {}
+
 f func() {
     dbg,,(a, b)
     println,,("{} {:?}", a, b)

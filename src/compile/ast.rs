@@ -677,7 +677,11 @@ impl ToLang for Func {
         }
         for (i, param) in s.params.iter().enumerate() {
             p.push_rust(&param.outer_attrs);
-            p.push_rust(&param.name);
+            if let Some(pat) = &param.pat {
+                p.push_rust(pat);
+            } else {
+                p.push_rust(&param.name);
+            }
             p.push_raw(": ");
             p.push_rust(&param.type_);
             if i != s.params.len() - 1 {
@@ -763,7 +767,11 @@ impl ToLang for Func {
         }
         for (i, param) in s.params.iter().enumerate() {
             p.push_u(&param.outer_attrs);
-            p.push_u(&param.name);
+            if let Some(pat) = &param.pat {
+                p.push_u(pat);
+            } else {
+                p.push_u(&param.name);
+            }
             p.push_raw(": ");
             p.push_u(&param.type_);
             if i != s.params.len() - 1 {
@@ -916,8 +924,8 @@ pub struct SelfParamType {
 #[derive(Debug, Default)]
 pub struct FuncParam {
     pub outer_attrs: Attrs,
-    // pub pattern: Pattern, // I don't think using patterns for function params is neccessary
     pub name: Identifier,
+    pub pat: Option<Pattern>,
     pub type_: Type,
 }
 #[derive(Debug)]

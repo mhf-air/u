@@ -501,11 +501,12 @@ example
 
 - **patterns in function parameters**
 
-    it's bad to have that in function parameters.
-    if you really need that, add a destructuring assignment at the start of the function body
-
 ```
-f func($"pat"mut a: i32, b i32) {}
+f func(:Pattern: Type) {}
+
+example
+
+    f func(:mut a: i32, b i32) {}
 ```
 
 - **doc comment**

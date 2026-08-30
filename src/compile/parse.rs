@@ -1717,28 +1717,45 @@ impl Parse {
             }
 
             let token = s.current();
-            if let TokenCode::Identifier(identifier) = &token.code {
-                param.name = identifier.clone();
-                s.plusplus();
-
-                param.type_ = s.parse_type()?;
-                let token = s.current();
-                s.plusplus();
-                match &token.code {
-                    T![")"] => {
-                        r.span_paren_close = token.span;
-                        r.params.push(param);
-                        break;
-                    }
-                    T![,] | T![;] => {
-                        r.params.push(param);
-                    }
-                    _ => {
-                        return Err(s.panic(token, &format!("expected , or ) but got {:?}", token)));
+            match &token.code {
+                TokenCode::Identifier(identifier) => {
+                    param.name = identifier.clone();
+                    s.plusplus();
+                    let token = s.current();
+                    if matches!(&token.code, T![:]) {
+                        return Err(s.panic(
+                            token,
+                            &format!("don't add ':' after param name '{:?}'", param.name),
+                        ));
                     }
                 }
-            } else {
-                return Err(s.panic(token, &format!("expected identifier but got {:?}", token)));
+                T![:] => {
+                    s.plusplus();
+                    param.pat = Some(s.parse_pattern()?);
+                    s.expect(T![:])?;
+                }
+                _ => {
+                    return Err(s.panic(
+                        token,
+                        &format!("expected identifier or ':' but got {:?}", token),
+                    ));
+                }
+            }
+            param.type_ = s.parse_type()?;
+            let token = s.current();
+            s.plusplus();
+            match &token.code {
+                T![")"] => {
+                    r.span_paren_close = token.span;
+                    r.params.push(param);
+                    break;
+                }
+                T![,] | T![;] => {
+                    r.params.push(param);
+                }
+                _ => {
+                    return Err(s.panic(token, &format!("expected , or ) but got {:?}", token)));
+                }
             }
         }
 
