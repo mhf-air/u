@@ -300,20 +300,11 @@ example
 
 ```
 
-- **use new syntax for destructive binding(including if let, while let), but don't support destructive assignment**
+- **use new syntax for destructive binding(including if let, while let)**
 
     use Expr -> Pattern instead of let Pattern = Expr
 
     use if Expr -> Pattern { }, as I always believe that the order should be reversed
-
-    if Expr is too long, you can use
-    ```
-    a := Expr
-    a -> Pattern
-    ```
-
-    destructive assignment is not supported, because using a pattern as lvalue is very confusing,
-    and destructive declaration is already sufficient to use
 
     possible future conflict: when -> is used in Rust as part of an expression
 
@@ -330,6 +321,10 @@ example
     for &token.code -> Token-code..Identifier(identifier) {
         println,,("{:?}", identifier)
     }
+
+    // if Expr is too long, you can use
+    a := Expr
+    a -> Pattern
 ```
 
 - **use , instead of && as separators between chains of conditions in if and while statements**
@@ -516,9 +511,11 @@ example
     TODO: maybe generating rust doc in the future
 
 ### caveats
-- vim-u offers the following, you can use '.' to repeat
-    - <leader>+ to add + at the current line
-    - <leader>^ to add ^ at the current line
+- vim-u offers the following to add something after the first symbol in the current line,
+you can use '.' to repeat
+    - <leader>+ to add "+"
+    - <leader>^ to add "^"
+    - <leader>am to add " mut"
 
 ### for more examples, check [a.u file](./data/a.u)
 

@@ -1,9 +1,35 @@
 #!/usr/bin/env rustx
 /*! doc
 see the last line for the current Rust version
+
+rust reference
+    https://doc.rust-lang.org/reference/introduction.html
 */
 
 #![allow(unused-imports)]
+
+/* todo
+- $"no-derive-debug"
+    - in u->rs, if there's no $"no-derive-debug",
+        add #[derive(Debug)] in rs
+        that is to say, the next time you open the .u file, the struct which had no #[derive(Debug)]
+        will have #[derive(Debug)] now.
+        so the benefit is less thinking about Debug and typing, since most places need Debug anyway
+    - in rs->u, if there's no #[derive(Debug)] in rs,
+        add $"no-derive-debug" in u
+- $"no-s"
+    in u->rs, if there's no $"no-s",
+        add "let s = self;"
+    in rs->u, if there's no "let s = self;" at the first item in method body,
+        add $"no-s"
+    else
+        delete the first item
+
+- open *.rs: read *.rs -> rust's ast -> write .*.u
+- close .*.u: rustfmt --edition 2024 *.rs
+
+- when writing to .*.u, align multi-line struct members and other stuff with least gap of 3 spaces
+*/
 
 crate std
 crate std as ruststd
@@ -502,6 +528,10 @@ f func() {
         ret 1
     })
     a(|[async, move]| 1)
+
+    (0, 1) -> (mut a, mut b)
+    (b, a) = (a, b)
+    Struct { x: a, y: b } = Struct { x: 3, y: 4 }
 }
 
 f func() {
