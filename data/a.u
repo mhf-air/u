@@ -7,20 +7,22 @@ rust reference
 */
 
 #![allow(unused-imports)]
+$!"inner, not useful now"
 
 /* todo
 - $"no-derive-debug"
     - in u->rs, if there's no $"no-derive-debug",
         add #[derive(Debug)] in rs
+
         that is to say, the next time you open the .u file, the struct which had no #[derive(Debug)]
         will have #[derive(Debug)] now.
         so the benefit is less thinking about Debug and typing, since most places need Debug anyway
-    - in rs->u, if there's no #[derive(Debug)] in rs,
+    - in rs->u, if there's no Debug in #[derive()] in rs,
         add $"no-derive-debug" in u
 - $"no-s"
     in u->rs, if there's no $"no-s",
         add "let s = self;"
-    in rs->u, if there's no "let s = self;" at the first item in method body,
+    in rs->u, if there's no "let s = self;" as the first item in method body,
         add $"no-s"
     else
         delete the first item
@@ -28,6 +30,7 @@ rust reference
 - open *.rs: read *.rs -> rust's ast -> write .*.u
 - close .*.u: rustfmt --edition 2024 *.rs
 
+- place comments in the right order in u-to-rust
 - when writing to .*.u, align multi-line struct members and other stuff with least gap of 3 spaces
 */
 
@@ -316,11 +319,21 @@ const-c-void[T] func(r &T) *const c-void {
     ret r as *const T as *const c-void
 }
 
-#[!derive(Debug)]
+$"no-derive-debug"
 Person['a] struct {
     #[serde(rename = "lnum")]
     name+   &'a str
     age     i32
+    desc    String
+}
+Person impl {
+    $"no-s"
+    no-s (&) func() String {
+        < self.desc
+    }
+    has-s (&) func() String {
+        < s.desc
+    }
 }
 
 Person['a] impl fmt..Debug {
@@ -332,7 +345,9 @@ Person['a] impl fmt..Debug {
     }
 }
 
-Pair[T, U] struct(+ T, U)
+Pair[T, U] struct(+ T, + U)
+Pair[T, U] struct(^ T, U)
+Pair[T, U] struct(T, U)
 
 Foo[N const usize = 10 + 1] struct
 

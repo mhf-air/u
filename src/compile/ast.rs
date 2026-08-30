@@ -306,8 +306,8 @@ impl ToLang for Item {
             // add #[derive(Debug)] for all struct and enum
             ItemPayload::Struct(_) | ItemPayload::Enum(_) => {
                 let mut derive = true;
-                for attr in &s.outer_attrs.items {
-                    if attr.text == "!derive(Debug)" {
+                for sp in &s.outer_attrs.sp_list {
+                    if sp == "no-derive-debug" {
                         derive = false;
                         break;
                     }
@@ -620,6 +620,7 @@ pub struct Func {
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
     pub qualifier: FuncQualifier,
+    pub no_s: bool,
 
     pub self_param: Option<SelfParam>,
     pub params: Vec<FuncParam>,
@@ -712,11 +713,9 @@ impl ToLang for Func {
             p.inc_indent();
             p.push_rust(&body.inner_attrs);
 
-            if s.self_param.is_some() && !body.stmts.is_empty() {
+            if !s.no_s && s.self_param.is_some() && !body.stmts.is_empty() {
                 p.indent();
-                p.push_raw("#[allow(unused_variables)]\n");
-                p.indent();
-                p.push_raw("let mut s = self;\n");
+                p.push_raw("let s = self;\n");
             }
 
             for item in &body.stmts {
@@ -795,11 +794,9 @@ impl ToLang for Func {
             p.inc_indent();
             p.push_u(&body.inner_attrs);
 
-            if s.self_param.is_some() && !body.stmts.is_empty() {
+            if !s.no_s && s.self_param.is_some() && !body.stmts.is_empty() {
                 p.indent();
-                p.push_raw("#[allow(unused_variables)]\n");
-                p.indent();
-                p.push_raw("let mut s = self;\n");
+                p.push_raw("let s = self;\n");
             }
 
             for item in &body.stmts {
@@ -2089,6 +2086,7 @@ pub enum ExternalBlockItemPayload {
 #[derive(Debug, Default)]
 pub struct Attrs {
     pub items: Vec<Attr>,
+    pub sp_list: Vec<String>,
 }
 impl ToLang for Attrs {
     fn to_rust(&self, p: &mut LangFormatter) {

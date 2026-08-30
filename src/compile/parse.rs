@@ -526,6 +526,7 @@ impl Parse {
                     a.generics = n.generics;
                     a.self_param = self_param;
                     a.span_func = special_token.span;
+                    a.no_s = outer_attrs.sp_list.iter().any(|it| it == "no-s");
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         public: n.public,
@@ -6029,6 +6030,12 @@ impl Parse {
             }
 
             if inner {
+                if matches!(&token.code, T![$]) && matches!(&s.nth(1).code, T![!]) {
+                    s.inc(2);
+                    let sp = parse_sp(s)?;
+                    r.sp_list.push(sp);
+                    continue;
+                }
                 if !matches!(&token.code, T!["#!["]) {
                     break;
                 }
@@ -6039,6 +6046,12 @@ impl Parse {
                     return Err(
                         s.panic(&token, "expected outer attributes but got inner attributes")
                     );
+                }
+                if matches!(&token.code, T![$]) {
+                    s.plusplus();
+                    let sp = parse_sp(s)?;
+                    r.sp_list.push(sp);
+                    continue;
                 }
                 if !matches!(&token.code, T!["#["]) {
                     break;
@@ -6053,6 +6066,21 @@ impl Parse {
         }
 
         return Ok(r);
+
+        // $""
+        fn parse_sp(s: &Parse) -> ParseResult<String> {
+            let token = s.current();
+            if let TokenCode::Literal(lit) =
+                &token.code && let LiteralPayload::String(a) = &lit.payload {
+                    s.plusplus();
+                    s.expect(T![;])?;
+                    return Ok(a.text.to_owned());
+                } else {
+                    return Err(
+                        s.panic(&token, "expected string literal after $")
+                    );
+                };
+        }
 
         // after #[ or #![
         fn parse_attr(s: &Parse) -> ParseResult<Attr> {
