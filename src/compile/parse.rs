@@ -1315,6 +1315,7 @@ impl Parse {
         s.expect(T!["{"])?;
         r.inner_attrs = s.parse_inner_attrs()?;
 
+        let mut items = Vec::new();
         while s.has_more() {
             let token = s.current();
             if matches!(&token.code, T!["}"]) {
@@ -1324,7 +1325,7 @@ impl Parse {
             }
             let stmt = s.parse_stmt()?;
             if let Stmt::Item(item) = stmt {
-                r.items.push(item);
+                items.push(item);
             } else {
                 return Err(s.panic(token, "expected Item"));
             }
@@ -1334,6 +1335,7 @@ impl Parse {
                 return Err(s.panic(&s.tokens[s.tokens.len() - 1], "expected } for ending mod"));
             }
         }
+        r.items = Some(items);
 
         Ok(r)
     }

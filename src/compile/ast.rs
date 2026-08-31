@@ -425,7 +425,7 @@ impl Default for ItemPayload {
 pub struct Mod {
     pub name: Identifier,
     pub inner_attrs: Attrs,
-    pub items: Vec<Item>,
+    pub items: Option<Vec<Item>>,
 
     pub span_mod: Span,
     pub span_brace_open: Option<Span>,
@@ -439,10 +439,10 @@ impl ToLang for Mod {
         p.push_str("mod", s.span_mod);
         p.push_raw(" ");
         p.push_rust(&s.name);
-        if s.items.is_empty() {
+        let Some(items) = &s.items else {
             p.push_raw(";");
             return;
-        }
+        };
 
         p.push_raw(" ");
         p.push_str("{", s.span_brace_open.unwrap());
@@ -450,7 +450,7 @@ impl ToLang for Mod {
 
         p.inc_indent();
         p.push_rust(&s.inner_attrs);
-        for item in &s.items {
+        for item in items {
             p.push_rust(item);
         }
         p.dec_indent();
@@ -461,11 +461,15 @@ impl ToLang for Mod {
         let s = self;
 
         p.push_u(&s.name);
+        let Some(items) = &s.items else {
+            p.push_raw(";");
+            return;
+        };
         p.push_raw(" mod {\n");
 
         p.inc_indent();
         p.push_u(&s.inner_attrs);
-        for item in &s.items {
+        for item in items {
             p.push_u(item);
         }
         p.dec_indent();

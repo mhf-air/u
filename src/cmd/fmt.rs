@@ -270,7 +270,10 @@ impl Fmt {
         let s = self;
         match item.payload {
             cc::ItemPayload::Mod(a) => {
-                for b in a.items {
+                let Some(items) = a.items else {
+                    return;
+                };
+                for b in items {
                     s.fmt_item(b);
                 }
             }

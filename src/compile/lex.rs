@@ -1864,12 +1864,13 @@ impl Identifier {
         return p;
     }
 }
+pub const ALLOWED_KEYWORD_NAMES: &[&'static str] = &["func", "import", "interface", "ret"];
 impl ToLang for Identifier {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
         let mut r = String::new();
-        if let Some(prefix) = &s.prefix {
+        if let Some(prefix) = &s.prefix && !ALLOWED_KEYWORD_NAMES.contains(&s.id.as_str()) {
             r.push_str(&Identifier::id_to_rust(prefix));
             r.push('#');
         }

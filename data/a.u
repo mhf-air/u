@@ -73,7 +73,8 @@ import std..env..consts as env-consts
 import super..Api-result as Result
 import std..option { Option, Option..Some, Option..None as nil }
 
-empty-mod mod
+include-mod mod
+empty-mod mod {}
 
 vis-self+(self) mod {}
 vis-super+(super) mod {}
@@ -101,6 +102,13 @@ Param struct {
 }
 
 f func(:mut a: i32, b i32) {}
+
+f func() {
+    r#func := a
+    r#import := a
+    r#interface := a
+    r#ret := a
+}
 
 f func() {
     dbg,,(a, b)
