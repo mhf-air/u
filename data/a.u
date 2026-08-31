@@ -40,7 +40,7 @@ crate foo as -
 
 import {
     + crate..a
-    + crate..a..*
+    ^ crate..a..*
     crate..a..*
     super..a
     self..a
@@ -60,8 +60,8 @@ import {
     }
 }
 
-import + crate..a
-import + crate..a..*
+import+ crate..a
+import^ crate..a..*
 import crate..a..*
 import super..a
 import self..a
@@ -72,6 +72,11 @@ import std..env
 import std..env..consts as env-consts
 import super..Api-result as Result
 import std..option { Option, Option..Some, Option..None as nil }
+
+import+[block] {
+    std..env
+    std..option { Option, Option..Some, Option..None as nil }
+}
 
 include-mod mod
 empty-mod mod {}

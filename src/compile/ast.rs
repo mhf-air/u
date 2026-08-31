@@ -525,15 +525,30 @@ pub struct CrateItem {
 #[derive(Debug, Default)]
 pub struct Import {
     pub items: Vec<ImportItem>, // items.len() > 0
+    pub public: Visibility,
+    pub is_block: bool,
 }
 impl ToLang for Import {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        for item in &s.items {
-            if item.public.is_some() {
-                p.push_raw("pub ");
+        if s.is_block {
+            p.push_rust(&s.public);
+            p.push_raw("use {\n");
+            p.inc_indent();
+            for item in &s.items {
+                p.indent();
+                p.push_rust(item);
+                p.push_raw(",\n");
             }
+            p.dec_indent();
+            p.indent();
+            p.push_raw("}");
+            return;
+        }
+
+        for item in &s.items {
+            p.push_rust(&item.public);
             p.push_raw("use ");
             p.push_rust(item);
             p.push_raw(";\n");
@@ -556,7 +571,7 @@ impl ToLang for Import {
 }
 #[derive(Debug, Default)]
 pub struct ImportItem {
-    pub public: Option<Visibility>,
+    pub public: Visibility,
     pub alias: Option<Identifier>,
     pub paths: Vec<Identifier>, // path.len() > 0
     pub sub: Vec<ImportItem>,

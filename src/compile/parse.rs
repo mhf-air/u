@@ -1373,34 +1373,62 @@ impl Parse {
         let s = self;
 
         let mut r = Import::default();
+        let outer_public = s.parse_pub()?;
 
-        let mut has_brace = false;
+        // import[block] {}
         let token = s.current();
-        if matches!(&token.code, T!["{"]) {
-            has_brace = true;
+        if matches!(&token.code, T!["["]) {
             s.plusplus();
+            // skips checking for "block"
+            s.plusplus();
+            s.expect(T!["]"])?;
+            r.is_block = true;
         }
 
-        // first token is }, +, self, super, crate or identifier
+        // import+ std..env
+        let token = s.current();
+        if !matches!(&token.code, T!["{"]) {
+            let mut item = parse_import_item(s)?;
+            item.public = outer_public;
+            r.items.push(item);
+            return Ok(r);
+        }
+
+        // {  }
+        r.public = outer_public;
+        s.plusplus();
+        // first token is }, +, ^, self, super, crate or identifier
         while s.has_more() {
+            let public = s.parse_pub()?;
+            if err_on_pub && !matches!(public.payload, VisibilityPayload::Private) {
+                return Err(s.panic(token, "not expected pub in sub-imports"));
+            }
+
             let token = s.current();
-            let public = if matches!(token.code, T![+]) {
-                if err_on_pub {
-                    return Err(s.panic(token, "not expected + in sub-imports"));
+            if matches!(&token.code, T!["}"]) {
+                if !matches!(public.payload, VisibilityPayload::Private) {
+                    return Err(s.panic(token, "expected path after + in import"));
                 }
                 s.plusplus();
-                Some(Visibility {
-                    span: token.span,
-                    payload: VisibilityPayload::Pub,
-                    is_default: false,
-                })
-            } else {
-                None
-            };
+                s.skip_semicolons();
+                return Ok(r);
+            }
+
+            let mut item = parse_import_item(s)?;
+            item.public = public;
+
+            r.items.push(item);
+        }
+
+        return Ok(r);
+
+        fn parse_import_item(s: &Parse) -> ParseResult<ImportItem> {
+            // next token is } ; , .. { identifier
+            let mut r = ImportItem::default();
 
             let token = s.current();
             // so that you can type {.. to trigger auto-completion
-            let leading_sep = if matches!(token.code, T![..]) {
+            r.leading_sep = if matches!(token.code, T![..]) {
                 s.plusplus();
                 if s.magic {
                     Some(token.span)
@@ -1410,32 +1438,6 @@ impl Parse {
             } else {
                 None
             };
-
-            let token = s.current();
-            if has_brace && matches!(&token.code, T!["}"]) {
-                if public.is_some() {
-                    return Err(s.panic(token, "expected path after + in import"));
-                }
-                s.plusplus();
-                s.skip_semicolons();
-                return Ok(r);
-            }
-
-            let mut item = parse_import_item(s, leading_sep)?;
-            item.public = public;
-
-            r.items.push(item);
-            if !has_brace {
-                break;
-            }
-        }
-
-        return Ok(r);
-
-        fn parse_import_item(s: &Parse, leading_sep: Option<Span>) -> ParseResult<ImportItem> {
-            // next token is } ; , .. { identifier
-            let mut r = ImportItem::default();
-            r.leading_sep = leading_sep;
 
             let mut expect_identifier = true;
             while s.has_more() {
