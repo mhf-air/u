@@ -456,11 +456,13 @@ the following two expressions are the same
 
 - **drop colon and -> in declarations**
 
-    exception: if you need to annotate closure expression's return type, then it has to be |n| -> i32 { < 1 }
+    exception: if you need to annotate closure expression's return type,
+    then it has to be |n| -> i32 { < 1 },
+    because you can have |n| n
 
 - **use func, interface, import instead of fn, trait, use**
 
-- **new syntax for bare function type**
+- **new syntax for bare function type and closure type**
 
     use : here instead of ->, because Type might appear before :=, which will
     mistake a := statement into a -> statement
@@ -473,6 +475,11 @@ example
     fn(i32, i32): T
 
     dyn Fn-once(): T
+
+    a(|:mut n: i32|: i32 {
+        n++
+        < n
+    })
 ```
 
 - **use ret instead of return**

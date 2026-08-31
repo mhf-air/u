@@ -5744,8 +5744,8 @@ impl ToLang for ExprField {
 #[derive(Debug, Default)]
 pub struct FuncParamOptionalType {
     pub outer_attrs: Attrs,
-    // pub pattern: Pattern, // I don't think using patterns for function params is neccessary
     pub name: Identifier,
+    pub pat: Option<Pattern>,
     pub type_: Option<Type>,
 }
 #[derive(Debug, Default)]
@@ -5777,7 +5777,11 @@ impl ToLang for ExprClosure {
         p.push_str("|", s.span_paren_open);
         for (i, item) in s.params.iter().enumerate() {
             p.push_rust(&item.outer_attrs);
-            p.push_rust(&item.name);
+            if let Some(pat) = &item.pat {
+                p.push_rust(pat);
+            } else {
+                p.push_rust(&item.name);
+            }
             if let Some(type_) = &item.type_ {
                 p.push_raw(": ");
                 p.push_rust(type_);
@@ -5808,7 +5812,11 @@ impl ToLang for ExprClosure {
         p.push_raw("|");
         for (i, item) in s.params.iter().enumerate() {
             p.push_u(&item.outer_attrs);
-            p.push_u(&item.name);
+            if let Some(pat) = &item.pat {
+                p.push_u(pat);
+            } else {
+                p.push_u(&item.name);
+            }
             if let Some(type_) = &item.type_ {
                 p.push_raw(": ");
                 p.push_u(type_);

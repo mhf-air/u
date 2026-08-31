@@ -533,7 +533,9 @@ f func() {
 
     a * b + c
 
-    a(|[move]| { ret 1; })
+    a(|a i32|: i32 { < 1 })
+    a(|:mut a: i32|: i32 { < 1 })
+    a(|[move]| { < 1 })
     a(|[move] a, b| 1)
     a(|-| { p -> (a, b); })
     a(|| {
@@ -722,9 +724,9 @@ b
 /// a
 f func() {
     sum u32 := (0``)
-        .map(|n u32| -> u32 { < n * n })
-        .take-while(|n &u32| -> bool { < *n < 1000 })
-        .filter(|n &u32| -> bool { < *n % 2 == 1 })
+        .map(|n u32|: u32 { < n * n })
+        .take-while(|n &u32|: bool { < *n < 1000 })
+        .filter(|n &u32|: bool { < *n % 2 == 1 })
         .fold(0, |acc u32, n u32| { < acc + n } )
 
     sum u32 := (0``)

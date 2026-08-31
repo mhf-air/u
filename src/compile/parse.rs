@@ -4289,7 +4289,7 @@ impl Parse {
 
     // |a, b, c| Expr
     // || Expr
-    // || -> Type BlockExpr
+    // |:Pattern: Type|: Type BlockExpr
     // |[move] a, b, c| Expr
     // |[async] a, b, c| Expr
     // |[async, move] a, b, c| Expr
@@ -4336,40 +4336,57 @@ impl Parse {
                     let mut param = FuncParamOptionalType::default();
                     param.outer_attrs = s.parse_outer_attrs()?;
 
+                    match &token.code {
+                        TokenCode::Identifier(identifier) => {
+                            param.name = identifier.clone();
+                            s.plusplus();
+
+                            let token = s.current();
+                            match &token.code {
+                                T![|] | T![,] => {}
+                                _ => {
+                                    if matches!(&token.code, T![:]) {
+                                        return Err(s.panic(
+                                            token,
+                                            &format!("don't add ':' after param name '{:?}'",
+                                                param.name),
+                                        ));
+                                    }
+                                    param.type_ = Some(s.parse_type()?);
+                                }
+                            }
+                        }
+                        T![:] => {
+                            s.plusplus();
+                            param.pat = Some(s.parse_pattern()?);
+                            s.expect(T![:])?;
+                            param.type_ = Some(s.parse_type()?);
+                        }
+                        _ => {
+                            return Err(s.panic(
+                                token,
+                                &format!("expected identifier or ':' but got {:?}", token),
+                            ));
+                        }
+                    }
+
                     let token = s.current();
-                    if let TokenCode::Identifier(identifier) = &token.code {
-                        param.name = identifier.clone();
-                        s.plusplus();
-
-                        match &s.current().code {
-                            T![|] | T![,] => {}
-                            _ => {
-                                param.type_ = Some(s.parse_type()?);
-                            }
+                    s.plusplus();
+                    match &token.code {
+                        T![|] => {
+                            r.span_paren_close = token.span;
+                            r.params.push(param);
+                            break;
                         }
-
-                        let token = s.current();
-                        s.plusplus();
-                        match &token.code {
-                            T![|] => {
-                                r.span_paren_close = token.span;
-                                r.params.push(param);
-                                break;
-                            }
-                            T![,] => {
-                                r.params.push(param);
-                            }
-                            _ => {
-                                return Err(s.panic(
-                                    token,
-                                    &format!("expected , or ) but got {:?}", token),
-                                ));
-                            }
+                        T![,] => {
+                            r.params.push(param);
                         }
-                    } else {
-                        return Err(
-                            s.panic(token, &format!("expected identifier but got {:?}", token))
-                        );
+                        _ => {
+                            return Err(s.panic(
+                                token,
+                                &format!("expected , or ) but got {:?}", token),
+                            ));
+                        }
                     }
                 }
             }
@@ -4380,7 +4397,7 @@ impl Parse {
         }
 
         let token = s.current();
-        if matches!(&token.code, T![->]) {
+        if matches!(&token.code, T![:]) {
             s.plusplus();
             // return type
             let type_ = s.parse_type()?;
