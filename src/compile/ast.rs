@@ -858,9 +858,15 @@ impl ToLang for SelfParam {
             SelfParamPayload::Type(a) => {
                 if let Some(span) = a.span_mut {
                     p.push_str("mut ", span);
+                    if a.typ.is_none() {
+                        p.push_raw("self");
+                        return;
+                    }
                 }
                 p.push_raw("self: ");
-                p.push_rust(&a.typ);
+                if let Some(typ) = &a.typ {
+                    p.push_rust(typ);
+                }
             }
             SelfParamPayload::Short(a) => {
                 if let Some(span) = a.span_self {
@@ -889,9 +895,15 @@ impl ToLang for SelfParam {
             SelfParamPayload::Type(a) => {
                 if let Some(span) = a.span_mut {
                     p.push_str("mut ", span);
+                    if a.typ.is_none() {
+                        p.push_raw("self");
+                        return;
+                    }
                 }
                 p.push_raw("self: ");
-                p.push_rust(&a.typ);
+                if let Some(typ) = &a.typ {
+                    p.push_rust(typ);
+                }
             }
             SelfParamPayload::Short(a) => {
                 if let Some(span) = a.span_self {
@@ -933,7 +945,7 @@ pub struct SelfParamShort {
 }
 #[derive(Debug, Default)]
 pub struct SelfParamType {
-    pub typ: Type,
+    pub typ: Option<Type>,
 
     pub span_mut: Option<Span>,
 }

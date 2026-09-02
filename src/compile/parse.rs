@@ -1818,7 +1818,7 @@ impl Parse {
         Ok(r)
     }
 
-    // (&), (&'a), (&'a mut), (&mut), (), (Type)
+    // (&), (&'a), (&'a mut), (&mut), (), (mut), (Type) (mut Type)
     fn parse_func_self_param(&self) -> ParseResult<SelfParam> {
         let s = self;
 
@@ -1854,7 +1854,7 @@ impl Parse {
                     }
                     _ => {
                         let typ = SelfParamType {
-                            typ: s.parse_type()?,
+                            typ: Some(s.parse_type()?),
                             span_mut: None,
                         };
                         r.payload = SelfParamPayload::Type(typ);
@@ -1871,7 +1871,7 @@ impl Parse {
                 }
                 _ => {
                     let typ = SelfParamType {
-                        typ: s.parse_type()?,
+                        typ: Some(s.parse_type()?),
                         span_mut: None,
                     };
                     r.payload = SelfParamPayload::Type(typ);
@@ -1883,18 +1883,27 @@ impl Parse {
             r.payload = SelfParamPayload::Short(short);
             s.plusplus();
         } else {
-            // (mut Type)
+            // (mut) or (mut Type)
             let mut span_mut = None;
             if matches!(token.code, T![mut]) {
                 span_mut = Some(s.nth(1).span);
                 s.plusplus();
             }
-            let typ = SelfParamType {
-                typ: s.parse_type()?,
-                span_mut,
-            };
-            r.payload = SelfParamPayload::Type(typ);
-            s.expect(T![")"])?;
+            if matches!(s.current().code, T![")"]) {
+                s.plusplus();
+                let typ = SelfParamType {
+                    typ: None,
+                    span_mut,
+                };
+                r.payload = SelfParamPayload::Type(typ);
+            } else {
+                let typ = SelfParamType {
+                    typ: Some(s.parse_type()?),
+                    span_mut,
+                };
+                r.payload = SelfParamPayload::Type(typ);
+                s.expect(T![")"])?;
+            }
         }
 
         Ok(r)

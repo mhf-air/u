@@ -37,6 +37,8 @@ $!"inner, not useful now"
 // - preserve all line breaks, and deal with the ASI problems with that
 // - import item level 3 has an extra indent which might make the U code longer than line
 // - when writing to .*.u, align multi-line where clause members with gap of 3 spaces
+// - in rust-to-u, for all expressions(including ret) that doesn't end with ';',
+//      translate to "< ret EXPR" in u
 
 crate std
 crate std as ruststd
@@ -123,6 +125,7 @@ f func() {
     r#import := a
     r#interface := a
     r#ret := a
+    r#union := a
 }
 
 call,,(1, 2, 3)
@@ -428,6 +431,7 @@ Person impl {
     init+ (&mut) func(a &str) {}
 
     init+ () func(a &str) {}
+    init+ (mut) func(a &str) {}
     init+(self) () func(a &str) {}
     init+(crate) () func(a &str) {}
     init+(in crate..abc) () func(a &str) {}

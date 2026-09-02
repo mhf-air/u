@@ -1864,7 +1864,7 @@ impl Identifier {
         return p;
     }
 }
-pub const ALLOWED_KEYWORD_NAMES: &[&'static str] = &["func", "import", "interface", "ret"];
+pub const ALLOWED_KEYWORD_NAMES: &[&'static str] = &["func", "import", "interface", "ret", "union"];
 impl ToLang for Identifier {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
