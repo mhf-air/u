@@ -281,6 +281,8 @@ example
 
 - **use unified for syntax instead of loop, while, for**
 
+    but for struct patterns(because it uses {}), use "for: PATTERN in EXPR {}"
+
 ```
 example
 
@@ -297,6 +299,9 @@ example
     for item in list {
         println,,("{}", item.name)
     }
+
+    // for struct patterns, use for:
+    for: Order { id } in list {}
 
 ```
 

@@ -640,6 +640,9 @@ f func() {
     }
     for a == b, c -> Some(n), n > 0 {
     }
+
+    // for struct patterns, use for:
+    for: Order { id } in list {}
 }
 
 f func() {

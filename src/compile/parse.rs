@@ -2771,27 +2771,38 @@ impl Parse {
             return Ok(r);
         }
 
+        // used to indicate it's a for in expression
+        let fake_in_token = Token{
+            code: TokenCode::Keyword(Keyword::In),
+            span: Span::default(),
+        };
+
         // get the tokens from after for to the first opening brace({) or semicolon(;),
         // skipping pairs(parens, etc.) in the process
         let mut first_special_token: Option<&Token> = None;
-        let mut start = s.index.get();
-        while start < s.tokens.len() {
-            let token = &s.tokens[start];
-            start += 1;
-            match &token.code {
-                T!["{"] => break,
+        if matches!(&token.code, T![:]) {
+            first_special_token = Some(&fake_in_token);
+            s.plusplus();
+        } else {
+            let mut start = s.index.get();
+            while start < s.tokens.len() {
+                let token = &s.tokens[start];
+                start += 1;
+                match &token.code {
+                    T!["{"] => break,
 
-                T![;] if s.magic => break,
+                    T![;] if s.magic => break,
 
-                TokenCode::Pair(_) => {
-                    start = s.skip_pair(start, token)?;
+                    TokenCode::Pair(_) => {
+                        start = s.skip_pair(start, token)?;
+                    }
+                    T![->] | T![in] => {
+                        first_special_token = Some(token);
+                        break;
+                    }
+
+                    _ => (),
                 }
-                T![->] | T![in] => {
-                    first_special_token = Some(token);
-                    break;
-                }
-
-                _ => (),
             }
         }
 
@@ -2806,7 +2817,14 @@ impl Parse {
                 // for identifter, identifier in Expr {
                 T![in] => {
                     let pattern = s.parse_pattern()?;
-                    s.expect(T![in])?;
+                    let token = s.current();
+                    if !matches!(&token.code, T![in]) {
+                        return Err(s.panic(
+                            s.current(),
+                            &format!("expected 'in' but got '{:?}'", special_token),
+                        ));
+                    }
+                    s.plusplus();
 
                     s.stop_on_brace_open.set(true);
                     let mut in_expr = s.parse_expr()?;
@@ -2839,7 +2857,7 @@ impl Parse {
                     r.payload = ExprLoopPayload::In(ExprLoopIn {
                         pattern,
                         in_expr,
-                        span_in: special_token.span,
+                        span_in: token.span,
                     });
                 }
                 _ => {
