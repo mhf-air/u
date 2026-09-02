@@ -1,40 +1,42 @@
 #!/usr/bin/env rustx
-/*! doc
-see the last line for the current Rust version
+//! doc
+//! see the last line for the current Rust version
+//!
+//! rust reference
+//!     https://doc.rust-lang.org/reference/introduction.html
 
-rust reference
-    https://doc.rust-lang.org/reference/introduction.html
+/*!
+another form of inner doc comment
 */
 
 #![allow(unused-imports)]
 $!"inner, not useful now"
 
-/* todo
-- $"no-derive-debug"
-    - in u->rs, if there's no $"no-derive-debug",
-        add #[derive(Debug)] in rs
-
-        that is to say, the next time you open the .u file, the struct which had no #[derive(Debug)]
-        will have #[derive(Debug)] now.
-        so the benefit is less thinking about Debug and typing, since most places need Debug anyway
-    - in rs->u, if there's no Debug in #[derive()] in rs,
-        add $"no-derive-debug" in u
-- $"no-s"
-    in u->rs, if there's no $"no-s",
-        add "let s = self;"
-    in rs->u, if there's no "let s = self;" as the first item in method body,
-        add $"no-s"
-    else
-        delete the first item
-
-- open *.rs: read *.rs -> rust's ast -> write .*.u
-- close .*.u: rustfmt --edition 2024 *.rs
-
-- place comments in the right order in u-to-rust
-- preserve all line breaks, and deal with the ASI problems with that
-- import item level 3 has an extra indent which might make the U code longer than line
-- when writing to .*.u, align multi-line where clause members with gap of 3 spaces
-*/
+// todo
+// - $"no-derive-debug"
+//     - in u->rs, if there's no $"no-derive-debug",
+//         add #[derive(Debug)] in rs
+//
+//         that is to say, the next time you open the .u file, the struct which had no #[derive(Debug)]
+//         will have #[derive(Debug)] now.
+//         so the benefit is less thinking about Debug and typing, since most places need Debug anyway
+//     - in rs->u, if there's no Debug in #[derive()] in rs,
+//         add $"no-derive-debug" in u
+// - $"no-s"
+//     in u->rs, if there's no $"no-s",
+//         add "let s = self;"
+//     in rs->u, if there's no "let s = self;" as the first item in method body,
+//         add $"no-s"
+//     else
+//         delete the first item
+//
+// - open *.rs: read *.rs -> rust's ast -> write .*.u
+// - close .*.u: rustfmt --edition 2024 *.rs
+//
+// - place comments in the right order in u-to-rust
+// - preserve all line breaks, and deal with the ASI problems with that
+// - import item level 3 has an extra indent which might make the U code longer than line
+// - when writing to .*.u, align multi-line where clause members with gap of 3 spaces
 
 crate std
 crate std as ruststd
@@ -43,6 +45,8 @@ crate foo as -
 import {
     + crate..a
     ^ crate..a..*
+    +(super) crate..a
+    +(in crate..abc) crate..a
     crate..a..*
     super..a
     self..a
@@ -64,6 +68,8 @@ import {
 
 import+ crate..a
 import^ crate..a..*
+import+(super) crate..a
+import+(in crate..abc) crate..a
 import crate..a..*
 import super..a
 import self..a
@@ -80,19 +86,21 @@ import+[block] {
     std..option { Option, Option..Some, Option..None as nil }
 }
 
+f func() {
+    import -..crate-abc..Abc
+    Point type = -..crate-abc..Abc
+    -..crate-abc..f()
+}
+
 include-mod mod
 empty-mod mod {}
 
+vis-self mod {}
 vis-self+(self) mod {}
 vis-super+(super) mod {}
 vis-crate+(crate) mod {}
 vis-crate^ mod {}
 vis-in-path+(in crate..a..b) mod {}
-
-Order-item^ struct {
-    name^ String
-    age i32
-}
 
 #[allow(non-camel-case-types)]
 sub+ mod {
@@ -101,9 +109,9 @@ sub+ mod {
 }
 
 #[derive(Serialize, Deserialize)]
-Param struct {
+Param^ struct {
     #[serde(default = "default_page")]
-    default-page i32
+    default-page^ i32
     #[serde(default = "api::default_limit")]
     default-limit i32
 }
@@ -117,19 +125,6 @@ f func() {
     r#ret := a
 }
 
-f func() {
-    dbg,,(a, b)
-    println,,("{} {:?}", a, b)
-
-    quote,,{
-        pub func api-config() -> api..Api-config {
-            ret api..Api-config {
-                ``Default..default()
-            };
-        }
-    }
-}
-
 call,,(1, 2, 3)
 call,,[p]{select a from b}
 call,,[s]{select a from b}
@@ -140,9 +135,15 @@ call,,{
         ret;
     }
     #[derive(Debug)]
-    struct Order-item {
+    pub struct Order-item {
         name: String,
         age: i32,
+    }
+
+    pub func api-config() -> api..Api-config {
+        ret api..Api-config {
+            ``Default..default()
+        };
     }
 }
 call,,[stmt]{
@@ -266,10 +267,6 @@ identifier func() {
     c-void = "c-void"
 }
 
-name--c+ const &str = "hello"
-num--c static i32 = 0
-num--c static mut i32 = 0
-
 // use fn() for function type, not func
 Point[T] type = fn(T, T): T
 Point+[T Copy + Default] type = (T, T)
@@ -293,12 +290,6 @@ foo['a, 'b, T] func[async, unsafe](a i32, b i32) i32 where {
     f   Box[dyn Fn-mut(&mut T) + 'a]
     'a   'b
 }{}
-
-f func() {
-    import -..crate-abc..Abc
-    Point type = -..crate-abc..Abc
-    -..crate-abc..f()
-}
 
 f func(
     a i32
@@ -432,10 +423,6 @@ Foo interface {
 }
 
 Person impl {
-    test (&) func(a &str) {
-    }
-}
-Person impl {
     abc (&) func(a &str) {}
     abc+ (&) func(a &str) {}
     init+ (&mut) func(a &str) {}
@@ -453,9 +440,10 @@ Point[f32] impl {
     distance (&) func() f32 {}
 }
 
-{{T: N}} [T, N const usize] impl[unsafe] My-trait {}
-(fn(i32) impl Copy) impl {}
-(str) [I] impl ops..Index[I] {}
+{{T: N}} :[T, N const usize] impl[unsafe] My-trait {}
+str :[I] impl ops..Index[I] {}
+fn(i32): i32 impl {}
+fn(T): T :[T] impl {}
 
 crate..Person impl {
     abc (&) func() {

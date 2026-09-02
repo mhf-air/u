@@ -958,28 +958,32 @@ impl Parse {
         Ok(())
     }
 
-    // NOTE if the type contains special keywords(like impl), wrap the type in parens, otherwise
-    // it's a syntax error
     // Type [Generics]? impl[unsafe] Trait where { Where } {}
     fn parse_impl_left(&self) -> ParseResult<ImplLeft> {
         let s = self;
 
         let mut r = ImplLeft::default();
 
+        // if the type contains special keywords(like impl),
+        // wrap the type in parens, otherwise it's a syntax error
+        // NOTE BUT, it appears that won't happen
+
         // if Type is parenthesized, unwrap it
-        let type_ = s.parse_type()?;
-        if let Type::TypeNoBounds(a) = type_ {
-            if let TypeNoBounds::Parenthesized(p) = *a {
-                r.type_ = p.type_;
-            } else {
-                r.type_ = Type::TypeNoBounds(a);
-            }
-        } else {
-            r.type_ = type_;
-        }
+        // let type_ = s.parse_type()?;
+        // if let Type::TypeNoBounds(a) = type_ {
+        //     if let TypeNoBounds::Parenthesized(p) = *a {
+        //         r.type_ = p.type_;
+        //     } else {
+        //         r.type_ = Type::TypeNoBounds(a);
+        //     }
+        // } else {
+        //     r.type_ = type_;
+        // }
+        r.type_ = s.parse_type()?;
 
         let token = s.current();
-        if !matches!(&token.code, T![impl]) {
+        if matches!(&token.code, T![:]) {
+            s.plusplus();
             s.expect(T!["["])?;
             let mut a = s.parse_generics()?;
             a.span_square_open = token.span;
