@@ -35,10 +35,16 @@ $!"inner, not useful now"
 //
 // - place comments in the right order in u-to-rust
 // - preserve all line breaks, and deal with the ASI problems with that
-// - import item level 3 has an extra indent which might make the U code longer than line
 // - when writing to .*.u, align multi-line where clause members with gap of 3 spaces
 // - in rust-to-u, for all expressions(including ret) that doesn't end with ';',
 //      translate to "< ret EXPR" in u
+// - remove to_u(), attach each ast with (start_index, end_index) of all tokens(including comments)
+// - places that might affect comment order
+//      - item declaration
+//      - let, ->
+//      - pub
+//      - method receiver
+// - u's ast to a list of rust tokens
 
 crate std
 crate std as ruststd

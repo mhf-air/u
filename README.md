@@ -233,6 +233,59 @@ becomes
 
 ```
 
+- **use new syntax for destructive binding(including if let, while let)**
+
+    use Expr -> Pattern instead of let Pattern = Expr
+
+    use if Expr -> Pattern { }, as I always believe that the order should be reversed
+
+    possible future conflict: when -> is used in Rust as part of an expression
+
+```
+example
+
+    get-point() -> (a, b)
+    get-point() -> (a, b) let (i32, i32)
+
+    if &token.code -> Token-code..Identifier(identifier) {
+        println,,("{:?}", identifier)
+    }
+
+    for &token.code -> Token-code..Identifier(identifier) {
+        println,,("{:?}", identifier)
+    }
+
+    // if Expr is too long, you can use
+    a := Expr
+    a -> Pattern
+```
+
+- **use , instead of && as separators between chains of conditions in if and while statements**
+```
+example
+
+    // use , instead of && as separators between chains of conditions,
+    // because && can be regarded as part of the expr
+    if a == b, c && d, #[some-attr] outer -> Some(inner),
+            inner -> Some(number),
+            number == 1 {
+    }
+    if a == b, c -> Some(n), n > 0 {
+    }
+
+    for v -> E..X(n) | E..Y(n) {
+    }
+    for a -> Some(b) {
+    }
+    for a == b, c && d, #[some-attr] outer -> Some(inner),
+            inner -> Some(number),
+            number == 1 {
+    }
+    for a == b, c -> Some(n), n > 0 {
+    }
+
+```
+
 - **#[derive(Debug)] for all structs and enums by default**
 
     add #[derive(Debug)] for all structs and enums,
@@ -299,59 +352,6 @@ example
 
     // for struct patterns, use for:
     for: Order { id } in list {}
-
-```
-
-- **use new syntax for destructive binding(including if let, while let)**
-
-    use Expr -> Pattern instead of let Pattern = Expr
-
-    use if Expr -> Pattern { }, as I always believe that the order should be reversed
-
-    possible future conflict: when -> is used in Rust as part of an expression
-
-```
-example
-
-    get-point() -> (a, b)
-    get-point() -> (a, b) let (i32, i32)
-
-    if &token.code -> Token-code..Identifier(identifier) {
-        println,,("{:?}", identifier)
-    }
-
-    for &token.code -> Token-code..Identifier(identifier) {
-        println,,("{:?}", identifier)
-    }
-
-    // if Expr is too long, you can use
-    a := Expr
-    a -> Pattern
-```
-
-- **use , instead of && as separators between chains of conditions in if and while statements**
-```
-example
-
-    // use , instead of && as separators between chains of conditions,
-    // because && can be regarded as part of the expr
-    if a == b, c && d, #[some-attr] outer -> Some(inner),
-            inner -> Some(number),
-            number == 1 {
-    }
-    if a == b, c -> Some(n), n > 0 {
-    }
-
-    for v -> E..X(n) | E..Y(n) {
-    }
-    for a -> Some(b) {
-    }
-    for a == b, c && d, #[some-attr] outer -> Some(inner),
-            inner -> Some(number),
-            number == 1 {
-    }
-    for a == b, c -> Some(n), n > 0 {
-    }
 
 ```
 
@@ -456,13 +456,9 @@ the following two expressions are the same
 
 ## Other Changes
 
-- **drop colon and -> in declarations**
-
-    exception: if you need to annotate closure expression's return type,
-    then it has to be |n| -> i32 { < 1 },
-    because you can have |n| n
-
 - **use func, interface, import instead of fn, trait, use**
+
+- **drop colon and -> in declarations**
 
 - **new syntax for bare function type and closure type**
 
