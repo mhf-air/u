@@ -84,10 +84,26 @@ impl Lex {
             },
         };
 
+        let (end_line, end_column) = if let TokenCode::Literal(a) = &code &&
+                let LiteralPayload::String(b)= &a.payload {
+            let lines: Vec<_> = b.text.split('\n').collect();
+            let end_column = if lines.len() == 1 {
+                s.column + 2 + b.text.len() + b.raw_count * 2 - 1
+            } else {
+                let str_len = lines[lines.len() - 1].chars().fold(0, |r, _| r + 1);
+                1 + str_len + b.raw_count
+            };
+            (s.line + lines.len() - 1, end_column)
+        } else {
+            (s.line, s.column + width - 1)
+        };
+
         let span = Span {
             line: s.line,
             column: s.column,
             width,
+            end_line,
+            end_column,
         };
 
         let mut code = code;
@@ -104,7 +120,7 @@ impl Lex {
         let new_token = Token { code, span };
         s.tokens.push(new_token);
 
-        s.column += width;
+        s.column = end_column + 1;
     }
 
     fn add_semicolon(&mut self) {
@@ -115,6 +131,8 @@ impl Lex {
                 line: s.line,
                 column: std::usize::MAX,
                 width: 1,
+                end_line: s.line,
+                end_column: std::usize::MAX,
             },
         };
         s.tokens.push(new_token);
@@ -153,6 +171,14 @@ impl Lex {
             None => false,
         };
 
+        let (end_line, end_column) = if !is_line {
+            let lines: Vec<_> = text.split('\n').collect();
+            let end_column = lines[lines.len() - 1].chars().fold(0, |r, _| r + 1);
+            (lines.len() - 1, end_column)
+        } else {
+            (start_line, s.column)
+        };
+
         let width = text.len();
         s.comments.push(Comment {
             text,
@@ -164,6 +190,8 @@ impl Lex {
                 line: start_line,
                 column: s.column,
                 width,
+                end_line,
+                end_column,
             },
         });
     }
@@ -632,7 +660,6 @@ impl Lex {
                                     LiteralString {
                                         raw_count: 0,
                                         text: a,
-                                        u_tokens: Vec::new(),
                                     }
                                 ),
                                 &mut id_prefix,
@@ -1071,7 +1098,6 @@ impl Lex {
                                         LiteralString {
                                             raw_count,
                                             text: a,
-                                            u_tokens: Vec::new(),
                                         }
                                     ),
                                     &mut id_prefix,
@@ -1133,7 +1159,7 @@ impl fmt::Debug for Lex {
 }
 
 // --------------------------------------------------------------------------------
-#[derive(Clone, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Default)]
 pub struct Token {
     pub code: TokenCode,
     pub span: Span,
@@ -1144,6 +1170,9 @@ pub struct Span {
     pub line: usize,
     pub column: usize,
     pub width: usize,
+    // some tokens have different ending, such as multi-line string and comment
+    pub end_line: usize,
+    pub end_column: usize,
 }
 
 impl fmt::Debug for Token {
@@ -1185,6 +1214,8 @@ impl ToLang for Token {
                         line: s.span.line,
                         column: s.span.column - 1,
                         width: 1,
+                        end_line: s.span.line,
+                        end_column: s.span.column,
                     },
                 );
                 p.push_rust(identifier);
@@ -1509,7 +1540,6 @@ impl Default for TokenCode {
 pub struct LiteralString {
     raw_count: usize, // number of pound sign
     pub text: String,
-    u_tokens: Vec<Token>,
 }
 impl LiteralString {
     fn to_rust_string(&self) -> String {
@@ -1523,17 +1553,7 @@ impl LiteralString {
             }
         }
         p.push('"');
-
-        if s.u_tokens.is_empty() {
-            p.push_str(&s.text);
-        } else {
-            let mut fmtter = LangFormatter::new(Vec::new());
-            for token in &s.u_tokens {
-                fmtter.push_rust(token);
-            }
-            p.push_str(&fmtter.buf())
-        }
-
+        p.push_str(&s.text);
         p.push('"');
         for _ in 0..s.raw_count {
             p.push('#');
@@ -1696,14 +1716,9 @@ impl ToLang for Literal {
 
         match &s.payload {
             LiteralPayload::String(a) => {
-                if a.u_tokens.is_empty() {
-                    // NOTE don't output prefix and suffix for u string
-                    push_str(&a.to_rust_string(), false);
-                } else {
-                    p.push_str(&a.to_rust_string(), s.span)
-                }
+                push_str(&a.to_rust_string(), false);
 
-                let mut n = 0;
+                /* let mut n = 0;
                 let mut column = 1;
                 for c in a.text.chars() {
                     if c == '\n' {
@@ -1721,9 +1736,11 @@ impl ToLang for Literal {
                             line: s.span.line + n,
                             column,
                             width: column,
+                            end_line: s.span.line + n,
+                            end_column: column,
                         },
                     );
-                }
+                } */
             }
             LiteralPayload::Char(a) => push_str(&a.to_rust_string(), false),
             LiteralPayload::Int(a) => push_str(a, true),
@@ -1762,6 +1779,8 @@ impl Identifier {
                 line,
                 column,
                 width,
+                end_line: line,
+                end_column: column + width,
             },
         }
     }
@@ -1784,6 +1803,8 @@ impl Identifier {
                 line,
                 column,
                 width,
+                end_line: line,
+                end_column: column + width,
             },
         }
     }

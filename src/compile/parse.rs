@@ -36,7 +36,6 @@ pub struct Parse {
     tokens: Vec<Token>,
     index: Cell<usize>,
     comments: Vec<Comment>,
-    doc_index: Cell<usize>,
 
     stop_on_brace_open: Cell<bool>,
     op_map: HashMap<TokenCode, u8>,
@@ -56,7 +55,6 @@ impl Parse {
             tokens: lex.tokens,
             index: Cell::new(0),
             comments: lex.comments,
-            doc_index: Cell::new(0),
 
             stop_on_brace_open: Cell::new(false),
             op_map: build_operator_precedence_map(),
@@ -125,23 +123,8 @@ impl Parse {
         &self.pkg
     }
 
-    /* pub fn to_rust_doc(self) -> Result<Self, ParseError> {
-        let mut s = self;
-
-        let mut comments = mem::take(&mut s.comments);
-        for comment in comments.iter_mut() {
-            if !comment.is_doc {
-                continue;
-            }
-        }
-        s.comments = comments;
-
-        Ok(s)
-    } */
-
     pub fn to_rust(self) -> Result<LangFormatter, ParseError> {
         let s = self;
-        // let s = s.to_rust_doc()?;
         let mut p = LangFormatter::new(s.comments);
         s.pkg.to_rust(&mut p);
         Ok(p)
@@ -789,6 +772,8 @@ impl Parse {
                         line: plus_token.span.line,
                         column: 0,
                         width: 0,
+                        end_line: plus_token.span.line,
+                        end_column: 0,
                     },
                     payload,
                     is_default: true,
@@ -3161,7 +3146,7 @@ impl Parse {
                 | T!["``"]
                 | T!["``="] => {
                     s.plusplus();
-                    list.push(ExprOp::Op(OpToken {
+                    list.push(ExprOp::Op(Token {
                         code: token.code.clone(),
                         span: token.span,
                     }));
@@ -3181,18 +3166,12 @@ impl Parse {
         #[derive(Debug)]
         enum ExprOp {
             Expr(Expr),
-            Op(OpToken),
+            Op(Token),
         }
         impl Default for ExprOp {
             fn default() -> Self {
-                ExprOp::Op(OpToken::default())
+                ExprOp::Op(Token::default())
             }
-        }
-
-        #[derive(Debug, Default)]
-        struct OpToken {
-            code: TokenCode,
-            span: Span,
         }
 
         /*
@@ -3238,7 +3217,7 @@ impl Parse {
                 }
             }
 
-            let mut op_stack: Vec<OpToken> = Vec::new();
+            let mut op_stack: Vec<Token> = Vec::new();
             let mut r_list: Vec<ExprOp> = Vec::new();
 
             // from infix to postfix
@@ -3268,7 +3247,7 @@ impl Parse {
                     },
                 }
             }
-            for op in op_stack.into_iter().rev().collect::<Vec<OpToken>>() {
+            for op in op_stack.into_iter().rev().collect::<Vec<Token>>() {
                 r_list.push(ExprOp::Op(op));
             }
 
@@ -6076,11 +6055,6 @@ impl Parse {
             }
 
             let token = s.current();
-            let docs = parse_doc(s, inner, &token);
-            for doc in docs {
-                r.items.push(doc);
-            }
-
             if inner {
                 if matches!(&token.code, T![$]) && matches!(&s.nth(1).code, T![!]) {
                     s.inc(2);
@@ -6157,36 +6131,11 @@ impl Parse {
                 r.push(token.clone());
             }
 
-            let text = attr_to_text(&r);
             Ok(Attr {
                 span_start: Span::default(),
                 tokens: r,
-                text,
                 span_end: Span::default(),
-                ..Default::default()
             })
-        }
-
-        fn parse_doc(s: &Parse, inner: bool, next_token: &Token) -> Vec<Attr> {
-            let mut r = Vec::new();
-            let start_index = s.doc_index.get();
-            for (i, c) in s.comments[start_index..].iter().enumerate() {
-                if c.span.line >= next_token.span.line {
-                    break;
-                }
-                if !c.is_doc {
-                    continue;
-                }
-                if inner != c.inner_doc {
-                    break;
-                }
-                r.push(Attr {
-                    comment: Some(c.clone()),
-                    ..Default::default()
-                });
-                s.doc_index.set(start_index + i + 1);
-            }
-            r
         }
     }
 }

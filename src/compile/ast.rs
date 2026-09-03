@@ -88,13 +88,6 @@ impl LangFormatter {
         let start = s.comment_index;
         for _ in start..s.comments.len() {
             let comment = &s.comments[s.comment_index];
-            // doc comments associated with items are converted to rust in attrs
-            // so there is no need to it here
-            // NOTE doc comments at the bottom of the file(following no item) will be skipped
-            if comment.is_doc {
-                s.comment_index += 1;
-                continue;
-            }
             if comment.span.line < span.line
                 || (comment.span.line == span.line && comment.span.column < span.column)
             {
@@ -236,6 +229,8 @@ impl Visibility {
                 line,
                 column: 0,
                 width: 0,
+                end_line: line,
+                end_column: 0,
             },
             payload: VisibilityPayload::Crate,
             is_default: true,
@@ -1827,20 +1822,19 @@ pub fn tokens_to_rust(span_open: Span, list: &[Token], span_close: Span, p: &mut
         return;
     }
 
-    let mut last_line = span_open.line;
-    let mut last_end = list[0].span.column;
+    let mut last_line = span_open.end_line;
+    let mut last_end = span_open.end_column;
     let mut is_attr = false;
 
     for item in list {
         let cur_line = item.span.line;
         if cur_line > last_line {
             push_many_raw(cur_line - last_line, "\n", p);
-            last_line = cur_line;
-            // column starts from 1 not 0
-            last_end = 1;
+            last_line = item.span.end_line;
+            last_end = 0;
         }
-        push_many_raw(item.span.column - last_end, " ", p);
-        last_end = item.span.column + item.span.width;
+        push_many_raw(item.span.column - last_end - 1, " ", p);
+        last_end = item.span.end_column;
 
         // for attrs in macro and macro call, #[ ]
         match &item.code {
@@ -1868,9 +1862,9 @@ pub fn tokens_to_rust(span_open: Span, list: &[Token], span_close: Span, p: &mut
     let cur_line = span_close.line;
     if cur_line > last_line {
         push_many_raw(cur_line - last_line, "\n", p);
-        last_end = 1;
+        last_end = 0;
     }
-    push_many_raw(span_close.column - last_end, " ", p);
+    push_many_raw(span_close.column - last_end - 1, " ", p);
 
     fn push_many_raw(n: usize, text: &str, p: &mut LangFormatter) {
         for _ in 0..n {
@@ -2143,9 +2137,6 @@ impl ToLang for Attrs {
 #[derive(Debug, Default)]
 pub struct Attr {
     pub tokens: Vec<Token>,
-    pub text: String,
-
-    pub comment: Option<Comment>,
 
     pub span_start: Span,
     pub span_end: Span,
@@ -2154,17 +2145,7 @@ impl ToLang for Attr {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if let Some(doc) = &s.comment {
-            p.push_comment(&doc.span);
-            p.push_rust(doc);
-            return;
-        }
-
         if s.tokens.is_empty() {
-            return;
-        }
-
-        if s.text.starts_with('!') {
             return;
         }
 
@@ -2185,27 +2166,6 @@ impl ToLang for Attr {
         }
     }
 }
-
-pub fn attr_to_text(tokens: &[Token]) -> String {
-    let mut p = LangFormatter::new(Vec::new());
-    for token in tokens {
-        token.to_rust(&mut p)
-    }
-    p.buf()
-}
-
-/*
-#[derive(Debug, Default)]
-pub struct Attr {
-    pub path: SimplePath,
-    pub input: Option<AttrInput>,
-}
-#[derive(Debug)]
-pub enum AttrInput {
-    DelimTokenTree(DelimTokenTree),
-    ExprLiteral(ExprLiteral),
-}
- */
 
 // --------------------------------------------------------------------------------
 #[derive(Debug, Default)]
@@ -2261,6 +2221,8 @@ impl ToLang for GenericParam {
                         line: span.line,
                         column: span.column - 1,
                         width: 1,
+                        end_line: span.line,
+                        end_column: span.column,
                     },
                 );
                 p.push_rust(&s.name);
@@ -2371,6 +2333,8 @@ impl ToLang for Lifetime {
                 line: s.name.span.line,
                 column: s.name.span.column - 1,
                 width: 1,
+                end_line: s.name.span.line,
+                end_column: s.name.span.column,
             },
         );
         p.push_rust(&s.name);
