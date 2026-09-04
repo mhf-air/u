@@ -105,10 +105,7 @@ fn u_cargo_lint(args: Vec<String>) -> io::Result<()> {
                     u_file.insert_str(0, "../../../");
                 }
 
-                let compile = u::CmdCompile::new(vec![u_file.clone()]);
-                let (_, is_main) = compile.get_rs_path()?;
-
-                let a = compile_to_rust_lint(&u_file, is_main)?;
+                let a = compile_to_rust_lint(&u_file)?;
                 file_map.insert(file.clone(), a);
             }
 
@@ -146,9 +143,9 @@ fn u_cargo_lint(args: Vec<String>) -> io::Result<()> {
     }
 }
 
-fn compile_to_rust_lint(filepath: &str, is_main: bool) -> io::Result<u::LangFormatter> {
+fn compile_to_rust_lint(filepath: &str) -> io::Result<u::LangFormatter> {
     let p = u::compile_file(filepath)?;
-    match p.to_rust(is_main) {
+    match p.to_rust() {
         Err(_) => Err(io::Error::new(io::ErrorKind::Other, "parse error")),
         Ok(f) => Ok(f),
     }

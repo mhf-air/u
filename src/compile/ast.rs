@@ -1830,10 +1830,10 @@ pub fn tokens_to_rust(span_open: Span, list: &[Token], span_close: Span, p: &mut
         let cur_line = item.span.line;
         if cur_line > last_line {
             push_many_raw(cur_line - last_line, "\n", p);
-            last_line = item.span.end_line;
             last_end = 0;
         }
         push_many_raw(item.span.column - last_end - 1, " ", p);
+        last_line = item.span.end_line;
         last_end = item.span.end_column;
 
         // for attrs in macro and macro call, #[ ]

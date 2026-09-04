@@ -90,13 +90,14 @@ impl<'a> TagField<'a> {
             u::VisibilityPayload::Pub => {
                 s.access = Some("public");
             }
-            u::VisibilityPayload::Private => {
-                s.access = Some("private");
+            u::VisibilityPayload::Crate => {
+                s.access = Some("protected");
             }
-            u::VisibilityPayload::Super
-            | u::VisibilityPayload::Crate
-            | u::VisibilityPayload::SimplePath(_) => {
+            u::VisibilityPayload::Private => {
                 s.access = Some("");
+            }
+            u::VisibilityPayload::Super | u::VisibilityPayload::SimplePath(_) => {
+                s.access = Some("private");
             }
         }
     }
@@ -161,26 +162,13 @@ fn parse_items(p: &mut String, items: &[u::Item], filepath: &str, mod_: &Vec<&st
                     type_char: 't',
                 });
 
-                let mut new_mod = mod_.clone();
-                new_mod.push(&a.name.id);
-                parse_items(p, &a.items, filepath, &new_mod);
-            }
-            u::ItemPayload::Test(a) => {
-                field.type_ = Some("test");
-                ng = name_generics(&NameGenerics {
-                    name: &u::Identifier {
-                        id: "test".to_string(),
-                        span: a.span_test,
-                        prefix: None,
-                    },
-                    generics: &None,
-                    filepath: &filepath,
-                    type_char: 't',
-                });
+                let Some(items) = &a.items else {
+                    continue;
+                };
 
                 let mut new_mod = mod_.clone();
-                new_mod.push("test");
-                parse_items(p, &a.items, filepath, &new_mod);
+                new_mod.push(&a.name.id);
+                parse_items(p, &items, filepath, &new_mod);
             }
             u::ItemPayload::Extern(a) => {
                 field.type_ = Some("extern");
@@ -191,6 +179,8 @@ fn parse_items(p: &mut String, items: &[u::Item], filepath: &str, mod_: &Vec<&st
                             line: a.span_extern.line,
                             column: 0,
                             width: 6,
+                            end_line: a.span_extern.line,
+                            end_column: 0,
                         },
                         prefix: None,
                     },
@@ -329,7 +319,7 @@ fn parse_items(p: &mut String, items: &[u::Item], filepath: &str, mod_: &Vec<&st
 }
 
 fn to_u(a: &impl ToLang) -> String {
-    let mut formatter = u::LangFormatter::new(false, Vec::new());
+    let mut formatter = u::LangFormatter::new(Vec::new());
     a.to_u(&mut formatter);
     formatter.buf()
 }
@@ -383,19 +373,29 @@ fn func_sig_text(a: &u::Func) -> String {
     if let Some(b) = &a.self_param {
         p.push_str(" (");
         match &b.payload {
-            u::SelfParamPayload::Type(type_) => {
-                p.push_str(&to_u(type_));
+            u::SelfParamPayload::Type(t) => {
+                if let Some(typ) = &t.typ {
+                    if t.span_mut.is_some() {
+                        p.push_str("mut ");
+                    }
+                    p.push_str(&to_u(typ));
+                } else {
+                    p.push_str("mut");
+                }
             }
             u::SelfParamPayload::Short(c) => {
-                p.push('&');
-                if let Some(label) = &c.label {
-                    p.push_str(&to_u(label));
-                    if c.mut_ {
-                        p.push_str(" mut")
-                    }
-                } else {
-                    if c.mut_ {
-                        p.push_str("mut")
+                if c.span_self.is_none() {
+                    p.push('&');
+                    if let Some(label) = &c.label {
+                        p.push_str("'");
+                        p.push_str(&to_u(label));
+                        if c.mut_ {
+                            p.push_str(" mut")
+                        }
+                    } else {
+                        if c.mut_ {
+                            p.push_str("mut")
+                        }
                     }
                 }
             }
