@@ -34,6 +34,7 @@ pub struct Parse {
     pkg: Package,
 
     tokens: Vec<Token>,
+    end_tokens: Vec<Token>,
     index: Cell<usize>,
 
     stop_on_brace_open: Cell<bool>,
@@ -49,9 +50,11 @@ impl Parse {
                 shebang: None,
                 inner_attrs: Attrs::default(),
                 items: Vec::new(),
+                end_tokens: Vec::new(),
             },
 
             tokens: lex.tokens,
+            end_tokens: lex.end_tokens,
             index: Cell::new(0),
 
             stop_on_brace_open: Cell::new(false),
@@ -282,17 +285,18 @@ impl Parse {
 
         // possible shebang
         let token = s.current();
-        let shebang = if let TokenCode::Shebang(_) = &token.code {
+        let shebang = if let TokenCode::Shebang = &token.code {
             s.plusplus();
             Some(token.clone())
         } else {
             None
         };
 
-        s.skip_semicolons();
+        let end_tokens = s.end_tokens.clone();
         if !s.has_more() {
             s.pkg = Package {
                 shebang,
+                end_tokens,
                 ..Default::default()
             };
             return Ok(());
@@ -334,6 +338,7 @@ impl Parse {
             shebang,
             inner_attrs,
             items,
+            end_tokens,
         };
         Ok(())
     }
@@ -514,7 +519,7 @@ impl Parse {
                     a.generics = n.generics;
                     a.self_param = self_param;
                     a.span_func = special_token.span;
-                    a.no_s = outer_attrs.sp_list.iter().any(|it| it == "no-s");
+                    a.no_s = outer_attrs.sp_list.iter().any(|it| it == r#""no-s""#);
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         public: n.public,
@@ -3163,12 +3168,7 @@ impl Parse {
                 | T!["``"]
                 | T!["``="] => {
                     s.plusplus();
-                    list.push(ExprOp::Op(Token {
-                        code: token.code.clone(),
-                        span: token.span,
-                        tokens_before: token.tokens_before.clone(),
-                        u: token.u.clone(),
-                    }));
+                    list.push(ExprOp::Op(token.clone()));
                     let expr = s.parse_binary_expr()?;
                     list.push(ExprOp::Expr(expr));
                 }
@@ -6117,10 +6117,10 @@ impl Parse {
         fn parse_sp(s: &Parse) -> ParseResult<String> {
             let token = s.current();
             if let TokenCode::Literal(lit) =
-                &token.code && let LiteralPayload::String(a) = &lit.payload {
+                &token.code && let LiteralPayload::String(_) = &lit.payload {
                     s.plusplus();
                     s.expect(T![;])?;
-                    return Ok(a.text.to_owned());
+                    return Ok(token.u.clone());
                 } else {
                     return Err(
                         s.panic(&token, "expected string literal after $")

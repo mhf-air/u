@@ -5,6 +5,8 @@ use std::str::FromStr;
 
 pub struct Lex {
     pub tokens: Vec<Token>,
+    // pure comments and whitespaces at the end of the file
+    pub end_tokens: Vec<Token>,
 
     chars: Vec<char>,
     tokens_before: Vec<Token>,
@@ -16,6 +18,7 @@ impl Lex {
     pub fn new() -> Lex {
         Lex {
             tokens: Vec::new(),
+            end_tokens: Vec::new(),
             chars: Vec::new(),
             tokens_before: Vec::new(),
             line: 1,
@@ -88,11 +91,11 @@ impl Lex {
 
         let mut code = code;
         match &mut code {
-            TokenCode::Identifier(id) => {
-                id.span = span;
+            TokenCode::Identifier(a) => {
+                a.span = span;
             }
-            TokenCode::Literal(id) => {
-                id.span = span;
+            TokenCode::Literal(a) => {
+                a.span = span;
             }
             _ => {}
         }
@@ -225,7 +228,6 @@ impl Lex {
             is_line,
             is_doc,
             inner_doc,
-            ..Default::default()
         };
         if is_line {
             s.add_token_to_before(TokenCode::Comment(comment), u);
@@ -287,14 +289,14 @@ impl Lex {
             while i < total_len {
                 if s.chars[i] == '\n' {
                     let u = s.sub_str(0, i);
-                    s.add_token(TokenCode::Shebang(u.clone()), u);
+                    s.add_token(TokenCode::Shebang, u);
                     break;
                 }
                 i += 1;
             }
             if i == total_len {
                 let u = s.sub_str(0, i);
-                s.add_token(TokenCode::Shebang(u.clone()), u);
+                s.add_token(TokenCode::Shebang, u);
                 return Ok(());
             }
         }
@@ -318,7 +320,7 @@ impl Lex {
                     i += 1;
                 }
                 let u = s.sub_str(start, i);
-                s.add_token_to_before_nl(TokenCode::Blank(u.clone()), u);
+                s.add_token_to_before_nl(TokenCode::Blank, u);
                 continue;
             }
 
@@ -1315,7 +1317,10 @@ impl Lex {
             i += 1;
         }
 
-        // println!("{:?}", s);
+        if !s.tokens_before.is_empty() {
+            s.end_tokens = std::mem::take(&mut s.tokens_before);
+        }
+
         Ok(())
     }
 }
@@ -1378,9 +1383,9 @@ impl ToLang for Token {
         let s = self;
 
         match &s.code {
-            TokenCode::Shebang(a) => p.push_str(a, s.span),
-            TokenCode::Blank(a) => p.push_str(a, s.span),
-            TokenCode::Comment(comment) => p.push_rust(comment),
+            TokenCode::Shebang => p.push_str(&s.u, s.span),
+            TokenCode::Blank => p.push_str(&s.u, s.span),
+            TokenCode::Comment(_) => p.push_str(&s.u, s.span),
             TokenCode::Literal(literal) => p.push_rust(literal),
             TokenCode::Identifier(identifier) => p.push_rust(identifier),
             TokenCode::Lifetime(identifier) => {
@@ -1543,10 +1548,11 @@ impl ToLang for Token {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub enum TokenCode {
-    Shebang(String),
-    Blank(String),
+    #[default]
+    Shebang,
+    Blank,
     Comment(Comment),
     Literal(Literal),
     Identifier(Identifier),
@@ -1557,33 +1563,10 @@ pub enum TokenCode {
     Pair(Pair),
 }
 
-impl fmt::Debug for TokenCode {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Shebang(a) => write!(f, "{}", a),
-            Self::Blank(a) => write!(f, "{}", a),
-            Self::Comment(a) => write!(f, "{:?}", a),
-            Self::Literal(a) => write!(f, "{:?}", a),
-            Self::Identifier(a) => write!(f, "{:?}", a),
-            Self::Lifetime(a) => write!(f, "'{:?}", a),
-            Self::Keyword(a) => write!(f, "{:?}", a),
-            Self::Assign(a) => write!(f, "{:?}", a),
-            Self::Op(a) => write!(f, "{:?}", a),
-            Self::Pair(a) => write!(f, "{:?}", a),
-        }
-    }
-}
-
-impl Default for TokenCode {
-    fn default() -> Self {
-        TokenCode::Op(Op::Eq)
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct LiteralString {
     raw_count: usize, // number of pound sign
-    pub text: String,
+    text: String,
 }
 impl LiteralString {
     fn to_rust_string(&self) -> String {
@@ -2253,84 +2236,6 @@ pub struct Comment {
     pub is_line: bool,
     pub is_doc: bool,
     pub inner_doc: bool,
-
-    pub newline_before: bool,
-
-    pub span: Span,
-}
-impl ToLang for Comment {
-    fn to_rust(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if s.newline_before {
-            p.push_raw("\n");
-            p.indent();
-        }
-
-        if s.is_line {
-            if s.is_doc {
-                if s.inner_doc {
-                    p.push_raw("//!")
-                } else {
-                    p.push_raw("///")
-                }
-            } else {
-                p.push_raw("//")
-            }
-        } else {
-            if s.is_doc {
-                if s.inner_doc {
-                    p.push_raw("/*!")
-                } else {
-                    p.push_raw("/**")
-                }
-            } else {
-                p.push_raw("/*")
-            }
-        }
-
-        if s.is_doc {
-            // turn ```\n sth\n``` to ```u\n sth\n```
-            let list: Vec<_> = s.text.split("```").collect();
-            let mut text = String::new();
-            for (i, item) in list.iter().enumerate() {
-                if i % 2 == 1 {
-                    text.push_str("```u");
-                    text.push_str(item);
-                    continue;
-                }
-                if i != 0 {
-                    text.push_str("```");
-                }
-
-                let subs: Vec<_> = item.split('`').collect();
-                for (j, token) in subs.iter().enumerate() {
-                    if j % 2 == 1 {
-                        text.push('`');
-                        text.push_str(&Identifier::id_to_rust(token));
-                        continue;
-                    }
-                    if j != 0 {
-                        text.push('`');
-                    }
-                    text.push_str(token);
-                }
-            }
-            p.push_raw(&text);
-        } else {
-            p.push_raw(&s.text);
-        }
-
-        if !s.is_line {
-            p.push_raw("*/");
-        }
-        p.push_raw("\n");
-        p.indent();
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-        p.push_raw(&s.text)
-    }
 }
 
 // --------------------------------------------------------------------------------

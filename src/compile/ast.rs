@@ -165,6 +165,7 @@ pub struct Package {
     pub shebang: Option<Token>,
     pub inner_attrs: Attrs,
     pub items: Vec<Item>,
+    pub end_tokens: Vec<Token>,
 }
 impl ToLang for Package {
     fn to_rust(&self, p: &mut LangFormatter) {
@@ -179,11 +180,9 @@ impl ToLang for Package {
             p.push_rust(item);
         }
 
-        // print remaining comments
-        /* for i in p.comment_index..p.comments.len() {
-            let a = mem::take(&mut p.comments[i]);
-            p.push_rust(&a);
-        } */
+        for it in &s.end_tokens {
+            p.push_rust(it);
+        }
     }
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
@@ -294,7 +293,7 @@ impl ToLang for Item {
             ItemPayload::Struct(_) | ItemPayload::Enum(_) => {
                 let mut derive = true;
                 for sp in &s.outer_attrs.sp_list {
-                    if sp == "no-derive-debug" {
+                    if sp == r#""no-derive-debug""# {
                         derive = false;
                         break;
                     }

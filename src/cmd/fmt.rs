@@ -230,10 +230,10 @@ impl Fmt {
         for token in &lex.tokens {
             match &token.code {
                 cc::TokenCode::Literal(cc::Literal {
-                    payload: cc::LiteralPayload::String(a),
+                    payload: cc::LiteralPayload::String(_),
                     ..
                 }) => {
-                    let count = a.text.chars().filter(|ch| *ch == '\n').count();
+                    let count = token.span.end_line - token.span.line;
                     if count == 0 {
                         continue;
                     }
@@ -851,12 +851,10 @@ fn multiline_expr(expr: &cc::Expr, line: usize) -> bool {
         cc::ExprPayload::WithoutBlock(a) => match a.as_ref() {
             cc::ExprWithoutBlock::Literal(a) => {
                 let mut r = false;
-                if let cc::LiteralPayload::String(a) = &a.0.payload {
-                    for ch in a.text.chars() {
-                        if ch == '\n' {
-                            r = true;
-                            break;
-                        }
+                if let cc::LiteralPayload::String(_) = &a.0.payload {
+                    let span = a.0.span;
+                    if span.end_line > span.line {
+                        r = true;
                     }
                 }
 

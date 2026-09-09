@@ -319,7 +319,7 @@ fn parse_items(p: &mut String, items: &[u::Item], filepath: &str, mod_: &Vec<&st
 }
 
 fn to_u(a: &impl ToLang) -> String {
-    let mut formatter = u::LangFormatter::new(Vec::new());
+    let mut formatter = u::LangFormatter::new();
     a.to_u(&mut formatter);
     formatter.buf()
 }
@@ -357,10 +357,17 @@ fn generics_text(a: &Option<u::Generics>) -> Option<String> {
             if i != 0 {
                 p.push_str(", ");
             }
-            if matches!(item.payload, u::GenericParamPayload::Lifetime(_)) {
-                p.push('\'');
+            match &item.payload {
+                u::GenericParamPayload::Lifetime(a) => {
+                    p.push_str(&a.lifetime.u);
+                }
+                u::GenericParamPayload::Type(a) => {
+                    p.push_str(&a.name.id);
+                }
+                u::GenericParamPayload::Const(a) => {
+                    p.push_str(&a.name.id);
+                }
             }
-            p.push_str(&item.name.id);
         }
         p.push(']');
         generics = Some(p);
