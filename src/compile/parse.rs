@@ -46,12 +46,7 @@ pub struct Parse {
 impl Parse {
     pub fn new(lex: Lex) -> Parse {
         return Parse {
-            pkg: Package {
-                shebang: None,
-                inner_attrs: Attrs::default(),
-                items: Vec::new(),
-                end_tokens: Vec::new(),
-            },
+            pkg: Package::default(),
 
             tokens: lex.tokens,
             end_tokens: lex.end_tokens,
@@ -124,16 +119,16 @@ impl Parse {
         &self.pkg
     }
 
-    pub fn to_rust(self) -> Result<LangFormatter, ParseError> {
+    pub fn to_rust(self) -> Result<ToRust, ParseError> {
         let s = self;
-        let mut p = LangFormatter::new();
+        let mut p = LangFormatter::new(&s.tokens, &s.end_tokens);
         s.pkg.to_rust(&mut p);
-        Ok(p)
+        Ok(p.to_rust())
     }
 
     pub fn to_u(self) -> String {
         let s = self;
-        let mut p = LangFormatter::new();
+        let mut p = LangFormatter::new(&s.tokens, &s.end_tokens);
         s.pkg.to_u(&mut p);
         p.buf()
     }
@@ -282,6 +277,10 @@ impl Parse {
         if s.tokens.is_empty() {
             return Ok(());
         }
+        let u_pair = UPair {
+            start: 0,
+            end: s.tokens.len(),
+        };
 
         // possible shebang
         let token = s.current();
@@ -297,6 +296,7 @@ impl Parse {
             s.pkg = Package {
                 shebang,
                 end_tokens,
+                u_pair,
                 ..Default::default()
             };
             return Ok(());
@@ -339,6 +339,7 @@ impl Parse {
             inner_attrs,
             items,
             end_tokens,
+            u_pair,
         };
         Ok(())
     }

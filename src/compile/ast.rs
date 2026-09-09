@@ -7,9 +7,12 @@ use std::mem;
 HashMap<Span, Comment>
 match each comment with the token preceding it, a u span or comment
 */
-pub struct LangFormatter {
+pub struct LangFormatter<'a> {
     buf: String,
     indent: u8,
+
+    tokens: &'a [Token],
+    end_tokens: &'a [Token],
 
     span_pairs: Vec<SpanPair>,
     line: usize,
@@ -34,11 +37,20 @@ pub struct RustSpan {
     pub text: String,
 }
 
-impl LangFormatter {
-    pub fn new() -> LangFormatter {
+#[derive(Debug)]
+pub struct ToRust {
+    pub buf: String,
+    pub span_pairs: Vec<SpanPair>,
+}
+
+impl<'a> LangFormatter<'a> {
+    pub fn new(tokens: &'a [Token], end_tokens: &'a [Token]) -> LangFormatter<'a> {
         LangFormatter {
             buf: String::new(),
             indent: 0,
+
+            tokens,
+            end_tokens,
 
             span_pairs: Vec::new(),
             line: 1,
@@ -61,6 +73,14 @@ impl LangFormatter {
         mem::take(&mut s.span_pairs)
     }
 
+    pub fn to_rust(self) -> ToRust {
+        let s = self;
+        ToRust {
+            buf: s.buf,
+            span_pairs: s.span_pairs,
+        }
+    }
+
     pub fn push_rust(&mut self, a: &impl ToLang) {
         let s = self;
         a.to_rust(s);
@@ -69,35 +89,20 @@ impl LangFormatter {
         let s = self;
         a.to_u(s);
     }
-
-    /* NOTE
-        for { } -> (a, b) expressions and other out of order grammars,
-    comments within {} may come before {}
-        this seems not to be a problem, as they don't have doc comments
-    within and it's not used in macros(where order matters)
-    */
-    /* pub fn push_comment(&mut self, span: &Span) {
+    pub fn push_u_pair(&mut self, pair: &UPair) {
         let s = self;
-
-        let start = s.comment_index;
-        for _ in start..s.comments.len() {
-            let comment = &s.comments[s.comment_index];
-            if comment.span.line < span.line
-                || (comment.span.line == span.line && comment.span.column < span.column)
-            {
-                let item = std::mem::take(&mut s.comments[s.comment_index]);
-                item.to_rust(s);
-                s.comment_index += 1;
-            } else {
-                break;
+        let list = &s.tokens[pair.start..pair.end];
+        for it in list {
+            for a in &it.tokens_before {
+                s.buf.push_str(&a.u);
             }
+            s.buf.push_str(&it.u);
         }
-    } */
+    }
 
     pub fn push_str(&mut self, a: &str, span: Span) {
         let s = self;
 
-        // s.push_comment(&span);
         s.span_pairs.push(SpanPair {
             u: span,
             rust: RustSpan {
@@ -159,6 +164,12 @@ pub trait ToLang {
     fn to_u(&self, p: &mut LangFormatter);
 }
 
+#[derive(Debug, Default)]
+pub struct UPair {
+    pub start: usize,
+    pub end: usize,
+}
+
 // --------------------------------------------------------------------------------
 #[derive(Debug, Default)]
 pub struct Package {
@@ -166,6 +177,7 @@ pub struct Package {
     pub inner_attrs: Attrs,
     pub items: Vec<Item>,
     pub end_tokens: Vec<Token>,
+    pub u_pair: UPair,
 }
 impl ToLang for Package {
     fn to_rust(&self, p: &mut LangFormatter) {
@@ -185,15 +197,10 @@ impl ToLang for Package {
         }
     }
     fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if let Some(a) = &s.shebang {
-            p.push_u(a);
-        }
-
-        p.push_u(&s.inner_attrs);
-        for item in &s.items {
-            p.push_u(item);
+        p.push_u_pair(&self.u_pair);
+        // for file, need to print the ending tokens
+        for it in p.end_tokens {
+            p.push_raw(&it.u);
         }
     }
 }

@@ -331,7 +331,7 @@ impl CmdCompile {
                 Err(_) => {
                     return Err(io::Error::new(io::ErrorKind::Other, "to rust error"));
                 }
-                Ok(f) => return Ok(f.buf()),
+                Ok(f) => return Ok(f.buf),
             }
         }
     }
@@ -903,7 +903,7 @@ fn compile_to_rust(filepath: &str) -> Result<String, String> {
     match p.to_rust() {
         Err(err) => Err(serde_json::to_string(&err).unwrap()),
         Ok(f) => {
-            Ok(f.buf())
+            Ok(f.buf)
             // Ok(String::new())
             /* for item in f.span_pairs() {
                 println!("{:?}", item);
