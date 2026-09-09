@@ -5,8 +5,9 @@ use std::str::FromStr;
 
 pub struct Lex {
     pub tokens: Vec<Token>,
-    pub comments: Vec<Comment>,
 
+    chars: Vec<char>,
+    tokens_before: Vec<Token>,
     line: usize,
     column: usize,
 }
@@ -15,13 +16,14 @@ impl Lex {
     pub fn new() -> Lex {
         Lex {
             tokens: Vec::new(),
-            comments: Vec::new(),
+            chars: Vec::new(),
+            tokens_before: Vec::new(),
             line: 1,
             column: 1,
         }
     }
 
-    fn panic(&mut self, a: &str) -> ParseResult<()> {
+    fn panic(&self, a: &str) -> ParseResult<()> {
         let s = self;
 
         // panic!("{}:{}: {}", s.line, s.column, a);
@@ -35,69 +37,47 @@ impl Lex {
         Err(e)
     }
 
-    fn add_token(&mut self, code: TokenCode) {
+    fn add_token(&mut self, code: TokenCode, u: String) {
+        let s = self;
+        s.add_token_inner(code, u, false, false);
+    }
+    // for string
+    fn add_token_nl(&mut self, code: TokenCode, u: String) {
+        let s = self;
+        s.add_token_inner(code, u, true, false);
+    }
+    // for single-line comment
+    fn add_token_to_before(&mut self, code: TokenCode, u: String) {
+        let s = self;
+        s.add_token_inner(code, u, false, true);
+    }
+    // for whitespace, multi-line comment
+    fn add_token_to_before_nl(&mut self, code: TokenCode, u: String) {
+        let s = self;
+        s.add_token_inner(code, u, true, true);
+    }
+
+    fn add_token_inner(
+        &mut self,
+        code: TokenCode,
+        u: String,
+        check_nl: bool,
+        to_before: bool,
+    ) {
         let s = self;
 
-        let width = match &code {
-            TokenCode::Literal(a) => {
-                let p_width = if let Some(prefix) = &a.prefix {
-                    prefix.len()
-                } else {
-                    0
-                };
-                let w = match &a.payload {
-                    LiteralPayload::Bool(b) | LiteralPayload::Int(b) | LiteralPayload::Float(b) => {
-                        let length = b.len();
-                        if p_width == 0 { length } else { length + 1 }
-                    }
-                    LiteralPayload::String(b) => {
-                        let a = 2 + b.text.len() + b.raw_count * 2;
-                        a
-                    }
-                    LiteralPayload::Char(b) => 2 + b.text.len(),
-                };
-                let s_width = if let Some(suffix) = &a.suffix {
-                    suffix.len()
-                } else {
-                    0
-                };
-                p_width + w + s_width
-            }
-            TokenCode::Shebang(a) => a.len(),
-            TokenCode::Identifier(a) => {
-                let p_width = if let Some(prefix) = &a.prefix {
-                    prefix.len()
-                } else {
-                    0
-                };
-                let length = a.id.len();
-                if p_width == 0 { length } else { length + 1 }
-            }
-            TokenCode::Lifetime(a) => a.id.len() + 1,
-            TokenCode::Keyword(a) => format!("{:?}", a).len(),
-            TokenCode::Assign(a) => format!("{:?}", a).len(),
-            TokenCode::Op(a) => format!("{:?}", a).len(),
-            TokenCode::Pair(a) => match a {
-                Pair::DoubleBraceOpen | Pair::DoubleBraceClose | Pair::OuterAttr => 2,
-                Pair::InnerAttr => 3,
-                _ => 1,
-            },
-        };
+        let width = u.len();
 
-        let (end_line, end_column) = if let TokenCode::Literal(a) = &code &&
-                let LiteralPayload::String(b)= &a.payload {
-            let lines: Vec<_> = b.text.split('\n').collect();
-            let end_column = if lines.len() == 1 {
-                s.column + 2 + b.text.len() + b.raw_count * 2 - 1
+        let (end_line, end_column) = if check_nl {
+            if let Some(index) = u.as_str().rfind('\n'){
+                let count = u.as_bytes().iter().filter(|&&c| c == b'\n').count();
+                (s.line + count, width - index)
             } else {
-                let str_len = lines[lines.len() - 1].chars().fold(0, |r, _| r + 1);
-                1 + str_len + b.raw_count
-            };
-            (s.line + lines.len() - 1, end_column)
+                (s.line, s.column + width - 1)
+            }
         } else {
             (s.line, s.column + width - 1)
         };
-
         let span = Span {
             line: s.line,
             column: s.column,
@@ -117,29 +97,19 @@ impl Lex {
             _ => {}
         }
 
-        let new_token = Token { code, span };
-        s.tokens.push(new_token);
+        if to_before {
+            s.tokens_before.push(Token { code, span, tokens_before: Vec::new(), u });
+        } else {
+            let tokens_before = std::mem::take(&mut s.tokens_before);
+            s.tokens.push(Token { code, span, tokens_before, u });
+        }
 
+        s.line = end_line;
         s.column = end_column + 1;
     }
 
-    fn add_semicolon(&mut self) {
-        let s = self;
-        let new_token = Token {
-            code: TokenCode::Op(Op::Semicolon),
-            span: Span {
-                line: s.line,
-                column: std::usize::MAX,
-                width: 1,
-                end_line: s.line,
-                end_column: std::usize::MAX,
-            },
-        };
-        s.tokens.push(new_token);
-    }
-
-    // find the last non-comment token
-    fn last_non_comment_token(&mut self) -> Result<&Token, ParseError> {
+    // find the last real token(blank, comment)
+    fn last_real_token(&self) -> Result<&Token, ParseError> {
         let s = self;
         if !s.tokens.is_empty() {
             return Ok(s.tokens.last().unwrap());
@@ -154,163 +124,208 @@ impl Lex {
         Err(e)
     }
 
-    fn add_comment(
-        &mut self,
-        text: String,
-        is_line: bool,
-        is_doc: bool,
-        inner_doc: bool,
-        start_line: usize,
-    ) {
+    // add semicolon at line end where neccessary
+    // after '\n' or before EOF
+    fn may_add_semicolon(&mut self) {
+        let s = self;
+        let Ok(last_token) = s.last_real_token() else {
+            return;
+        };
+        let need = match &last_token.code {
+            TokenCode::Identifier(_)
+            | TokenCode::Lifetime(_)
+            | TokenCode::Keyword(_)
+            | TokenCode::Literal(_) => true,
+            TokenCode::Op(op) => match op {
+                Op::PlusPlus | Op::MinusMinus | Op::Question |
+                    Op::Dot | Op::DotDot => true,
+                _ => false,
+            },
+            TokenCode::Pair(pair) => match pair {
+                Pair::ParenClose
+                | Pair::SquareClose
+                | Pair::BraceClose
+                | Pair::DoubleBraceClose => true,
+                _ => false,
+            },
+            _ => false,
+        };
+        if need {
+            // auto added semicolon has colomn which is std::usize::MAX
+            let new_token = Token {
+                code: TokenCode::Op(Op::Semicolon),
+                span: Span {
+                    line: s.line,
+                    column: std::usize::MAX,
+                    width: 1,
+                    end_line: s.line,
+                    end_column: std::usize::MAX,
+                },
+                tokens_before: Vec::new(),
+                u: String::new(),
+            };
+            s.tokens.push(new_token);
+        }
+    }
+
+    fn add_comment(&mut self, u: String) {
         let s = self;
 
-        // might be inaccurate, but it doesn't matter(the worst case is adding one more newline before the comment)
-        // and always add a newline after the comment
-        let newline_before = match s.tokens.last() {
-            Some(token) => token.span.line < start_line,
-            None => false,
-        };
+        let chars: Vec<char> = u.chars().collect();
+        let total_len = chars.len();
 
-        let (end_line, end_column) = if !is_line {
-            let lines: Vec<_> = text.split('\n').collect();
-            let end_column = lines[lines.len() - 1].chars().fold(0, |r, _| r + 1);
-            (lines.len() - 1, end_column)
+        let mut is_line = false;
+        let mut is_doc = false;
+        let mut inner_doc = false;
+
+        // total_len >= 2
+        if chars[1] == '/' {
+            is_line = true;
+            if total_len > 2 {
+                match chars[2] {
+                    '/' => {
+                        is_doc = true;
+                    }
+                    '!' => {
+                        is_doc = true;
+                        inner_doc = true;
+                    }
+                    _ => {}
+                }
+            }
         } else {
-            (start_line, s.column)
-        };
+            // total_len >= 4
+            if chars[2] == '*' {
+                is_doc = chars[3] != '/';
+            } else if chars[2] == '!' {
+                is_doc = true;
+                inner_doc = true;
+            }
+        }
 
-        let width = text.len();
-        s.comments.push(Comment {
+        let text = if is_line {
+            if is_doc {
+                // ///, //!
+                chars[3..total_len].iter().collect()
+            } else {
+                // //
+                chars[2..total_len].iter().collect()
+            }
+        } else {
+            if is_doc {
+                // /** */, /*! */
+                chars[3..total_len - 2].iter().collect()
+            } else {
+                // /* */
+                chars[2..total_len - 2].iter().collect()
+            }
+        };
+        let comment = Comment {
             text,
             is_line,
             is_doc,
             inner_doc,
-            newline_before,
-            span: Span {
-                line: start_line,
-                column: s.column,
-                width,
-                end_line,
-                end_column,
-            },
-        });
+            ..Default::default()
+        };
+        if is_line {
+            s.add_token_to_before(TokenCode::Comment(comment), u);
+        } else {
+            s.add_token_to_before_nl(TokenCode::Comment(comment), u);
+        }
+    }
+
+    fn sub_str(&self, start: usize, end: usize) -> String {
+        let s = self;
+        s.chars[start..end].iter().collect()
+    }
+
+    fn get_literal_suffix(&self, new_i: usize) -> (Option<String>, usize) {
+        let s = self;
+
+        let total_len = s.chars.len();
+        if new_i >= total_len {
+            return (None, 0);
+        }
+        let c_first = s.chars[new_i];
+        if !(c_first.is_alphabetic() || c_first != '-') {
+            return (None, 0);
+        }
+        let mut end = new_i;
+        for k in new_i..total_len {
+            end = k;
+            let c = s.chars[k];
+            if !(c.is_alphanumeric() || c == '-') {
+                break;
+            }
+        }
+        (Some(s.sub_str(new_i, end)), end)
     }
 
     // --------------------------------------------------------------------------------
-    pub fn lex(&mut self, mut data: String) -> Result<(), ParseError> {
+    pub fn lex(&mut self, data: String) -> Result<(), ParseError> {
+        let s = self;
+        let r = s.lex_inner(data);
+        // if the last char is not '\n', add semicolon where neccessary
+        s.may_add_semicolon();
+        r
+    }
+    pub fn lex_inner(&mut self, data: String) -> Result<(), ParseError> {
         let s = self;
 
-        data.push('\n');
-        let chars: Vec<char> = data.chars().collect();
-        let total_len = chars.len();
-
-        let mut id_prefix: Option<String> = None;
-        let mut i = 0;
-
-        let get_literal_suffix = |new_i: usize| -> (Option<String>, usize) {
-            if new_i >= total_len {
-                return (None, 0);
-            }
-            let c_first = chars[new_i];
-            if !(c_first.is_alphabetic() || c_first != '-') {
-                return (None, 0);
-            }
-            let mut end = new_i;
-            for k in new_i..total_len {
-                end = k;
-                let c = chars[k];
-                if !(c.is_alphanumeric() || c == '-') {
-                    break;
-                }
-            }
-            (Some(chars[new_i..end].iter().collect()), end)
-        };
-
-        // possible shebang #! at the begining of the file
-        if total_len > 2 && chars[0] == '#' && chars[1] == '!' && chars[2] != '[' {
-            while i < total_len {
-                if chars[i] == '\n' {
-                    let a = chars[0..i].iter().collect();
-                    s.add_token(TokenCode::Shebang(a));
-                    break;
-                }
-                i += 1;
-            }
+        if data.is_empty() {
+            return Ok(());
         }
 
-        // skip newlines and whitespaces after possible shebang
-        while i < total_len {
-            let ch = chars[i];
-            if ch == '\n' {
-                s.line += 1;
-                s.column = 1;
+        s.chars = data.chars().collect();
+        let total_len = s.chars.len();
+
+        let mut id_prefix: Option<(String, usize)> = None;
+        let mut i = 0;
+
+        // possible shebang #! at the begining of the file
+        if total_len > 2 && s.chars[0] == '#' && s.chars[1] == '!' && s.chars[2] != '[' {
+            while i < total_len {
+                if s.chars[i] == '\n' {
+                    let u = s.sub_str(0, i);
+                    s.add_token(TokenCode::Shebang(u.clone()), u);
+                    break;
+                }
                 i += 1;
-                continue;
             }
-            if ch.is_whitespace() {
-                s.column += 1;
-                i += 1;
-                continue;
+            if i == total_len {
+                let u = s.sub_str(0, i);
+                s.add_token(TokenCode::Shebang(u.clone()), u);
+                return Ok(());
             }
-            break;
         }
 
         // main loop
         'outer: while i < total_len {
-            let ch = chars[i];
-            let mut next_ch = '\n';
-            if i + 1 < total_len {
-                next_ch = chars[i + 1];
-            }
-
-            // newline
-            if ch == '\n' {
-                let last_token = match s.last_non_comment_token() {
-                    Ok(ok) => ok,
-                    Err(_) => {
-                        s.line += 1;
-                        s.column = 1;
-                        i += 1;
-                        continue;
-                    }
-                };
-                let need_semicolon = match &last_token.code {
-                    TokenCode::Identifier(_)
-                    | TokenCode::Lifetime(_)
-                    | TokenCode::Keyword(_)
-                    | TokenCode::Literal(_) => true,
-                    TokenCode::Op(op) => match op {
-                        Op::PlusPlus | Op::MinusMinus | Op::Question | Op::Dot | Op::DotDot => true,
-                        _ => false,
-                    },
-                    TokenCode::Pair(pair) => match pair {
-                        Pair::ParenClose
-                        | Pair::SquareClose
-                        | Pair::BraceClose
-                        | Pair::DoubleBraceClose => true,
-                        _ => false,
-                    },
-                    _ => false,
-                };
-                if need_semicolon {
-                    s.add_semicolon();
-                }
-                s.line += 1;
-                s.column = 1;
-                i += 1;
-                continue;
-            }
+            let ch = s.chars[i];
 
             // whitespace
             if ch.is_whitespace() {
-                i += 1;
-                s.column += 1;
+                let start = i;
+                while i < total_len {
+                    let ch = s.chars[i];
+                    if !ch.is_whitespace() {
+                        break;
+                    }
+                    // newline
+                    if ch == '\n' {
+                        s.may_add_semicolon();
+                    }
+                    i += 1;
+                }
+                let u = s.sub_str(start, i);
+                s.add_token_to_before_nl(TokenCode::Blank(u.clone()), u);
                 continue;
             }
 
             // ->
-            if ch == '-' && next_ch == '>' {
-                s.add_token(TokenCode::Op(Op::RArrow));
+            if ch == '-' && i + 1 < total_len && s.chars[i + 1] == '>' {
+                let u = s.sub_str(i, i + 2);
+                s.add_token(TokenCode::Op(Op::RArrow), u);
                 i += 2;
                 continue;
             }
@@ -319,76 +334,98 @@ impl Lex {
             if ch.is_alphabetic() || ch == '-' {
                 let start = i;
                 for delta in start + 1..total_len {
-                    let c = chars[delta];
+                    let c = s.chars[delta];
                     if c.is_alphanumeric() || c == '-' {
                         continue;
                     }
 
-                    let a: String = chars[start..delta].iter().collect();
+                    let a = s.sub_str(start, delta);
+                    // prefix for string literal or char literal
                     if c == '"' || c == '\'' {
-                        id_prefix = Some(a);
+                        id_prefix = Some((a, start));
                         i = delta;
                         continue 'outer;
                     }
                     if c == '#' {
-                        let ch = chars[delta + 1];
+                        let ch = s.chars[delta + 1];
 
+                        // prefix for string literal
                         // id#"
                         // id##"
                         if ch == '"' || ch == '#' {
-                            id_prefix = Some(a);
+                            id_prefix = Some((a, start));
                             i = delta;
                             continue 'outer;
                         }
 
+                        // prefix for identifier
                         // id#id, id#123
                         if !(ch.is_alphanumeric() || ch == '-') {
                             return s.panic("expected identifier or digit after #");
                         }
 
-                        id_prefix = Some(a);
+                        id_prefix = Some((a, start));
                         i = delta + 1;
                         continue 'outer;
                     }
 
-                    if id_prefix.is_some() {
-                        s.add_token(TokenCode::Identifier(Identifier::new_with_prefix(
-                            a,
-                            &mut id_prefix,
-                            s.line,
-                            s.column,
-                        )));
+                    // add identifier
+                    if let Some(prefix) = id_prefix {
+                        // with prefix
+                        let id = Identifier {
+                            prefix: Some(prefix.0),
+                            id: a,
+                            span: Span::default(),
+                        };
+                        let u = s.sub_str(prefix.1, delta);
+                        s.add_token(TokenCode::Identifier(id), u);
+                        id_prefix = None;
                     } else {
+                        // no prefix
                         if a == "true" || a == "false" {
                             s.add_token(TokenCode::Literal(Literal::new(LiteralPayload::Bool(
-                                a.to_string(),
-                            ))));
+                                a.clone(),
+                            ))), a);
                         } else {
                             let keyword = Keyword::from_str(&a);
                             if let Ok(key) = keyword {
-                                s.add_token(TokenCode::Keyword(key));
+                                s.add_token(TokenCode::Keyword(key), a);
                             } else {
-                                s.add_token(TokenCode::Identifier(Identifier::new(
-                                    a, s.line, s.column,
-                                )));
+                                s.add_token(TokenCode::Identifier(Identifier::new(a.clone())), a);
                             }
                         }
                     }
                     i = delta;
                     continue 'outer;
                 }
+                // reached EOF here
+                let u = s.sub_str(start, total_len);
+                s.add_token(TokenCode::Identifier(Identifier::new(u.clone())), u);
+                return Ok(());
             }
 
             // number
             if ch.is_digit(10) {
                 let start = i;
-                let mut new_i = start;
+
+                // with leading 0
                 if ch == '0' {
+                    if i + 1 == total_len {
+                        let u = s.sub_str(start, total_len);
+                        s.add_token(TokenCode::Literal(Literal::new_with_prefix(
+                            LiteralPayload::Int(u.clone()),
+                            &mut id_prefix,
+                            None,
+                        )), u);
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
                     match next_ch {
                         // hex
                         'x' | 'X' => {
+                            i += 1;
                             for delta in start + 2..total_len {
-                                let c = chars[delta];
+                                let c = s.chars[delta];
                                 if ('0'..='9').contains(&c)
                                     || ('a'..='f').contains(&c)
                                     || ('A'..='F').contains(&c)
@@ -396,50 +433,58 @@ impl Lex {
                                 {
                                     continue;
                                 }
-                                new_i = delta;
+                                i = delta;
                                 break;
                             }
                         }
                         // octal
                         'o' | 'O' => {
+                            i += 1;
                             for delta in start + 2..total_len {
-                                let c = chars[delta];
+                                let c = s.chars[delta];
                                 if ('0'..='7').contains(&c) || c == '_' {
                                     continue;
                                 }
-                                new_i = delta;
+                                i = delta;
                                 break;
                             }
                         }
                         // binary
                         'b' | 'B' => {
+                            i += 1;
                             for delta in start + 2..total_len {
-                                let c = chars[delta];
+                                let c = s.chars[delta];
                                 if c == '0' || c == '1' || c == '_' {
                                     continue;
                                 }
-                                new_i = delta;
+                                i = delta;
                                 break;
                             }
                         }
                         _ => {}
                     }
-                }
-                // add number
-                if new_i - start == 2 {
-                    return s.panic("expected digit");
-                }
-                if new_i > start {
-                    // possible suffix
-                    let (suffix, end) = get_literal_suffix(new_i);
-                    let a = chars[start..new_i].iter().collect();
-                    s.add_token(TokenCode::Literal(Literal::new_with_prefix(
-                        LiteralPayload::Int(a),
-                        &mut id_prefix,
-                        suffix,
-                    )));
-                    i = end;
-                    continue;
+                    // add number
+                    if i > start {
+                        if i - start == 1 {
+                            return s.panic(&format!("expected digit after 0{}, but got EOF",
+                                next_ch));
+                        }
+                        if i - start == 2 {
+                            return s.panic(&format!("expected digit after 0{}, but got {:?}",
+                                next_ch, s.chars[start + 2]));
+                        }
+                        // possible suffix
+                        let (suffix, end) = s.get_literal_suffix(i);
+                        let a = s.sub_str(start, i);
+                        let u = s.sub_str(start, end);
+                        s.add_token(TokenCode::Literal(Literal::new_with_prefix(
+                            LiteralPayload::Int(a),
+                            &mut id_prefix,
+                            suffix,
+                        )), u);
+                        i = end;
+                        continue;
+                    }
                 }
 
                 /* decimal
@@ -452,630 +497,770 @@ impl Lex {
                    (e|E) (+|~)? (DEC_DIGIT|_)* DEC_DIGIT (DEC_DIGIT|_)*
                 */
 
-                let mut is_float = false;
-
                 // skip DEC_LITERAL
-                for delta in new_i..total_len {
-                    let c = chars[delta];
+                let new_start = i;
+                for delta in new_start..total_len {
+                    let c = s.chars[delta];
                     if ('0'..='9').contains(&c) || c == '_' {
                         continue;
                     }
-                    new_i = delta;
+                    i = delta;
                     // for cases such as a.0.0
-                    if let Some(a) = s.tokens.last()
-                        && matches!(a.code, TokenCode::Op(Op::Dot))
+                    if let Some(a) = s.tokens.last() &&
+                        matches!(a.code, TokenCode::Op(Op::Dot))
                     {
-                        let a = chars[start..new_i].iter().collect();
+                        let u = s.sub_str(start, i);
                         s.add_token(TokenCode::Literal(Literal {
-                            payload: LiteralPayload::Int(a),
+                            payload: LiteralPayload::Int(u.clone()),
                             prefix: None,
                             suffix: None,
                             span: Span::default(),
-                        }));
-                        i = new_i;
+                        }), u);
                         continue 'outer;
                     }
                     break;
                 }
                 // possible .
-                if chars[new_i] == '.' {
-                    new_i += 1;
+                let mut is_float = false;
+                if s.chars[i] == '.' {
+                    i += 1;
                     // skip DEC_LITERAL
-                    let new_i_start = new_i;
+                    let new_i = i;
                     for delta in new_i..total_len {
-                        let c = chars[delta];
+                        let c = s.chars[delta];
                         if ('0'..='9').contains(&c) || c == '_' {
                             continue;
                         }
-                        new_i = delta;
+                        i = delta;
                         break;
                     }
-                    if new_i == new_i_start {
-                        let a = chars[start..(new_i - 1)].iter().collect();
+                    // no digit after INT. translates to INT and .
+                    if i == new_i {
+                        let u = s.sub_str(start, i - 1);
                         s.add_token(TokenCode::Literal(Literal {
-                            payload: LiteralPayload::Int(a),
+                            payload: LiteralPayload::Int(u.clone()),
                             prefix: None,
                             suffix: None,
                             span: Span::default(),
-                        }));
-                        s.add_token(TokenCode::Op(Op::Dot));
-                        i = new_i;
+                        }), u);
+                        s.add_token(TokenCode::Op(Op::Dot), ".".to_owned());
                         continue 'outer;
                     }
                     is_float = true;
                 }
                 // possible e | E
-                if chars[new_i] == 'e' || chars[new_i] == 'E' {
+                if s.chars[i] == 'e' || s.chars[i] == 'E' {
                     is_float = true;
-                    new_i += 1;
+                    i += 1;
+                    if i == total_len {
+                        return s.panic(&format!("expected stuff after float literal {:?}",
+                            s.chars[i - 1]));
+                    }
                     // possible + | ~
-                    if chars[new_i] == '+' || chars[new_i] == '~' {
-                        new_i += 1;
+                    if s.chars[i] == '+' || s.chars[i] == '~' {
+                        i += 1;
+                    }
+                    if i == total_len {
+                        return s.panic(&format!("expected stuff after float literal {:?}",
+                            s.chars[i - 1]));
                     }
                     // possible _
-                    if chars[new_i] == '_' {
-                        new_i += 1;
+                    if s.chars[i] == '_' {
+                        i += 1;
+                    }
+                    if i == total_len {
+                        return s.panic(&format!("expected stuff after float literal {:?}",
+                            s.chars[i - 1]));
                     }
                     // digit
-                    if !(('0'..='9').contains(&chars[new_i]) || chars[new_i] == '_') {
-                        return s.panic("expected digit");
+                    if !(('0'..='9').contains(&s.chars[i]) || s.chars[i] == '_') {
+                        return s.panic("expected digit after float literal");
                     }
-                    new_i += 1;
+                    i += 1;
                     // skip DEC_LITERAL
+                    let new_i = i;
                     for delta in new_i..total_len {
-                        let c = chars[delta];
+                        let c = s.chars[delta];
                         if ('0'..='9').contains(&c) || c == '_' {
                             continue;
                         }
-                        new_i = delta;
+                        i = delta;
                         break;
                     }
                 }
                 // possible suffix
-                let (suffix, end) = get_literal_suffix(new_i);
-                let a = chars[start..new_i].iter().collect();
+                let (suffix, end) = s.get_literal_suffix(i);
+                let a = s.sub_str(start, i);
+                let u = s.sub_str(start, end);
                 if is_float {
                     s.add_token(TokenCode::Literal(Literal::new_with_prefix(
                         LiteralPayload::Float(a),
                         &mut id_prefix,
                         suffix,
-                    )));
+                    )), u);
                 } else {
                     s.add_token(TokenCode::Literal(Literal::new_with_prefix(
                         LiteralPayload::Int(a),
                         &mut id_prefix,
                         suffix,
-                    )));
+                    )), u);
                 }
                 i = end;
                 continue;
             }
 
+            // other
             match ch {
-                '/' => match next_ch {
-                    // //
-                    '/' => {
-                        let mut start = i + 2;
-                        let (is_doc, inner_doc) = if chars[start] == '/' && chars[start + 1] != '/'
-                        {
-                            start += 1;
-                            (true, false)
-                        } else if chars[start] == '!' {
-                            start += 1;
-                            (true, true)
-                        } else {
-                            (false, false)
-                        };
-                        for delta in start..total_len {
-                            if chars[delta] == '\n' {
-                                i = delta;
-                                let a = chars[start..delta].iter().collect();
-                                s.add_comment(a, true, is_doc, inner_doc, s.line);
-                                continue 'outer;
-                            }
-                        }
-                        return s.panic("expected newline after //");
+                '/' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::Div), "/".to_owned());
+                        return Ok(());
                     }
-                    // /* */
-                    '*' => {
-                        let start_line = s.line;
-                        s.column += 2;
-                        let mut start = i + 2;
-                        let (is_doc, inner_doc) = if chars[start] == '*' && chars[start + 1] != '/'
-                        {
-                            start += 1;
-                            (true, false)
-                        } else if chars[start] == '!' {
-                            start += 1;
-                            (true, true)
-                        } else {
-                            (false, false)
-                        };
-
-                        let mut comment_count = 1;
-                        for delta in start..total_len {
-                            let c = chars[delta];
-                            let mut next_c = ' ';
-                            if delta + 1 < total_len {
-                                next_c = chars[delta + 1];
-                            }
-                            if c == '\n' {
-                                s.line += 1;
-                                s.column = 0;
-                            }
-                            if c == '/' && next_c == '*' {
-                                comment_count += 1;
-                                continue;
-                            }
-                            if c == '*' && next_c == '/' {
-                                comment_count -= 1;
-                                if comment_count == 0 {
-                                    let a = chars[start..delta].iter().collect();
-                                    s.add_comment(a, false, is_doc, inner_doc, start_line);
-                                    i = delta + 2;
-                                    s.column += 2;
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // //
+                        '/' => {
+                            let start = i;
+                            for delta in (start + 2)..total_len {
+                                if s.chars[delta] == '\n' {
+                                    let a = s.sub_str(start, delta);
+                                    s.add_comment(a);
+                                    i = delta;
                                     continue 'outer;
                                 }
                             }
-                            s.column += 1;
+                            if i == total_len {
+                                let u = s.sub_str(start, total_len);
+                                s.add_comment(u);
+                                return Ok(());
+                            }
                         }
-                        return s.panic("expected */ after /*");
+                        // /* */
+                        '*' => {
+                            let start = i;
+                            let mut comment_count = 1;
+                            let mut skip = false;
+                            for delta in (start + 2)..total_len {
+                                if skip {
+                                    skip = false;
+                                    continue;
+                                }
+                                let c = s.chars[delta];
+                                if delta + 1 == total_len {
+                                    return s.panic("expected */ after /*");
+                                }
+                                let next_c = s.chars[delta + 1];
+                                if c == '/' && next_c == '*' {
+                                    comment_count += 1;
+                                    skip = true;
+                                    continue;
+                                }
+                                if c == '*' && next_c == '/' {
+                                    comment_count -= 1;
+                                    if comment_count == 0 {
+                                        let u = s.sub_str(start, delta + 2);
+                                        s.add_comment(u);
+                                        i = delta + 2;
+                                        continue 'outer;
+                                    }
+                                }
+                            }
+                            return s.panic("expected */ after /*");
+                        }
+                        // /=
+                        '=' => {
+                            s.add_token(TokenCode::Assign(Assign::Div), "/=".to_owned());
+                            i += 1;
+                        }
+                        // /
+                        _ => {
+                            s.add_token(TokenCode::Op(Op::Div), "/".to_owned());
+                        }
                     }
-                    // /=
-                    '=' => {
-                        s.add_token(TokenCode::Assign(Assign::Div));
-                        i += 1;
-                    }
-                    // /
-                    _ => {
-                        s.add_token(TokenCode::Op(Op::Div));
-                    }
-                },
+                }
 
                 // string
                 '"' => {
-                    let start_line = s.line;
-                    let start = i + 1;
+                    let start = i;
                     let mut skip = false;
-                    for delta in start..total_len {
+                    for delta in (start + 1)..total_len {
                         if skip {
                             skip = false;
                             continue;
                         }
-                        let c = chars[delta];
-                        if c == '\n' {
-                            s.line += 1;
-                        }
+                        let c = s.chars[delta];
                         if c == '\\' {
                             skip = true;
                             continue;
                         }
                         if c == '"' {
-                            let new_line = s.line;
-                            s.line = start_line;
-                            let (suffix, end) = get_literal_suffix(delta + 1);
-                            let a = chars[start..delta].iter().collect();
-                            s.add_token(TokenCode::Literal(Literal::new_with_prefix(
+                            let (suffix, end) = s.get_literal_suffix(delta + 1);
+                            let text = s.sub_str(start + 1, delta);
+                            let u = if let Some(prefix) = &id_prefix {
+                                s.sub_str(prefix.1, end)
+                            } else {
+                                s.sub_str(start, end)
+                            };
+                            s.add_token_nl(TokenCode::Literal(Literal::new_with_prefix(
                                 LiteralPayload::String(
                                     LiteralString {
                                         raw_count: 0,
-                                        text: a,
+                                        text,
                                     }
                                 ),
                                 &mut id_prefix,
                                 suffix,
-                            )));
+                            )), u);
                             i = end;
-                            s.line = new_line;
                             continue 'outer;
                         }
                     }
                     return s.panic("expected closing \"");
                 }
 
+                // lifetime or char
                 '\'' => {
+                    if i + 1 == total_len {
+                        return s.panic("expected char after '");
+                    }
+                    let next_ch = s.chars[i + 1];
                     if next_ch == '\'' {
                         return s.panic("expected char in ''");
                     }
 
-                    // lifetime
                     if next_ch.is_alphabetic() || next_ch == '-' {
-                        let is_lifetime = if i + 2 < total_len {
-                            chars[i + 2] != '\''
-                        } else {
-                            true
-                        };
-                        if is_lifetime {
-                            let start = i + 1;
-                            let mut end = start;
-                            for k in start..total_len {
-                                let c = chars[k];
-                                if !(c.is_alphanumeric() || c == '-') {
-                                    break;
-                                }
-                                end += 1;
+                        let mut is_lifetime = true;
+                        let start = i;
+                        let mut end = start + 2;
+                        for k in (start + 2)..total_len {
+                            end = k;
+                            let c = s.chars[k];
+                            if c == '\'' {
+                                is_lifetime = false;
+                                break;
                             }
-                            let a: String = chars[start..end].iter().collect();
-                            s.add_token(TokenCode::Lifetime(Identifier::new(
-                                a,
-                                s.line,
-                                s.column + 1,
-                            )));
+                            if !(c.is_alphanumeric() || c == '-' || c == '#') {
+                                break;
+                            }
+                        }
+
+                        // lifetime
+                        if is_lifetime {
+                            let a = s.sub_str(start + 1, end);
+                            let u = s.sub_str(start, end);
+                            s.add_token(TokenCode::Lifetime(Identifier::new(a)), u);
                             i = end;
-                            continue;
+                            continue 'outer;
                         }
                     }
 
                     // char
-                    let start = i + 1;
+                    let start = i;
                     let mut skip = false;
-                    for delta in start..total_len {
+                    for delta in (start + 1)..total_len {
                         if skip {
                             skip = false;
                             continue;
                         }
-                        let c = chars[delta];
+                        let c = s.chars[delta];
                         if c == '\\' {
                             skip = true;
                             continue;
                         }
                         if c == '\'' {
-                            let (suffix, end) = get_literal_suffix(delta + 1);
-                            let a: String = chars[start..delta].iter().collect();
+                            let (suffix, end) = s.get_literal_suffix(delta + 1);
+                            let a = s.sub_str(start + 1, delta);
+                            let u = if let Some(prefix) = &id_prefix {
+                                s.sub_str(prefix.1, end)
+                            } else {
+                                s.sub_str(start, end)
+                            };
                             s.add_token(TokenCode::Literal(Literal::new_with_prefix(
                                 LiteralPayload::Char(LiteralChar { text: a }),
                                 &mut id_prefix,
                                 suffix,
-                            )));
+                            )), u);
                             i = end;
                             continue 'outer;
                         }
                     }
+                    return s.panic("expected closing '");
                 }
 
-                '+' => match next_ch {
-                    // ++
-                    '+' => {
-                        s.add_token(TokenCode::Op(Op::PlusPlus));
-                        i += 1;
+                '+' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::Add), "+".to_owned());
+                        return Ok(());
                     }
-                    // +=
-                    '=' => {
-                        s.add_token(TokenCode::Assign(Assign::Add));
-                        i += 1;
-                    }
-                    // +
-                    _ => {
-                        s.add_token(TokenCode::Op(Op::Add));
-                    }
-                },
-
-                '~' => match next_ch {
-                    // ~~
-                    '~' => {
-                        s.add_token(TokenCode::Op(Op::MinusMinus));
-                        i += 1;
-                    }
-                    // ~=
-                    '=' => {
-                        s.add_token(TokenCode::Assign(Assign::Sub));
-                        i += 1;
-                    }
-                    // ~
-                    _ => {
-                        s.add_token(TokenCode::Op(Op::Sub));
-                    }
-                },
-
-                '*' => match next_ch {
-                    // *=
-                    '=' => {
-                        s.add_token(TokenCode::Assign(Assign::Star));
-                        i += 1;
-                    }
-                    // *
-                    _ => {
-                        s.add_token(TokenCode::Op(Op::Star));
-                    }
-                },
-
-                '%' => match next_ch {
-                    // %=
-                    '=' => {
-                        s.add_token(TokenCode::Assign(Assign::Rem));
-                        i += 1;
-                    }
-                    // %
-                    _ => {
-                        s.add_token(TokenCode::Op(Op::Rem));
-                    }
-                },
-
-                '!' => match next_ch {
-                    // !=
-                    '=' => {
-                        s.add_token(TokenCode::Op(Op::Neq));
-                        i += 1;
-                    }
-                    // !
-                    _ => {
-                        s.add_token(TokenCode::Op(Op::Not));
-                    }
-                },
-
-                '^' => match next_ch {
-                    // ^=
-                    '=' => {
-                        s.add_token(TokenCode::Assign(Assign::BitXor));
-                        i += 1;
-                    }
-                    // ^
-                    _ => {
-                        s.add_token(TokenCode::Op(Op::BitXor));
-                    }
-                },
-
-                '|' => match next_ch {
-                    // ||
-                    '|' => {
-                        s.add_token(TokenCode::Op(Op::Or));
-                        i += 1;
-                    }
-                    // |=
-                    '=' => {
-                        s.add_token(TokenCode::Assign(Assign::BitOr));
-                        i += 1;
-                    }
-                    // |
-                    _ => {
-                        s.add_token(TokenCode::Op(Op::BitOr));
-                    }
-                },
-
-                '=' => match next_ch {
-                    // ==
-                    '=' => {
-                        s.add_token(TokenCode::Op(Op::Eq));
-                        i += 1;
-                    }
-                    // =>
-                    '>' => {
-                        s.add_token(TokenCode::Op(Op::FatArrow));
-                        i += 1;
-                    }
-                    // =
-                    _ => {
-                        s.add_token(TokenCode::Assign(Assign::Assign));
-                    }
-                },
-
-                ':' => match next_ch {
-                    // :=
-                    '=' => {
-                        s.add_token(TokenCode::Assign(Assign::Declare));
-                        i += 1;
-                    }
-                    // ::
-                    ':' => {
-                        s.add_token(TokenCode::Op(Op::ColonColon));
-                        i += 1;
-                    }
-                    // :
-                    _ => {
-                        s.add_token(TokenCode::Op(Op::Colon));
-                    }
-                },
-
-                ',' => match next_ch {
-                    // ,,
-                    ',' => {
-                        i += 1;
-                        s.add_token(TokenCode::Op(Op::CommaComma));
-                    }
-                    // ,
-                    _ => {
-                        s.add_token(TokenCode::Op(Op::Comma));
-                    }
-                },
-
-                '`' => match next_ch {
-                    '`' => {
-                        if i + 2 >= total_len {
-                            // ``
-                            s.add_token(TokenCode::Op(Op::TickTick));
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // ++
+                        '+' => {
+                            s.add_token(TokenCode::Op(Op::PlusPlus), "++".to_owned());
                             i += 1;
-                        } else {
-                            match chars[i + 2] {
-                                '=' => {
-                                    // ``=
-                                    s.add_token(TokenCode::Op(Op::TickTickEq));
-                                    i += 2;
-                                }
-                                _ => {
-                                    // ``
-                                    s.add_token(TokenCode::Op(Op::TickTick));
-                                    i += 1;
-                                }
-                            }
+                        }
+                        // +=
+                        '=' => {
+                            s.add_token(TokenCode::Assign(Assign::Add), "+=".to_owned());
+                            i += 1;
+                        }
+                        // +
+                        _ => {
+                            s.add_token(TokenCode::Op(Op::Add), "+".to_owned());
                         }
                     }
-                    _ => {
+                },
+
+                '~' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::Sub), "~".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // ~~
+                        '~' => {
+                            s.add_token(TokenCode::Op(Op::MinusMinus), "~~".to_owned());
+                            i += 1;
+                        }
+                        // ~=
+                        '=' => {
+                            s.add_token(TokenCode::Assign(Assign::Sub), "~=".to_owned());
+                            i += 1;
+                        }
+                        // ~
+                        _ => {
+                            s.add_token(TokenCode::Op(Op::Sub), "~".to_owned());
+                        }
+                    }
+                },
+
+                '*' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::Star), "*".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // *=
+                        '=' => {
+                            s.add_token(TokenCode::Assign(Assign::Star), "*=".to_owned());
+                            i += 1;
+                        }
+                        // *
+                        _ => {
+                            s.add_token(TokenCode::Op(Op::Star), "*".to_owned());
+                        }
+                    }
+                },
+
+                '%' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::Rem), "%".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // %=
+                        '=' => {
+                            s.add_token(TokenCode::Assign(Assign::Rem), "%=".to_owned());
+                            i += 1;
+                        }
+                        // %
+                        _ => {
+                            s.add_token(TokenCode::Op(Op::Rem), "%".to_owned());
+                        }
+                    }
+                },
+
+                '!' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::Not), "!".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // !=
+                        '=' => {
+                            s.add_token(TokenCode::Op(Op::Neq), "!=".to_owned());
+                            i += 1;
+                        }
+                        // !
+                        _ => {
+                            s.add_token(TokenCode::Op(Op::Not), "!".to_owned());
+                        }
+                    }
+                },
+
+                '^' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::BitXor), "^".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // ^=
+                        '=' => {
+                            s.add_token(TokenCode::Assign(Assign::BitXor), "^=".to_owned());
+                            i += 1;
+                        }
+                        // ^
+                        _ => {
+                            s.add_token(TokenCode::Op(Op::BitXor), "^".to_owned());
+                        }
+                    }
+                },
+
+                '|' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::BitOr), "|".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // ||
+                        '|' => {
+                            s.add_token(TokenCode::Op(Op::Or), "||".to_owned());
+                            i += 1;
+                        }
+                        // |=
+                        '=' => {
+                            s.add_token(TokenCode::Assign(Assign::BitOr), "|=".to_owned());
+                            i += 1;
+                        }
+                        // |
+                        _ => {
+                            s.add_token(TokenCode::Op(Op::BitOr), "|".to_owned());
+                        }
+                    }
+                },
+
+                '=' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Assign(Assign::Assign), "=".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // ==
+                        '=' => {
+                            s.add_token(TokenCode::Op(Op::Eq), "==".to_owned());
+                            i += 1;
+                        }
+                        // =>
+                        '>' => {
+                            s.add_token(TokenCode::Op(Op::FatArrow), "=>".to_owned());
+                            i += 1;
+                        }
+                        // =
+                        _ => {
+                            s.add_token(TokenCode::Assign(Assign::Assign), "=".to_owned());
+                        }
+                    }
+                },
+
+                ':' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::Colon), ":".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // :=
+                        '=' => {
+                            s.add_token(TokenCode::Assign(Assign::Declare), ":=".to_owned());
+                            i += 1;
+                        }
+                        // ::
+                        ':' => {
+                            s.add_token(TokenCode::Op(Op::ColonColon), "::".to_owned());
+                            i += 1;
+                        }
+                        // :
+                        _ => {
+                            s.add_token(TokenCode::Op(Op::Colon), ":".to_owned());
+                        }
+                    }
+                },
+
+                ',' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::Comma), ",".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // ,,
+                        ',' => {
+                            s.add_token(TokenCode::Op(Op::CommaComma), ",,".to_owned());
+                            i += 1;
+                        }
+                        // ,
+                        _ => {
+                            s.add_token(TokenCode::Op(Op::Comma), ",".to_owned());
+                        }
+                    }
+                },
+
+                '`' => {
+                    if i + 1 == total_len {
                         return s.panic("expected ` after `");
                     }
-                },
-
-                '.' => match next_ch {
-                    '.' => {
-                        if i + 2 >= total_len {
-                            // ..
-                            s.add_token(TokenCode::Op(Op::DotDot));
-                            i += 1;
-                        } else {
-                            match chars[i + 2] {
-                                '.' => {
-                                    // ...
-                                    s.add_token(TokenCode::Op(Op::DotDotDot));
-                                    i += 2;
-                                }
-                                '=' => {
-                                    // ..=
-                                    s.add_token(TokenCode::Op(Op::DotDotEq));
-                                    i += 2;
-                                }
-                                _ => {
-                                    // ..
-                                    s.add_token(TokenCode::Op(Op::DotDot));
-                                    i += 1;
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        '`' => {
+                            if i + 2 >= total_len {
+                                // ``
+                                s.add_token(TokenCode::Op(Op::TickTick), "``".to_owned());
+                                i += 1;
+                            } else {
+                                match s.chars[i + 2] {
+                                    '=' => {
+                                        // ``=
+                                        s.add_token(TokenCode::Op(Op::TickTickEq), "``=".to_owned());
+                                        i += 2;
+                                    }
+                                    _ => {
+                                        // ``
+                                        s.add_token(TokenCode::Op(Op::TickTick), "``".to_owned());
+                                        i += 1;
+                                    }
                                 }
                             }
                         }
-                    }
-                    /* .
-                    if the last non-comment token is an added semicolon, drop the semicolon.
-                    for cases like:
-                        list
-                            .filter()
-                            .map()
-                    */
-                    _ => {
-                        let last_token = s.last_non_comment_token()?;
-                        if last_token.is_added_semicolon() {
-                            s.tokens.pop();
+                        _ => {
+                            return s.panic("expected ` after `");
                         }
-                        s.add_token(TokenCode::Op(Op::Dot));
                     }
                 },
 
-                '<' => match next_ch {
-                    // <=
-                    '=' => {
-                        s.add_token(TokenCode::Op(Op::LessEq));
-                        i += 1;
+                '.' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::Dot), ".".to_owned());
+                        return Ok(());
                     }
-                    '<' => {
-                        if i + 2 < total_len && chars[i + 2] == '=' {
-                            // <<=
-                            s.add_token(TokenCode::Assign(Assign::LeftShift));
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        '.' => {
+                            if i + 2 >= total_len {
+                                // ..
+                                s.add_token(TokenCode::Op(Op::DotDot), "..".to_owned());
+                                i += 1;
+                            } else {
+                                match s.chars[i + 2] {
+                                    '.' => {
+                                        // ...
+                                        s.add_token(TokenCode::Op(Op::DotDotDot), "...".to_owned());
+                                        i += 2;
+                                    }
+                                    '=' => {
+                                        // ..=
+                                        s.add_token(TokenCode::Op(Op::DotDotEq), "..=".to_owned());
+                                        i += 2;
+                                    }
+                                    _ => {
+                                        // ..
+                                        s.add_token(TokenCode::Op(Op::DotDot), "..".to_owned());
+                                        i += 1;
+                                    }
+                                }
+                            }
+                        }
+                        /* .
+                        if the last non-comment token is an added semicolon, drop the semicolon.
+                        for cases like:
+                            list
+                                .filter()
+                                .map()
+                        */
+                        _ => {
+                            let last_token = s.last_real_token()?;
+                            if last_token.is_added_semicolon() {
+                                s.tokens.pop();
+                            }
+                            s.add_token(TokenCode::Op(Op::Dot), ".".to_owned());
+                        }
+                    }
+                },
+
+                '<' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::Less), "<".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // <=
+                        '=' => {
+                            s.add_token(TokenCode::Op(Op::LessEq), "<=".to_owned());
+                            i += 1;
+                        }
+                        '<' => {
+                            if i + 2 < total_len && s.chars[i + 2] == '=' {
+                                // <<=
+                                s.add_token(TokenCode::Assign(Assign::LeftShift), "<<=".to_owned());
+                                i += 2;
+                            } else {
+                                // <<
+                                s.add_token(TokenCode::Op(Op::LeftShift), "<<".to_owned());
+                                i += 1;
+                            }
+                        }
+                        // <
+                        _ => {
+                            s.add_token(TokenCode::Op(Op::Less), "<".to_owned());
+                        }
+                    }
+                },
+
+                '>' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::Greater), ">".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // >=
+                        '=' => {
+                            s.add_token(TokenCode::Op(Op::GreaterEq), ">=".to_owned());
+                            i += 1;
+                        }
+                        '>' => {
+                            if i + 2 < total_len && s.chars[i + 2] == '=' {
+                                // >>=
+                                s.add_token(TokenCode::Assign(Assign::RightShift), ">>=".to_owned());
+                                i += 2;
+                            } else {
+                                // >>
+                                s.add_token(TokenCode::Op(Op::RightShift), ">>".to_owned());
+                                i += 1;
+                            }
+                        }
+                        // >
+                        _ => {
+                            s.add_token(TokenCode::Op(Op::Greater), ">".to_owned());
+                        }
+                    }
+                },
+
+                '&' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::BitAnd), "&".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // &&
+                        '&' => {
+                            s.add_token(TokenCode::Op(Op::And), "&&".to_owned());
+                            i += 1;
+                        }
+                        // &=
+                        '=' => {
+                            s.add_token(TokenCode::Assign(Assign::BitAnd), "&=".to_owned());
+                            i += 1;
+                        }
+                        // &
+                        _ => {
+                            s.add_token(TokenCode::Op(Op::BitAnd), "&".to_owned());
+                        }
+                    }
+                },
+
+                '{' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Pair(Pair::BraceOpen), "{".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // {{
+                        '{' => {
+                            s.add_token(TokenCode::Pair(Pair::DoubleBraceOpen), "{{".to_owned());
+                            i += 1;
+                        }
+                        // {
+                        _ => {
+                            s.add_token(TokenCode::Pair(Pair::BraceOpen), "{".to_owned());
+                        }
+                    }
+                },
+                '}' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Pair(Pair::BraceClose), "}".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // }}
+                        '}' => {
+                            s.add_token(TokenCode::Pair(Pair::DoubleBraceClose), "}}".to_owned());
+                            i += 1;
+                        }
+                        // }
+                        _ => {
+                            s.add_token(TokenCode::Pair(Pair::BraceClose), "}".to_owned());
+                        }
+                    }
+                },
+
+                '#' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::Pound), "#".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // #[
+                        '[' => {
+                            s.add_token(TokenCode::Pair(Pair::OuterAttr), "#[".to_owned());
+                            i += 1;
+                        }
+                        // #![
+                        '!' => {
+                            if i + 2 == total_len {
+                                s.add_token(TokenCode::Op(Op::Pound), "#".to_owned());
+                                s.add_token(TokenCode::Op(Op::Not), "!".to_owned());
+                                return Ok(());
+                            }
+                            if s.chars[i + 2] != '[' {
+                                return s.panic("expected [ after #!");
+                            }
+                            s.add_token(TokenCode::Pair(Pair::InnerAttr), "#![".to_owned());
                             i += 2;
-                        } else {
-                            // <<
-                            s.add_token(TokenCode::Op(Op::LeftShift));
-                            i += 1;
                         }
-                    }
-                    // <
-                    _ => {
-                        s.add_token(TokenCode::Op(Op::Less));
-                    }
-                },
-
-                '>' => match next_ch {
-                    // >=
-                    '=' => {
-                        s.add_token(TokenCode::Op(Op::GreaterEq));
-                        i += 1;
-                    }
-                    '>' => {
-                        if i + 2 < total_len && chars[i + 2] == '=' {
-                            // >>=
-                            s.add_token(TokenCode::Assign(Assign::RightShift));
-                            i += 2;
-                        } else {
-                            // >>
-                            s.add_token(TokenCode::Op(Op::RightShift));
-                            i += 1;
-                        }
-                    }
-                    // >
-                    _ => {
-                        s.add_token(TokenCode::Op(Op::Greater));
-                    }
-                },
-
-                '&' => match next_ch {
-                    // &&
-                    '&' => {
-                        s.add_token(TokenCode::Op(Op::And));
-                        i += 1;
-                    }
-                    // &=
-                    '=' => {
-                        s.add_token(TokenCode::Assign(Assign::BitAnd));
-                        i += 1;
-                    }
-                    // &
-                    _ => {
-                        s.add_token(TokenCode::Op(Op::BitAnd));
-                    }
-                },
-
-                '{' => match next_ch {
-                    // {{
-                    '{' => {
-                        s.add_token(TokenCode::Pair(Pair::DoubleBraceOpen));
-                        i += 1;
-                    }
-                    // {
-                    _ => {
-                        s.add_token(TokenCode::Pair(Pair::BraceOpen));
-                    }
-                },
-                '}' => match next_ch {
-                    // }}
-                    '}' => {
-                        s.add_token(TokenCode::Pair(Pair::DoubleBraceClose));
-                        i += 1;
-                    }
-                    // }
-                    _ => {
-                        s.add_token(TokenCode::Pair(Pair::BraceClose));
-                    }
-                },
-
-                '#' => match next_ch {
-                    // #[
-                    '[' => {
-                        s.add_token(TokenCode::Pair(Pair::OuterAttr));
-                        i += 1;
-                    }
-                    // #![
-                    '!' => {
-                        if i + 2 >= total_len || chars[i + 2] != '[' {
-                            return s.panic("expected [ after #!");
-                        }
-                        s.add_token(TokenCode::Pair(Pair::InnerAttr));
-                        i += 2;
-                    }
-                    // #" "#
-                    // ##" "##
-                    // ###" "###
-                    '"' | '#' => {
-                        let mut raw_count = 0;
-                        for delta in i..total_len {
-                            let c = chars[delta];
-                            if c == '#' {
-                                raw_count += 1;
-                                continue;
+                        // #" "#
+                        // ##" "##
+                        // ###" "###
+                        '"' | '#' => {
+                            let mut raw_count = 1;
+                            let new_i = i + 1;
+                            for delta in new_i..total_len {
+                                let c = s.chars[delta];
+                                if c == '#' {
+                                    raw_count += 1;
+                                    continue;
+                                }
+                                if c != '"' {
+                                    return s.panic("expected \" after #");
+                                }
+                                break;
                             }
-                            if raw_count > 0 && c != '"' {
-                                return s.panic("expected \" after #");
-                            }
-                            break;
-                        }
 
-                        let start_line = s.line;
-                        let start = i + raw_count + 1;
-                        for delta in start..total_len {
-                            let c = chars[delta];
-                            if c == '\n' {
-                                s.line += 1;
-                                continue;
-                            }
-                            // find "###
-                            if c == '"' {
+                            let start = i;
+                            let new_i = i + raw_count + 1;
+                            for delta in new_i..total_len {
+                                let c = s.chars[delta];
+                                // find "###
+                                if c != '"' {
+                                    continue;
+                                }
+                                if delta + 1 == total_len {
+                                    return s.panic("expected closing \"#");
+                                }
                                 let mut count = 0;
                                 for j in delta + 1..total_len {
-                                    let c = chars[j];
+                                    let c = s.chars[j];
                                     if c == '#' {
                                         count += 1;
                                         if count == raw_count {
@@ -1089,10 +1274,13 @@ impl Lex {
                                     continue;
                                 }
 
-                                let new_line = s.line;
-                                s.line = start_line;
-                                let (suffix, end) = get_literal_suffix(delta + raw_count + 1);
-                                let a = chars[start..delta].iter().collect();
+                                let (suffix, end) = s.get_literal_suffix(delta + raw_count + 1);
+                                let a = s.sub_str(new_i, delta);
+                                let u = if let Some(prefix) = &id_prefix {
+                                    s.sub_str(prefix.1, end)
+                                } else {
+                                    s.sub_str(start, end)
+                                };
                                 s.add_token(TokenCode::Literal(Literal::new_with_prefix(
                                     LiteralPayload::String(
                                         LiteralString {
@@ -1102,46 +1290,30 @@ impl Lex {
                                     ),
                                     &mut id_prefix,
                                     suffix,
-                                )));
+                                )), u);
                                 i = end;
-                                s.line = new_line;
                                 continue 'outer;
                             }
+                            return s.panic("expected closing \"#");
                         }
-                        return s.panic("expected closing \"#");
+                        _ => s.add_token(TokenCode::Op(Op::Pound), "#".to_owned()),
                     }
-                    _ => s.add_token(TokenCode::Op(Op::Pound)),
                 },
 
-                '(' => s.add_token(TokenCode::Pair(Pair::ParenOpen)),
-                ')' => s.add_token(TokenCode::Pair(Pair::ParenClose)),
-                '[' => s.add_token(TokenCode::Pair(Pair::SquareOpen)),
-                ']' => s.add_token(TokenCode::Pair(Pair::SquareClose)),
-                ';' => s.add_token(TokenCode::Op(Op::Semicolon)),
-                '?' => s.add_token(TokenCode::Op(Op::Question)),
-                '@' => s.add_token(TokenCode::Op(Op::At)),
-                '$' => s.add_token(TokenCode::Op(Op::Dollar)),
+                '(' => s.add_token(TokenCode::Pair(Pair::ParenOpen), "(".to_owned()),
+                ')' => s.add_token(TokenCode::Pair(Pair::ParenClose), ")".to_owned()),
+                '[' => s.add_token(TokenCode::Pair(Pair::SquareOpen), "[".to_owned()),
+                ']' => s.add_token(TokenCode::Pair(Pair::SquareClose), "]".to_owned()),
+                ';' => s.add_token(TokenCode::Op(Op::Semicolon), ";".to_owned()),
+                '?' => s.add_token(TokenCode::Op(Op::Question), "?".to_owned()),
+                '@' => s.add_token(TokenCode::Op(Op::At), "@".to_owned()),
+                '$' => s.add_token(TokenCode::Op(Op::Dollar), "$".to_owned()),
 
                 _ => return s.panic(&format!("illegal char: {}", ch)),
             }
 
             i += 1;
         }
-
-        // make sure the last token is always semicolon to help parse
-        let mut i = total_len - 1;
-        while i > 0 {
-            let ch = chars[i];
-            if ch == '\n' {
-                if s.line > 0 {
-                    s.line -= 1;
-                }
-                i -= 1;
-            } else {
-                break;
-            }
-        }
-        s.add_semicolon();
 
         // println!("{:?}", s);
         Ok(())
@@ -1163,6 +1335,8 @@ impl fmt::Debug for Lex {
 pub struct Token {
     pub code: TokenCode,
     pub span: Span,
+    pub tokens_before: Vec<Token>,
+    pub u: String,
 }
 
 #[derive(Copy, Clone, Default, Debug, PartialEq, Eq, Hash)]
@@ -1205,6 +1379,8 @@ impl ToLang for Token {
 
         match &s.code {
             TokenCode::Shebang(a) => p.push_str(a, s.span),
+            TokenCode::Blank(a) => p.push_str(a, s.span),
+            TokenCode::Comment(comment) => p.push_rust(comment),
             TokenCode::Literal(literal) => p.push_rust(literal),
             TokenCode::Identifier(identifier) => p.push_rust(identifier),
             TokenCode::Lifetime(identifier) => {
@@ -1363,149 +1539,15 @@ impl ToLang for Token {
     }
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
-
-        match &s.code {
-            TokenCode::Shebang(a) => p.push_raw(a),
-            TokenCode::Literal(literal) => p.push_u(literal),
-            TokenCode::Identifier(identifier) => p.push_u(identifier),
-            TokenCode::Lifetime(identifier) => {
-                p.push_raw("'");
-                p.push_u(identifier);
-            }
-            TokenCode::Keyword(keyword) => match keyword {
-                Keyword::Async => p.push_raw("async"),
-                Keyword::Await => p.push_raw("await"),
-                Keyword::Break => p.push_raw("break"),
-                Keyword::Const => p.push_raw("const"),
-                Keyword::Continue => p.push_raw("continue"),
-                Keyword::Crate => p.push_raw("crate"),
-                Keyword::Dyn => p.push_raw("dyn"),
-                Keyword::Else => p.push_raw("else"),
-                Keyword::Enum => p.push_raw("enum"),
-                Keyword::Extern => p.push_raw("extern"),
-                Keyword::For => p.push_raw("for"),
-                Keyword::Func => p.push_raw("func"),
-                Keyword::If => p.push_raw("if"),
-                Keyword::Impl => p.push_raw("impl"),
-                Keyword::Import => p.push_raw("import"),
-                Keyword::In => p.push_raw("in"),
-                Keyword::Let => p.push_raw("let"),
-                Keyword::Interface => p.push_raw("interface"),
-                Keyword::Macro => p.push_raw("macro"),
-                Keyword::Mod => p.push_raw("mod"),
-                Keyword::Mut => p.push_raw("mut"),
-                Keyword::Ref => p.push_raw("ref"),
-                Keyword::Ret => p.push_raw("ret"),
-                Keyword::SelfType => p.push_raw("Self"),
-                Keyword::Static => p.push_raw("static"),
-                Keyword::Struct => p.push_raw("struct"),
-                Keyword::Super => p.push_raw("super"),
-                Keyword::Match => p.push_raw("match"),
-                Keyword::Type => p.push_raw("type"),
-                Keyword::Unsafe => p.push_raw("unsafe"),
-                Keyword::Where => p.push_raw("where"),
-
-                Keyword::As => p.push_raw("as"),
-                Keyword::Fn => p.push_raw("fn"),
-                Keyword::Loop => p.push_raw("loop"),
-                Keyword::Move => p.push_raw("move"),
-                Keyword::Pub => p.push_raw("pub"),
-                Keyword::Return => p.push_raw("return"),
-                Keyword::SelfValue => p.push_raw("self"),
-                Keyword::Trait => p.push_raw("trait"),
-                Keyword::Use => p.push_raw("use"),
-                Keyword::While => p.push_raw("while"),
-
-                Keyword::Abstract => p.push_raw("abstract"),
-                Keyword::Become => p.push_raw("become"),
-                Keyword::Box => p.push_raw("box"),
-                Keyword::Do => p.push_raw("do"),
-                Keyword::Final => p.push_raw("final"),
-                Keyword::Override => p.push_raw("override"),
-                Keyword::Priv => p.push_raw("priv"),
-                Keyword::Typeof => p.push_raw("typeof"),
-                Keyword::Union => p.push_raw("union"),
-                Keyword::Unsized => p.push_raw("unsized"),
-                Keyword::Virtual => p.push_raw("virtual"),
-                Keyword::Yield => p.push_raw("yield"),
-                Keyword::Try => p.push_raw("try"),
-                Keyword::Gen => p.push_raw("gen"),
-            },
-            TokenCode::Assign(assign) => match assign {
-                Assign::Assign => p.push_raw("="),
-                Assign::Declare => p.push_raw(":="),
-                Assign::Add => p.push_raw("+="),
-                Assign::Sub => p.push_raw("~="),
-                Assign::Star => p.push_raw("*="),
-                Assign::Div => p.push_raw("/="),
-                Assign::Rem => p.push_raw("%="),
-                Assign::LeftShift => p.push_raw("<<="),
-                Assign::RightShift => p.push_raw(">>="),
-                Assign::BitAnd => p.push_raw("&="),
-                Assign::BitOr => p.push_raw("|="),
-                Assign::BitXor => p.push_raw("^="),
-            },
-            TokenCode::Op(op) => match op {
-                Op::Add => p.push_raw("+"),
-                Op::Sub => p.push_raw("~"),
-                Op::Star => p.push_raw("*"),
-                Op::Div => p.push_raw("/"),
-                Op::Rem => p.push_raw("%"),
-                Op::PlusPlus => p.push_raw("++"),
-                Op::MinusMinus => p.push_raw("~~"),
-                Op::Eq => p.push_raw("=="),
-                Op::Neq => p.push_raw("!="),
-                Op::Less => p.push_raw("<"),
-                Op::LessEq => p.push_raw("<="),
-                Op::Greater => p.push_raw(">"),
-                Op::GreaterEq => p.push_raw(">="),
-                Op::LeftShift => p.push_raw("<<"),
-                Op::RightShift => p.push_raw(">>"),
-                Op::Not => p.push_raw("!"),
-                Op::And => p.push_raw("&&"),
-                Op::Or => p.push_raw("||"),
-                Op::BitAnd => p.push_raw("+"),
-                Op::BitOr => p.push_raw("|"),
-                Op::BitXor => p.push_raw("^"),
-                Op::Dot => p.push_raw("."),
-                Op::DotDot => p.push_raw(".."),
-                Op::DotDotDot => p.push_raw("..."),
-                Op::Tick => p.push_raw("`"),
-                Op::TickTick => p.push_raw("``"),
-                Op::TickTickEq => p.push_raw("``="),
-                Op::Pound => p.push_raw("#"),
-                Op::Question => p.push_raw("?"),
-                Op::At => p.push_raw("@"),
-                Op::Comma => p.push_raw(", "),
-                Op::CommaComma => p.push_raw("!"),
-                Op::Colon => p.push_raw(":"),
-                Op::Semicolon => p.push_raw(";"),
-
-                Op::ColonColon => p.push_raw("::"),
-                Op::DotDotEq => p.push_raw("..="),
-                Op::RArrow => p.push_raw("->"),
-                Op::FatArrow => p.push_raw("=>"),
-                Op::Dollar => p.push_raw("$"),
-            },
-            TokenCode::Pair(pair) => match pair {
-                Pair::ParenOpen => p.push_raw("("),
-                Pair::ParenClose => p.push_raw(")"),
-                Pair::SquareOpen => p.push_raw("["),
-                Pair::SquareClose => p.push_raw("]"),
-                Pair::BraceOpen => p.push_raw("{"),
-                Pair::BraceClose => p.push_raw("}"),
-                Pair::DoubleBraceOpen => p.push_raw("{{"),
-                Pair::DoubleBraceClose => p.push_raw("}}"),
-                Pair::OuterAttr => p.push_raw("#["),
-                Pair::InnerAttr => p.push_raw("#!["),
-            },
-        }
+        p.push_raw(&s.u);
     }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum TokenCode {
     Shebang(String),
+    Blank(String),
+    Comment(Comment),
     Literal(Literal),
     Identifier(Identifier),
     Lifetime(Identifier),
@@ -1519,6 +1561,8 @@ impl fmt::Debug for TokenCode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Shebang(a) => write!(f, "{}", a),
+            Self::Blank(a) => write!(f, "{}", a),
+            Self::Comment(a) => write!(f, "{:?}", a),
             Self::Literal(a) => write!(f, "{:?}", a),
             Self::Identifier(a) => write!(f, "{:?}", a),
             Self::Lifetime(a) => write!(f, "'{:?}", a),
@@ -1654,14 +1698,14 @@ impl Literal {
     }
     fn new_with_prefix(
         payload: LiteralPayload,
-        prefix: &mut Option<String>,
+        prefix: &mut Option<(String, usize)>,
         suffix: Option<String>,
     ) -> Literal {
         let p = prefix.clone();
         *prefix = None;
         Literal {
             payload,
-            prefix: p,
+            prefix: p.map(|it| it.0),
             suffix,
             span: Span::default(),
         }
@@ -1717,30 +1761,6 @@ impl ToLang for Literal {
         match &s.payload {
             LiteralPayload::String(a) => {
                 push_str(&a.to_rust_string(), false);
-
-                /* let mut n = 0;
-                let mut column = 1;
-                for c in a.text.chars() {
-                    if c == '\n' {
-                        n += 1;
-                        column = 1;
-                    } else {
-                        column += 1;
-                    }
-                }
-                if n > 0 {
-                    column += a.raw_count;
-                    p.push_str(
-                        "",
-                        Span {
-                            line: s.span.line + n,
-                            column,
-                            width: column,
-                            end_line: s.span.line + n,
-                            end_column: column,
-                        },
-                    );
-                } */
             }
             LiteralPayload::Char(a) => push_str(&a.to_rust_string(), false),
             LiteralPayload::Int(a) => push_str(a, true),
@@ -1770,42 +1790,11 @@ pub struct Identifier {
     pub span: Span, // same as Token's span, added here for ease of use
 }
 impl Identifier {
-    pub fn new(id: String, line: usize, column: usize) -> Identifier {
-        let width = id.len();
+    pub fn new(id: String) -> Identifier {
         Identifier {
+            id,
             prefix: None,
-            id,
-            span: Span {
-                line,
-                column,
-                width,
-                end_line: line,
-                end_column: column + width,
-            },
-        }
-    }
-    pub fn new_with_prefix(
-        id: String,
-        prefix: &mut Option<String>,
-        line: usize,
-        column: usize,
-    ) -> Identifier {
-        let mut width = id.len();
-        if let Some(p) = prefix {
-            width += p.len();
-        }
-        let p = prefix.clone();
-        *prefix = None;
-        Identifier {
-            prefix: p,
-            id,
-            span: Span {
-                line,
-                column,
-                width,
-                end_line: line,
-                end_column: column + width,
-            },
+            span: Span::default(),
         }
     }
 
@@ -2258,7 +2247,7 @@ impl fmt::Debug for Pair {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Comment {
     pub text: String,
     pub is_line: bool,

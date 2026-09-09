@@ -16,9 +16,6 @@ pub struct LangFormatter {
     column: usize,
 
     in_impl_static: bool,
-
-    comments: Vec<Comment>,
-    comment_index: usize,
 }
 // Clone required by rust-analyzer
 #[derive(Debug, Clone)]
@@ -38,7 +35,7 @@ pub struct RustSpan {
 }
 
 impl LangFormatter {
-    pub fn new(comments: Vec<Comment>) -> LangFormatter {
+    pub fn new() -> LangFormatter {
         LangFormatter {
             buf: String::new(),
             indent: 0,
@@ -48,9 +45,6 @@ impl LangFormatter {
             column: 1,
 
             in_impl_static: false,
-
-            comments,
-            comment_index: 0,
         }
     }
 
@@ -82,7 +76,7 @@ impl LangFormatter {
         this seems not to be a problem, as they don't have doc comments
     within and it's not used in macros(where order matters)
     */
-    pub fn push_comment(&mut self, span: &Span) {
+    /* pub fn push_comment(&mut self, span: &Span) {
         let s = self;
 
         let start = s.comment_index;
@@ -98,12 +92,12 @@ impl LangFormatter {
                 break;
             }
         }
-    }
+    } */
 
     pub fn push_str(&mut self, a: &str, span: Span) {
         let s = self;
 
-        s.push_comment(&span);
+        // s.push_comment(&span);
         s.span_pairs.push(SpanPair {
             u: span,
             rust: RustSpan {
@@ -166,9 +160,9 @@ pub trait ToLang {
 }
 
 // --------------------------------------------------------------------------------
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Package {
-    pub shebang: Option<String>,
+    pub shebang: Option<Token>,
     pub inner_attrs: Attrs,
     pub items: Vec<Item>,
 }
@@ -177,8 +171,7 @@ impl ToLang for Package {
         let s = self;
 
         if let Some(a) = &s.shebang {
-            p.push_raw(a);
-            p.push_raw("\n");
+            p.push_rust(a);
         }
 
         p.push_rust(&s.inner_attrs);
@@ -187,17 +180,16 @@ impl ToLang for Package {
         }
 
         // print remaining comments
-        for i in p.comment_index..p.comments.len() {
+        /* for i in p.comment_index..p.comments.len() {
             let a = mem::take(&mut p.comments[i]);
             p.push_rust(&a);
-        }
+        } */
     }
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
         if let Some(a) = &s.shebang {
-            p.push_raw(a);
-            p.push_raw("\n");
+            p.push_u(a);
         }
 
         p.push_u(&s.inner_attrs);
@@ -1850,6 +1842,8 @@ pub fn tokens_to_rust(span_open: Span, list: &[Token], span_close: Span, p: &mut
                     p.push_rust(&Token {
                         span: item.span,
                         code: T!["}}"],
+                        tokens_before: Vec::new(),
+                        u: "]".to_owned(),
                     });
                 }
             }
@@ -2204,7 +2198,6 @@ impl ToLang for Generics {
 #[derive(Debug, Default)]
 pub struct GenericParam {
     pub outer_attrs: Attrs,
-    pub name: Identifier,
     pub payload: GenericParamPayload,
 }
 impl ToLang for GenericParam {
@@ -2214,18 +2207,7 @@ impl ToLang for GenericParam {
         p.push_rust(&s.outer_attrs);
         match &s.payload {
             GenericParamPayload::Lifetime(a) => {
-                let span = s.name.span;
-                p.push_str(
-                    "'",
-                    Span {
-                        line: span.line,
-                        column: span.column - 1,
-                        width: 1,
-                        end_line: span.line,
-                        end_column: span.column,
-                    },
-                );
-                p.push_rust(&s.name);
+                p.push_rust(&a.lifetime);
                 if !a.lifetime_bounds.is_empty() {
                     p.push_raw(": ");
                     for (i, item) in a.lifetime_bounds.iter().enumerate() {
@@ -2237,7 +2219,7 @@ impl ToLang for GenericParam {
                 }
             }
             GenericParamPayload::Type(a) => {
-                p.push_rust(&s.name);
+                p.push_rust(&a.name);
                 if !a.bounds.items.is_empty() {
                     p.push_raw(": ");
                     p.push_rust(&a.bounds);
@@ -2250,7 +2232,7 @@ impl ToLang for GenericParam {
             GenericParamPayload::Const(a) => {
                 p.push_str("const", a.span_const);
                 p.push_raw(" ");
-                p.push_rust(&s.name);
+                p.push_rust(&a.name);
                 p.push_raw(": ");
                 p.push_rust(&a.type_);
                 if let Some(expr) = &a.expr {
@@ -2267,7 +2249,7 @@ impl ToLang for GenericParam {
         match &s.payload {
             GenericParamPayload::Lifetime(a) => {
                 p.push_raw("'");
-                p.push_u(&s.name);
+                p.push_u(&a.lifetime);
                 if !a.lifetime_bounds.is_empty() {
                     p.push_raw(": ");
                     for (i, item) in a.lifetime_bounds.iter().enumerate() {
@@ -2279,7 +2261,7 @@ impl ToLang for GenericParam {
                 }
             }
             GenericParamPayload::Type(a) => {
-                p.push_u(&s.name);
+                p.push_u(&a.name);
                 if !a.bounds.items.is_empty() {
                     p.push_raw(": ");
                     p.push_u(&a.bounds);
@@ -2292,7 +2274,7 @@ impl ToLang for GenericParam {
             GenericParamPayload::Const(a) => {
                 p.push_str("const", a.span_const);
                 p.push_raw(" ");
-                p.push_u(&s.name);
+                p.push_u(&a.name);
                 p.push_raw(": ");
                 p.push_u(&a.type_);
                 if let Some(expr) = &a.expr {
@@ -2317,43 +2299,35 @@ impl Default for GenericParamPayload {
 
 #[derive(Debug, Default)]
 pub struct LifetimeParam {
+    pub lifetime: Token,
     pub lifetime_bounds: Vec<Lifetime>,
 }
 #[derive(Debug, Default)]
 pub struct Lifetime {
-    pub name: Identifier,
+    pub name: Token,
 }
 impl ToLang for Lifetime {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str(
-            "'",
-            Span {
-                line: s.name.span.line,
-                column: s.name.span.column - 1,
-                width: 1,
-                end_line: s.name.span.line,
-                end_column: s.name.span.column,
-            },
-        );
         p.push_rust(&s.name);
     }
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_raw("'");
         p.push_u(&s.name);
     }
 }
 #[derive(Debug, Default)]
 pub struct TypeParam {
+    pub name: Identifier,
     pub bounds: TypeParamBounds,
     pub type_: Option<Type>,
 }
 // Identifier const Type
 #[derive(Debug, Default)]
 pub struct ConstParam {
+    pub name: Identifier,
     pub type_: Type,
     pub expr: Option<Expr>,
 

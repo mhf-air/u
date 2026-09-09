@@ -35,7 +35,6 @@ pub struct Parse {
 
     tokens: Vec<Token>,
     index: Cell<usize>,
-    comments: Vec<Comment>,
 
     stop_on_brace_open: Cell<bool>,
     op_map: HashMap<TokenCode, u8>,
@@ -54,7 +53,6 @@ impl Parse {
 
             tokens: lex.tokens,
             index: Cell::new(0),
-            comments: lex.comments,
 
             stop_on_brace_open: Cell::new(false),
             op_map: build_operator_precedence_map(),
@@ -125,14 +123,14 @@ impl Parse {
 
     pub fn to_rust(self) -> Result<LangFormatter, ParseError> {
         let s = self;
-        let mut p = LangFormatter::new(s.comments);
+        let mut p = LangFormatter::new();
         s.pkg.to_rust(&mut p);
         Ok(p)
     }
 
     pub fn to_u(self) -> String {
         let s = self;
-        let mut p = LangFormatter::new(s.comments);
+        let mut p = LangFormatter::new();
         s.pkg.to_u(&mut p);
         p.buf()
     }
@@ -281,19 +279,26 @@ impl Parse {
         if s.tokens.is_empty() {
             return Ok(());
         }
-        let shebang = if let TokenCode::Shebang(a) = &s.current().code {
+
+        // possible shebang
+        let token = s.current();
+        let shebang = if let TokenCode::Shebang(_) = &token.code {
             s.plusplus();
-            Some(a.clone())
+            Some(token.clone())
         } else {
             None
         };
 
         s.skip_semicolons();
         if !s.has_more() {
+            s.pkg = Package {
+                shebang,
+                ..Default::default()
+            };
             return Ok(());
         }
 
-        // parse package
+        // possible inner attrs
         let inner_attrs = match s.parse_inner_attrs() {
             Ok(ok) => ok,
             Err(err) => {
@@ -301,7 +306,7 @@ impl Parse {
             }
         };
 
-        // parse items
+        // items
         let mut items = Vec::new();
         while s.has_more() {
             s.skip_semicolons();
@@ -1025,23 +1030,27 @@ impl Parse {
                         s.plusplus();
                         r.outer_attrs = s.parse_outer_attrs()?;
                     }
-                    TokenCode::Lifetime(identifier) => {
+                    TokenCode::Lifetime(_) => {
                         s.plusplus();
-                        r.name = identifier.clone();
-                        r.payload = GenericParamPayload::Lifetime(s.parse_lifetime_bounds()?);
+                        let mut c = s.parse_lifetime_bounds()?;
+                        c.lifetime = token.clone();
+                        r.payload = GenericParamPayload::Lifetime(c);
                     }
                     TokenCode::Identifier(identifier) => {
                         s.plusplus();
-                        r.name = identifier.clone();
+                        let name = identifier.clone();
 
                         let token = s.current();
                         if matches!(token.code, T![const]) {
                             s.plusplus();
                             let mut c = parse_const_param(s)?;
                             c.span_const = token.span;
+                            c.name = name;
                             r.payload = GenericParamPayload::Const(c);
                         } else {
-                            r.payload = GenericParamPayload::Type(parse_type_param(s)?);
+                            let mut c = parse_type_param(s)?;
+                            c.name = name;
+                            r.payload = GenericParamPayload::Type(c);
                         }
                     }
                     _ => {
@@ -1123,7 +1132,7 @@ impl Parse {
                 T!["]"] | T![,] | T![;] => {
                     break;
                 }
-                TokenCode::Lifetime(identifier) => {
+                TokenCode::Lifetime(_) => {
                     if expect_plus {
                         return Err(s.panic(
                             token,
@@ -1131,7 +1140,7 @@ impl Parse {
                         ));
                     }
                     r.lifetime_bounds.push(Lifetime {
-                        name: identifier.clone(),
+                        name: token.clone(),
                     });
                     expect_plus = true;
                     s.plusplus();
@@ -1163,9 +1172,9 @@ impl Parse {
         while s.has_more() {
             let token = s.current();
 
-            if let TokenCode::Lifetime(identifier) = &token.code {
+            if let TokenCode::Lifetime(_) = &token.code {
                 r.items.push(TypeParamBound::Lifetime(Lifetime {
-                    name: identifier.clone(),
+                    name: token.clone(),
                 }));
                 s.plusplus();
             } else if matches!(&token.code, T![use]) {
@@ -1179,9 +1188,9 @@ impl Parse {
                     let token = s.current();
                     s.plusplus();
                     match &token.code {
-                        TokenCode::Lifetime(identifier) => {
+                        TokenCode::Lifetime(_) => {
                             items.push(UseBoundGenericArg::Lifetime(Lifetime {
-                                name: identifier.clone(),
+                                name: token.clone(),
                             }));
                         }
                         TokenCode::Identifier(identifier) => {
@@ -1436,21 +1445,27 @@ impl Parse {
                 if expect_identifier {
                     if matches!(&token.code, T![*]) {
                         // because no auto added semicolon exists after *\n, so return immediately
-                        let a =
-                            Identifier::new("*".to_string(), token.span.line, token.span.column);
+                        let mut a = Identifier::new("*".to_string());
+                        a.span = token.span;
                         r.paths.push(a);
                         return Ok(r);
                     }
                     let identifier = match &token.code {
                         TokenCode::Identifier(a) => a.clone(),
                         T![self] => {
-                            Identifier::new("self".to_string(), token.span.line, token.span.column)
+                            let mut a = Identifier::new("self".to_string());
+                            a.span = token.span;
+                            a
                         }
                         T![crate] => {
-                            Identifier::new("crate".to_string(), token.span.line, token.span.column)
+                            let mut a = Identifier::new("crate".to_string());
+                            a.span = token.span;
+                            a
                         }
                         T![super] => {
-                            Identifier::new("super".to_string(), token.span.line, token.span.column)
+                            let mut a = Identifier::new("super".to_string());
+                            a.span = token.span;
+                            a
                         }
                         _ => {
                             return Err(s.panic(
@@ -2773,6 +2788,8 @@ impl Parse {
         let fake_in_token = Token{
             code: TokenCode::Keyword(Keyword::In),
             span: Span::default(),
+            tokens_before: Vec::new(),
+            u: String::new(),
         };
 
         // get the tokens from after for to the first opening brace({) or semicolon(;),
@@ -3149,6 +3166,8 @@ impl Parse {
                     list.push(ExprOp::Op(Token {
                         code: token.code.clone(),
                         span: token.span,
+                        tokens_before: token.tokens_before.clone(),
+                        u: token.u.clone(),
                     }));
                     let expr = s.parse_binary_expr()?;
                     list.push(ExprOp::Expr(expr));
@@ -4534,9 +4553,10 @@ impl Parse {
                 let double_ref = matches!(&token.code, T![&&]);
 
                 let mut lifetime = None;
-                if let TokenCode::Lifetime(identifier) = &s.current().code {
+                let token = s.current();
+                if let TokenCode::Lifetime(_) = &token.code {
                     lifetime = Some(Lifetime {
-                        name: identifier.clone(),
+                        name: token.clone(),
                     });
                     s.plusplus();
                 }
@@ -4898,12 +4918,12 @@ impl Parse {
                 s.plusplus();
                 break;
             }
-            if let TokenCode::Lifetime(identifier) = &token.code {
+            if let TokenCode::Lifetime(_) = &token.code {
                 s.plusplus();
                 let bounds = s.parse_lifetime_bounds()?;
                 let item = WhereItemLifetime {
                     lifetime: Lifetime {
-                        name: identifier.clone(),
+                        name: token.clone(),
                     },
                     lifetime_bounds: bounds.lifetime_bounds,
                 };
@@ -5069,10 +5089,10 @@ impl Parse {
         fn parse_generic_arg(s: &Parse) -> ParseResult<GenericArg> {
             let token = s.current();
             Ok(match &token.code {
-                TokenCode::Lifetime(lifetime) => {
+                TokenCode::Lifetime(_) => {
                     s.plusplus();
                     GenericArg::Lifetime(Lifetime {
-                        name: lifetime.clone(),
+                        name: token.clone(),
                     })
                 }
                 T!["{"] => {

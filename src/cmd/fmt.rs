@@ -245,7 +245,7 @@ impl Fmt {
             }
         }
 
-        for comment in &lex.comments {
+        /* for comment in &lex.comments {
             if comment.is_line {
                 continue;
             }
@@ -256,7 +256,7 @@ impl Fmt {
             for i in 1..=count {
                 s.skipped_lines.insert(comment.span.line + i);
             }
-        }
+        } */
     }
 
     fn fmt_pkg(&mut self, pkg: cc::Package) {
