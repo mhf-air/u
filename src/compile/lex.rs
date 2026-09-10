@@ -374,12 +374,13 @@ impl Lex {
                     // add identifier
                     if let Some(prefix) = id_prefix {
                         // with prefix
+                        let u = s.sub_str(prefix.1, delta);
                         let id = Identifier {
                             prefix: Some(prefix.0),
                             id: a,
                             span: Span::default(),
+                            u: u.clone(),
                         };
-                        let u = s.sub_str(prefix.1, delta);
                         s.add_token(TokenCode::Identifier(id), u);
                         id_prefix = None;
                     } else {
@@ -393,7 +394,8 @@ impl Lex {
                             if let Ok(key) = keyword {
                                 s.add_token(TokenCode::Keyword(key), a);
                             } else {
-                                s.add_token(TokenCode::Identifier(Identifier::new(a.clone())), a);
+                                let id = Identifier::new(a.clone(), a.clone());
+                                s.add_token(TokenCode::Identifier(id), a);
                             }
                         }
                     }
@@ -402,7 +404,8 @@ impl Lex {
                 }
                 // reached EOF here
                 let u = s.sub_str(start, total_len);
-                s.add_token(TokenCode::Identifier(Identifier::new(u.clone())), u);
+                let id = Identifier::new(u.clone(), u.clone());
+                s.add_token(TokenCode::Identifier(id), u);
                 return Ok(());
             }
 
@@ -750,7 +753,8 @@ impl Lex {
                         if is_lifetime {
                             let a = s.sub_str(start + 1, end);
                             let u = s.sub_str(start, end);
-                            s.add_token(TokenCode::Lifetime(Identifier::new(a)), u);
+                            let id = Identifier::new(a, u.clone());
+                            s.add_token(TokenCode::Lifetime(id), u);
                             i = end;
                             continue 'outer;
                         }
@@ -1283,7 +1287,7 @@ impl Lex {
                                 } else {
                                     s.sub_str(start, end)
                                 };
-                                s.add_token(TokenCode::Literal(Literal::new_with_prefix(
+                                s.add_token_nl(TokenCode::Literal(Literal::new_with_prefix(
                                     LiteralPayload::String(
                                         LiteralString {
                                             raw_count,
@@ -1770,12 +1774,14 @@ impl ToLang for Literal {
 pub struct Identifier {
     pub prefix: Option<String>,
     pub id: String,
+    pub u: String,
     pub span: Span, // same as Token's span, added here for ease of use
 }
 impl Identifier {
-    pub fn new(id: String) -> Identifier {
+    pub fn new(id: String, u: String) -> Identifier {
         Identifier {
             id,
+            u,
             prefix: None,
             span: Span::default(),
         }

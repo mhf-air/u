@@ -119,6 +119,11 @@ impl Parse {
         &self.pkg
     }
 
+    pub fn get_lang_formatter(&self) -> LangFormatter<'_> {
+        let s = self;
+        LangFormatter::new(&s.tokens, &s.end_tokens)
+    }
+
     pub fn to_rust(self) -> Result<ToRust, ParseError> {
         let s = self;
         let mut p = LangFormatter::new(&s.tokens, &s.end_tokens);
@@ -1451,7 +1456,8 @@ impl Parse {
                 if expect_identifier {
                     if matches!(&token.code, T![*]) {
                         // because no auto added semicolon exists after *\n, so return immediately
-                        let mut a = Identifier::new("*".to_string());
+                        let b = "*".to_owned();
+                        let mut a = Identifier::new(b.clone(), b);
                         a.span = token.span;
                         r.paths.push(a);
                         return Ok(r);
@@ -1459,17 +1465,20 @@ impl Parse {
                     let identifier = match &token.code {
                         TokenCode::Identifier(a) => a.clone(),
                         T![self] => {
-                            let mut a = Identifier::new("self".to_string());
+                            let b = "self".to_owned();
+                            let mut a = Identifier::new(b.clone(), b);
                             a.span = token.span;
                             a
                         }
                         T![crate] => {
-                            let mut a = Identifier::new("crate".to_string());
+                            let b = "crate".to_owned();
+                            let mut a = Identifier::new(b.clone(), b);
                             a.span = token.span;
                             a
                         }
                         T![super] => {
-                            let mut a = Identifier::new("super".to_string());
+                            let b = "super".to_owned();
+                            let mut a = Identifier::new(b.clone(), b);
                             a.span = token.span;
                             a
                         }
@@ -1843,15 +1852,15 @@ impl Parse {
                     r.payload = SelfParamPayload::Short(short);
                     s.inc(2);
                 }
-                TokenCode::Lifetime(identifier) => match &s.nth(2).code {
+                TokenCode::Lifetime(_) => match &s.nth(2).code {
                     T![")"] => {
-                        short.label = Some(identifier.clone());
+                        short.label = Some(s.nth(1).clone());
                         r.payload = SelfParamPayload::Short(short);
                         s.inc(3);
                     }
                     T![mut] => {
                         if matches!(&s.nth(3).code, T![")"]) {
-                            short.label = Some(identifier.clone());
+                            short.label = Some(s.nth(1).clone());
                             short.mut_ = true;
                             short.span_mut = Some(s.nth(2).span);
                             r.payload = SelfParamPayload::Short(short);
@@ -2694,9 +2703,9 @@ impl Parse {
         if matches!(&token.code, T![;]) {
             return Ok(r);
         }
-        if let TokenCode::Lifetime(a) = &token.code {
-            r.label = Some(a.clone());
-            r.span_label = Some(a.span);
+        if let TokenCode::Lifetime(_) = &token.code {
+            r.label = Some(token.clone());
+            r.span_label = Some(token.span);
             s.plusplus();
         } else {
             return Err(s.panic(token, &format!("expected lifetime, but got {:?}", token)));
@@ -2717,10 +2726,10 @@ impl Parse {
         }
 
         // parse label
-        if let TokenCode::Lifetime(a) = &token.code {
+        if let TokenCode::Lifetime(_) = &token.code {
             s.plusplus();
-            r.label = Some(a.clone());
-            r.span_label = Some(a.span);
+            r.label = Some(token.clone());
+            r.span_label = Some(token.span);
         }
 
         let token = s.current();
@@ -3588,7 +3597,7 @@ impl Parse {
                 // Expr as Type
                 T![as] => {
                     let type_ = s.parse_type()?;
-                    let type_no_bounds = if let Type::TypeNoBounds(a) = type_ {
+                    let type_no_bounds = if let TypePayload::TypeNoBounds(a) = type_.payload {
                         *a
                     } else {
                         unreachable!("not a TypeNoBounds")
@@ -3750,7 +3759,7 @@ impl Parse {
             }
 
             // lifetime
-            TokenCode::Lifetime(lifetime) => {
+            TokenCode::Lifetime(_) => {
                 let span_label = token.span;
                 s.expect(T![:])?;
 
@@ -3760,7 +3769,7 @@ impl Parse {
                     let mut for_ = s.parse_for()?;
                     for_.span_for = span_for;
                     for_.span_label = Some(span_label);
-                    for_.label = Some(lifetime.clone());
+                    for_.label = Some(token.clone());
                     r.payload =
                         ExprPayload::WithBlock(Box::new(ExprWithBlock::Loop(Box::new(for_))));
                 } else {
@@ -3768,7 +3777,7 @@ impl Parse {
                     s.expect(T!["{"])?;
                     let mut a = s.parse_block_expr()?;
                     a.span_brace_open = span_brace_open;
-                    a.label = Some(lifetime.clone());
+                    a.label = Some(token.clone());
                     a.span_label = Some(span_label);
                     r.payload = ExprPayload::WithBlock(Box::new(ExprWithBlock::BlockExpr(a)));
                 }
@@ -4435,7 +4444,7 @@ impl Parse {
             s.plusplus();
             // return type
             let type_ = s.parse_type()?;
-            if let Type::TypeNoBounds(a) = type_ {
+            if let TypePayload::TypeNoBounds(a) = type_.payload {
                 r.return_type = Some(*a);
             } else {
                 return Err(s.panic(token, "expected TypeNoBounds"));
@@ -4450,6 +4459,18 @@ impl Parse {
 
     // --------------------------------------------------------------------------------
     fn parse_type(&self) -> ParseResult<Type> {
+        let s = self;
+
+        let start = s.index.get();
+        let payload = s.parse_type_payload()?;
+        let end = s.index.get();
+        let r = Type {
+            payload,
+            u_pair: UPair{start, end},
+        };
+        return Ok(r);
+    }
+    fn parse_type_payload(&self) -> ParseResult<TypePayload> {
         let s = self;
 
         let token = s.current();
@@ -4467,21 +4488,23 @@ impl Parse {
                             s.plusplus();
                             if type_list.len() == 1 && !is_tuple {
                                 let a = mem::take(&mut type_list[0]);
-                                return Ok(Type::TypeNoBounds(Box::new(
+                                let payload = TypePayload::TypeNoBounds(Box::new(
                                     TypeNoBounds::Parenthesized(TypeParenthesized {
                                         type_: a,
                                         span_paren_open,
                                         span_paren_close: token.span,
                                     }),
-                                )));
+                                ));
+                                return Ok(payload);
                             } else {
-                                return Ok(Type::TypeNoBounds(Box::new(TypeNoBounds::Tuple(
+                                let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Tuple(
                                     TypeTuple {
                                         items: type_list,
                                         span_paren_open,
                                         span_paren_close: token.span,
                                     },
-                                ))));
+                                )));
+                                return Ok(payload);
                             }
                         }
                         T![,] => {
@@ -4502,12 +4525,13 @@ impl Parse {
 
                 let a_type_path = s.parse_type_path()?;
 
-                return Ok(Type::TypeNoBounds(Box::new(
+                let payload = TypePayload::TypeNoBounds(Box::new(
                     TypeNoBounds::QualifiedPathInType(QualifiedPathInType {
                         type_: qualified_path_type,
                         items: a_type_path.items,
                     }),
-                )));
+                ));
+                return Ok(payload);
             }
             // array or slice
             T!["{{"] => {
@@ -4521,7 +4545,7 @@ impl Parse {
                         let expr = s.parse_expr()?;
                         let span_double_brace_close = s.current().span;
                         s.expect(T!["}}"])?;
-                        return Ok(Type::TypeNoBounds(Box::new(TypeNoBounds::Array(
+                        let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Array(
                             TypeArray {
                                 type_,
                                 expr,
@@ -4529,17 +4553,19 @@ impl Parse {
                                 span_double_brace_close,
                                 span_semicolon,
                             },
-                        ))));
+                        )));
+                        return Ok(payload);
                     }
                     T!["}}"] => {
                         s.plusplus();
-                        return Ok(Type::TypeNoBounds(Box::new(TypeNoBounds::Slice(
+                        let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Slice(
                             TypeSlice {
                                 type_,
                                 span_double_brace_open,
                                 span_double_brace_close: token.span,
                             },
-                        ))));
+                        )));
+                        return Ok(payload);
                     }
                     _ => {
                         return Err(
@@ -4570,7 +4596,7 @@ impl Parse {
                     s.plusplus();
                 }
                 let type_ = s.parse_type()?;
-                if let Type::TypeNoBounds(t) = type_ {
+                if let TypePayload::TypeNoBounds(t) = type_.payload {
                     let no_bounds = Box::new(TypeNoBounds::Reference(TypeReference {
                         lifetime,
                         mut_,
@@ -4579,7 +4605,7 @@ impl Parse {
                         span_mut,
                     }));
                     if double_ref {
-                        return Ok(Type::TypeNoBounds(Box::new(TypeNoBounds::Reference(
+                        let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Reference(
                             TypeReference {
                                 lifetime: None,
                                 mut_: false,
@@ -4587,9 +4613,11 @@ impl Parse {
                                 span_ref,
                                 span_mut,
                             },
-                        ))));
+                        )));
+                        return Ok(payload);
                     } else {
-                        return Ok(Type::TypeNoBounds(no_bounds));
+                        let payload = TypePayload::TypeNoBounds(no_bounds);
+                        return Ok(payload);
                     }
                 } else {
                     return Err(s.panic(token, "expected TypeNoBounds"));
@@ -4617,76 +4645,84 @@ impl Parse {
                     }
                 }
                 let type_ = s.parse_type()?;
-                if let Type::TypeNoBounds(t) = type_ {
-                    return Ok(Type::TypeNoBounds(Box::new(TypeNoBounds::RawPointer(
+                if let TypePayload::TypeNoBounds(t) = type_.payload {
+                    let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::RawPointer(
                         TypeRawPointer {
                             mut_,
                             type_no_bounds: t,
                             span_pointer,
                             span_mut,
                         },
-                    ))));
+                    )));
+                    return Ok(payload);
                 } else {
                     return Err(s.panic(token, "expected TypeNoBounds"));
                 }
             }
             // never
             T![!] => {
-                return Ok(Type::TypeNoBounds(Box::new(TypeNoBounds::Never(
+                let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Never(
                     token.span,
-                ))));
+                )));
+                return Ok(payload);
             }
             // impl interface or impl interface one bound
             T![impl] => {
                 let next_token = s.current();
                 if let TokenCode::Lifetime(_) = &next_token.code {
                     let bounds = s.parse_type_param_bounds()?;
-                    return Ok(Type::ImplInterface(bounds, token.span));
+                    let payload = TypePayload::ImplInterface(bounds, token.span);
+                    return Ok(payload);
                 }
                 let bound = s.parse_interface_bound()?;
                 if !matches!(s.current().code, T![+]) {
-                    return Ok(Type::TypeNoBounds(Box::new(
+                    let payload = TypePayload::TypeNoBounds(Box::new(
                         TypeNoBounds::ImplInterfaceOneBound(TypeImplInterfaceOneBound {
                             bound,
                             span_impl: token.span,
                         }),
-                    )));
+                    ));
+                    return Ok(payload);
                 }
                 s.plusplus();
                 let mut bounds = s.parse_type_param_bounds()?;
                 bounds
                     .items
                     .insert(0, TypeParamBound::InterfaceBound(bound));
-                return Ok(Type::ImplInterface(bounds, token.span));
+                let payload = TypePayload::ImplInterface(bounds, token.span);
+                return Ok(payload);
             }
             // interface object or interface object one bound
             T![dyn] => {
                 let next_token = s.current();
                 if let TokenCode::Lifetime(_) = &next_token.code {
                     let bounds = s.parse_type_param_bounds()?;
-                    return Ok(Type::InterfaceObject(TypeInterfaceObject {
+                    let payload = TypePayload::InterfaceObject(TypeInterfaceObject {
                         bounds,
                         span: token.span,
-                    }));
+                    });
+                    return Ok(payload);
                 }
                 let bound = s.parse_interface_bound()?;
                 if !matches!(s.current().code, T![+]) {
-                    return Ok(Type::TypeNoBounds(Box::new(
+                    let payload = TypePayload::TypeNoBounds(Box::new(
                         TypeNoBounds::InterfaceObjectOneBound(TypeInterfaceObjectOneBound {
                             bound,
                             span_dyn: token.span,
                         }),
-                    )));
+                    ));
+                    return Ok(payload);
                 }
                 s.plusplus();
                 let mut bounds = s.parse_type_param_bounds()?;
                 bounds
                     .items
                     .insert(0, TypeParamBound::InterfaceBound(bound));
-                return Ok(Type::InterfaceObject(TypeInterfaceObject {
+                let payload = TypePayload::InterfaceObject(TypeInterfaceObject {
                     bounds,
                     span: token.span,
-                }));
+                });
+                return Ok(payload);
             }
 
             // bare function
@@ -4697,22 +4733,25 @@ impl Parse {
                 s.expect(T![func])?;
                 let mut f = s.parse_func_type(FuncType::Func(span_func))?;
                 f.for_lifetimes = Some(lifetimes);
-                return Ok(Type::TypeNoBounds(Box::new(TypeNoBounds::BareFunction(
+                let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::BareFunction(
                     Box::new(f),
-                ))));
+                )));
+                return Ok(payload);
             }
             T![fn] => {
                 let f = s.parse_func_type(FuncType::Func(token.span))?;
-                return Ok(Type::TypeNoBounds(Box::new(TypeNoBounds::BareFunction(
+                let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::BareFunction(
                     Box::new(f),
-                ))));
+                )));
+                return Ok(payload);
             }
 
             // type path
             T![Self] => {
                 s.minusminus();
                 let a = s.parse_type_path()?;
-                return Ok(Type::TypeNoBounds(Box::new(TypeNoBounds::TypePath(a))));
+                let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::TypePath(a)));
+                return Ok(payload);
             }
 
             // type path or macro call(simple path followed by ,,)
@@ -4721,7 +4760,8 @@ impl Parse {
                 let tp = s.parse_type_path()?;
                 let token = s.current();
                 if !matches!(token.code, T![,,]) {
-                    return Ok(Type::TypeNoBounds(Box::new(TypeNoBounds::TypePath(tp))));
+                    let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::TypePath(tp)));
+                    return Ok(payload);
                 }
 
                 let mut path = SimplePath::default();
@@ -4735,7 +4775,8 @@ impl Parse {
                 }
                 s.plusplus();
                 let call = s.parse_macro_call(path, token.span)?;
-                return Ok(Type::TypeNoBounds(Box::new(TypeNoBounds::MacroCall(call))));
+                let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::MacroCall(call)));
+                return Ok(payload);
             }
             _ => {
                 return Err(s.panic(token, &format!("illegal token {:?} for type", token)));
@@ -4880,8 +4921,8 @@ impl Parse {
             s.plusplus();
             // return type
             let type_ = s.parse_type()?;
-            if let Type::TypeNoBounds(a) = type_ {
-                r.return_type = Some(BareFunctionReturnType(a));
+            if let TypePayload::TypeNoBounds(_) = type_.payload {
+                r.return_type = Some(type_);
             } else {
                 return Err(s.panic(token, "expected TypeNoBounds but got {:?}"));
             }
@@ -5012,9 +5053,7 @@ impl Parse {
                         for param in f.params {
                             a.inputs.push(param.type_);
                         }
-                        if let Some(BareFunctionReturnType(b)) = f.return_type {
-                            a.return_type = Some(Type::TypeNoBounds(b));
-                        }
+                        a.return_type = f.return_type;
                         let last = r.items.pop().unwrap();
                         r.items.push(TypePathSegment {
                             name: last.name,

@@ -38,13 +38,12 @@ $!"inner, not useful now"
 // - when writing to .*.u, align multi-line where clause members with gap of 3 spaces
 // - in rust-to-u, for all expressions(including ret) that doesn't end with ';',
 //      translate to "< ret EXPR" in u
-// - remove to_u(), attach each ast with (start_index, end_index) of all tokens(including comments)
 // - places that might affect comment order
 //      - item declaration
 //      - let, ->
 //      - pub
 //      - method receiver
-// - u's ast to a list of rust tokens
+// - goto-definition jump to the correct position in u
 
 crate std
 crate std as ruststd

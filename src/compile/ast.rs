@@ -64,6 +64,10 @@ impl<'a> LangFormatter<'a> {
         let s = self;
         s.buf
     }
+    pub fn buf_ref(&self) -> &String {
+        let s = self;
+        &s.buf
+    }
     pub fn span_pairs(&self) -> &Vec<SpanPair> {
         let s = self;
         &s.span_pairs
@@ -89,12 +93,25 @@ impl<'a> LangFormatter<'a> {
         let s = self;
         a.to_u(s);
     }
+
+    // push all tokens including whitespaces and comments as they are in .u file
     pub fn push_u_pair(&mut self, pair: &UPair) {
         let s = self;
         let list = &s.tokens[pair.start..pair.end];
         for it in list {
             for a in &it.tokens_before {
                 s.buf.push_str(&a.u);
+            }
+            s.buf.push_str(&it.u);
+        }
+    }
+    // condense all whitespaces and comments into one space
+    pub fn push_u_pair_space(&mut self, pair: &UPair) {
+        let s = self;
+        let list = &s.tokens[pair.start..pair.end];
+        for it in list {
+            if !it.tokens_before.is_empty() {
+                s.buf.push_str(" ");
             }
             s.buf.push_str(&it.u);
         }
@@ -868,7 +885,6 @@ impl ToLang for SelfParam {
                 }
                 p.push_str("&", a.span_ref);
                 if let Some(label) = &a.label {
-                    p.push_raw("'");
                     p.push_rust(label);
                     p.push_raw(" ");
                 }
@@ -905,7 +921,6 @@ impl ToLang for SelfParam {
                 }
                 p.push_raw("&");
                 if let Some(label) = &a.label {
-                    p.push_raw("'");
                     p.push_u(label);
                     p.push_raw(" ");
                 }
@@ -929,7 +944,7 @@ impl Default for SelfParamPayload {
 }
 #[derive(Debug, Default)]
 pub struct SelfParamShort {
-    pub label: Option<Identifier>,
+    pub label: Option<Token>,
     pub mut_: bool,
 
     pub span_self: Option<Span>,
@@ -3687,29 +3702,44 @@ impl ToLang for PatternRangeBound {
 }
 
 // --------------------------------------------------------------------------------
-#[derive(Debug)]
-pub enum Type {
-    TypeNoBounds(Box<TypeNoBounds>),
-    ImplInterface(TypeParamBounds, Span),
-    InterfaceObject(TypeInterfaceObject),
-}
-impl Default for Type {
-    fn default() -> Self {
-        Type::ImplInterface(TypeParamBounds::default(), Span::default())
-    }
+#[derive(Debug, Default)]
+pub struct Type {
+    pub payload: TypePayload,
+    pub u_pair: UPair,
 }
 impl ToLang for Type {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
+        p.push_rust(&s.payload);
+    }
+    fn to_u(&self, p: &mut LangFormatter) {
+        let s = self;
+        p.push_u(&s.payload);
+    }
+}
+#[derive(Debug)]
+pub enum TypePayload {
+    TypeNoBounds(Box<TypeNoBounds>),
+    ImplInterface(TypeParamBounds, Span),
+    InterfaceObject(TypeInterfaceObject),
+}
+impl Default for TypePayload {
+    fn default() -> Self {
+        TypePayload::ImplInterface(TypeParamBounds::default(), Span::default())
+    }
+}
+impl ToLang for TypePayload {
+    fn to_rust(&self, p: &mut LangFormatter) {
+        let s = self;
 
         match s {
-            Type::TypeNoBounds(a) => p.push_rust(a.as_ref()),
-            Type::ImplInterface(a, span) => {
+            TypePayload::TypeNoBounds(a) => p.push_rust(a.as_ref()),
+            TypePayload::ImplInterface(a, span) => {
                 p.push_str("impl", *span);
                 p.push_raw(" ");
                 p.push_rust(a);
             }
-            Type::InterfaceObject(a) => {
+            TypePayload::InterfaceObject(a) => {
                 p.push_str("dyn", a.span);
                 p.push_raw(" ");
                 p.push_rust(&a.bounds);
@@ -3720,12 +3750,12 @@ impl ToLang for Type {
         let s = self;
 
         match s {
-            Type::TypeNoBounds(a) => p.push_u(a.as_ref()),
-            Type::ImplInterface(a, _) => {
+            TypePayload::TypeNoBounds(a) => p.push_u(a.as_ref()),
+            TypePayload::ImplInterface(a, _) => {
                 p.push_raw("impl ");
                 p.push_u(a);
             }
-            Type::InterfaceObject(a) => {
+            TypePayload::InterfaceObject(a) => {
                 p.push_raw("dyn ");
                 p.push_u(&a.bounds);
             }
@@ -3980,7 +4010,7 @@ pub struct TypeBareFunction {
     pub func_type: FuncType,
     pub qualifier: FuncTypeQualifier,
     pub params: Vec<MaybeNamedParam>,
-    pub return_type: Option<BareFunctionReturnType>,
+    pub return_type: Option<Type>,
     pub variadics: Option<MaybeNamedParamVariadics>,
 
     pub span_paren_open: Span,
@@ -4033,7 +4063,7 @@ impl ToLang for TypeBareFunction {
 
         if let Some(return_type) = &s.return_type {
             p.push_raw(" -> ");
-            p.push_rust(&*return_type.0);
+            p.push_rust(return_type);
         }
     }
     fn to_u(&self, p: &mut LangFormatter) {
@@ -4074,7 +4104,7 @@ impl ToLang for TypeBareFunction {
 
         if let Some(return_type) = &s.return_type {
             p.push_raw(" ");
-            p.push_u(&*return_type.0);
+            p.push_u(return_type);
         }
     }
 }
@@ -4105,9 +4135,6 @@ pub struct MaybeNamedParamVariadics {
 
     pub span: Span,
 }
-
-#[derive(Debug)]
-pub struct BareFunctionReturnType(pub Box<TypeNoBounds>);
 
 // --------------------------------------------------------------------------------
 #[derive(Debug)]
@@ -4284,7 +4311,7 @@ impl Default for ExprPayload {
 #[derive(Debug, Default)]
 pub struct BlockExpr {
     pub inner_attrs: Attrs,
-    pub label: Option<Identifier>,
+    pub label: Option<Token>,
     pub stmts: Vec<Stmt>,
 
     pub span_label: Option<Span>,
@@ -4296,7 +4323,6 @@ impl ToLang for BlockExpr {
         let s = self;
 
         if let Some(label) = &s.label {
-            p.push_str("'", s.span_label.unwrap());
             p.push_rust(label);
             p.push_raw(": ");
         }
@@ -4316,7 +4342,6 @@ impl ToLang for BlockExpr {
         let s = self;
 
         if let Some(label) = &s.label {
-            p.push_raw("'");
             p.push_u(label);
             p.push_raw(": ");
         }
@@ -4445,7 +4470,7 @@ impl ToLang for ExprConstBlock {
 }
 #[derive(Debug, Default)]
 pub struct ExprLoop {
-    pub label: Option<Identifier>,
+    pub label: Option<Token>,
     pub body: BlockExpr,
     pub payload: ExprLoopPayload,
 
@@ -4457,7 +4482,6 @@ impl ToLang for ExprLoop {
         let s = self;
 
         if let Some(label) = &s.label {
-            p.push_str("'", s.span_label.unwrap());
             p.push_rust(label);
             p.push_raw(": ");
         }
@@ -4486,7 +4510,6 @@ impl ToLang for ExprLoop {
         let s = self;
 
         if let Some(label) = &s.label {
-            p.push_raw("'");
             p.push_u(label);
             p.push_raw(": ");
         }
@@ -5811,7 +5834,7 @@ impl ToLang for ExprClosure {
 }
 #[derive(Debug, Default)]
 pub struct ExprContinue {
-    pub label: Option<Identifier>,
+    pub label: Option<Token>,
 
     pub span_continue: Span,
     pub span_label: Option<Span>,
@@ -5823,7 +5846,6 @@ impl ToLang for ExprContinue {
         p.push_str("continue", s.span_continue);
         if let Some(identifier) = &s.label {
             p.push_raw(" ");
-            p.push_str("'", s.span_label.unwrap());
             p.push_rust(identifier);
         }
     }
@@ -5832,14 +5854,14 @@ impl ToLang for ExprContinue {
 
         p.push_raw("continue");
         if let Some(identifier) = &s.label {
-            p.push_raw(" '");
+            p.push_raw(" ");
             p.push_u(identifier);
         }
     }
 }
 #[derive(Debug, Default)]
 pub struct ExprBreak {
-    pub label: Option<Identifier>,
+    pub label: Option<Token>,
     pub expr: Option<Expr>,
 
     pub span_break: Span,
@@ -5852,7 +5874,6 @@ impl ToLang for ExprBreak {
         p.push_str("break", s.span_break);
         if let Some(identifier) = &s.label {
             p.push_raw(" ");
-            p.push_str("'", s.span_label.unwrap());
             p.push_rust(identifier);
         }
         if let Some(expr) = &s.expr {
@@ -5865,7 +5886,7 @@ impl ToLang for ExprBreak {
 
         p.push_raw("break");
         if let Some(identifier) = &s.label {
-            p.push_raw(" '");
+            p.push_raw(" ");
             p.push_u(identifier);
         }
         if let Some(expr) = &s.expr {

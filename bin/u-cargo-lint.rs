@@ -57,7 +57,7 @@ fn u_cargo_lint(args: Vec<String>) -> io::Result<()> {
     let out = String::from_utf8(output.stdout).unwrap();
 
     let pwd_str = pwd.to_str().unwrap();
-    let mut file_map = HashMap::<String, u::LangFormatter>::new();
+    let mut file_map = HashMap::<String, Vec<u::SpanPair>>::new();
     for line in out.lines() {
         if !line.contains(r#""reason":"compiler-message""#) {
             continue;
@@ -105,11 +105,11 @@ fn u_cargo_lint(args: Vec<String>) -> io::Result<()> {
                     u_file.insert_str(0, "../../../");
                 }
 
-                let a = compile_to_rust_lint(&u_file)?;
-                file_map.insert(file.clone(), a);
+                let span_pairs = compile_to_rust_lint(&u_file)?;
+                file_map.insert(file.clone(), span_pairs);
             }
 
-            let pairs = file_map.get(file).unwrap().span_pairs();
+            let pairs = file_map.get(file).unwrap();
             /* for item in pairs {
                 eprintln!("{:?}", item);
             } */
@@ -143,11 +143,11 @@ fn u_cargo_lint(args: Vec<String>) -> io::Result<()> {
     }
 }
 
-fn compile_to_rust_lint(filepath: &str) -> io::Result<u::LangFormatter> {
+fn compile_to_rust_lint(filepath: &str) -> io::Result<Vec<u::SpanPair>> {
     let p = u::compile_file(filepath)?;
     match p.to_rust() {
         Err(_) => Err(io::Error::new(io::ErrorKind::Other, "parse error")),
-        Ok(f) => Ok(f),
+        Ok(f) => Ok(f.span_pairs),
     }
 }
 
