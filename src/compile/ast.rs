@@ -3,10 +3,6 @@ use crate::T;
 use std::convert::TryFrom;
 use std::mem;
 
-/*
-HashMap<Span, Comment>
-match each comment with the token preceding it, a u span or comment
-*/
 pub struct LangFormatter<'a> {
     buf: String,
     indent: u8,
@@ -88,10 +84,6 @@ impl<'a> LangFormatter<'a> {
     pub fn push_rust(&mut self, a: &impl ToLang) {
         let s = self;
         a.to_rust(s);
-    }
-    pub fn push_u(&mut self, a: &impl ToLang) {
-        let s = self;
-        a.to_u(s);
     }
 
     // push all tokens including whitespaces and comments as they are in .u file
@@ -178,7 +170,6 @@ impl<'a> LangFormatter<'a> {
 
 pub trait ToLang {
     fn to_rust(&self, p: &mut LangFormatter);
-    fn to_u(&self, p: &mut LangFormatter);
 }
 
 #[derive(Debug, Default)]
@@ -213,7 +204,9 @@ impl ToLang for Package {
             p.push_rust(it);
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
+}
+impl Package {
+    pub fn to_u(&self, p: &mut LangFormatter) {
         p.push_u_pair(&self.u_pair);
         // for file, need to print the ending tokens
         for it in p.end_tokens {
@@ -276,29 +269,6 @@ impl ToLang for Visibility {
                 p.push_raw(") ");
             }
         }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match &s.payload {
-            VisibilityPayload::Pub => {
-                p.push_str("pub", s.span);
-            }
-            VisibilityPayload::Private => {
-                p.push_str("pub(self)", s.span);
-            }
-            VisibilityPayload::Super => {
-                p.push_str("pub(super)", s.span);
-            }
-            VisibilityPayload::Crate => {
-                p.push_str("pub(crate)", s.span);
-            }
-            VisibilityPayload::SimplePath(path) => {
-                p.push_raw("in ");
-                p.push_u(path);
-            }
-        }
-        p.push_raw(" ");
     }
 }
 
@@ -369,42 +339,6 @@ impl ToLang for Item {
         }
         p.push_raw("\n");
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.outer_attrs);
-
-        p.indent();
-        if !matches!(
-            &s.payload,
-                ItemPayload::Crate(_)
-                | ItemPayload::Import(_)
-                | ItemPayload::Impl(_)
-                | ItemPayload::Macro(_)
-                | ItemPayload::MacroCall(_)
-        ) {
-            p.push_u(&s.public);
-        }
-
-        match &s.payload {
-            ItemPayload::Mod(a) => p.push_u(a),
-            ItemPayload::Crate(a) => p.push_u(a),
-            ItemPayload::Extern(a) => p.push_u(a),
-            ItemPayload::Import(a) => p.push_u(a),
-            ItemPayload::Func(a) => p.push_u(a.as_ref()),
-            ItemPayload::TypeAlias(a) => p.push_u(a),
-            ItemPayload::Struct(a) => p.push_u(a),
-            ItemPayload::Enum(a) => p.push_u(a),
-            ItemPayload::Union(a) => p.push_u(a),
-            ItemPayload::Const(a) => p.push_u(a),
-            ItemPayload::Static(a) => p.push_u(a),
-            ItemPayload::Interface(a) => p.push_u(a),
-            ItemPayload::Impl(a) => p.push_u(a),
-            ItemPayload::Macro(a) => p.push_u(a),
-            ItemPayload::MacroCall(a) => p.push_u(a),
-        }
-        p.push_raw("\n");
-    }
 }
 
 #[derive(Debug)]
@@ -467,25 +401,6 @@ impl ToLang for Mod {
         p.indent();
         p.push_str("}", s.span_brace_close.unwrap());
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.name);
-        let Some(items) = &s.items else {
-            p.push_raw(";");
-            return;
-        };
-        p.push_raw(" mod {\n");
-
-        p.inc_indent();
-        p.push_u(&s.inner_attrs);
-        for item in items {
-            p.push_u(item);
-        }
-        p.dec_indent();
-        p.indent();
-        p.push_raw("}");
-    }
 }
 
 #[derive(Debug, Default)]
@@ -506,24 +421,6 @@ impl ToLang for Crate {
             }
             p.push_raw(";\n");
         }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("crate {\n");
-        p.inc_indent();
-        for item in &s.items {
-            p.indent();
-            if let Some(alias) = &item.alias {
-                p.push_u(alias);
-                p.push_raw(" ");
-            }
-            p.push_u(&item.name);
-            p.push_raw("\n");
-        }
-        p.dec_indent();
-        p.indent();
-        p.push_raw("}");
     }
 }
 #[derive(Debug)]
@@ -564,20 +461,6 @@ impl ToLang for Import {
             p.push_raw(";\n");
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("import {\n");
-        p.inc_indent();
-        for item in &s.items {
-            p.indent();
-            p.push_u(item);
-            p.push_raw("\n");
-        }
-        p.dec_indent();
-        p.indent();
-        p.push_raw("}");
-    }
 }
 #[derive(Debug, Default)]
 pub struct ImportItem {
@@ -614,29 +497,6 @@ impl ToLang for ImportItem {
                     p.push_raw(", ");
                 }
                 p.push_rust(sub);
-            }
-            p.push_raw("}");
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if let Some(alias) = &s.alias {
-            p.push_u(alias);
-            p.push_raw(" ");
-        }
-        p.push_u(&s.paths[0]);
-        for path in &s.paths[1..] {
-            p.push_raw("/");
-            p.push_u(path);
-        }
-        if !s.sub.is_empty() {
-            p.push_raw("{");
-            for (i, sub) in s.sub.iter().enumerate() {
-                if i != 0 {
-                    p.push_raw(", ");
-                }
-                p.push_u(sub);
             }
             p.push_raw("}");
         }
@@ -757,87 +617,6 @@ impl ToLang for Func {
             p.push_raw(";");
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if s.qualifier.const_ {
-            p.push_raw("const ");
-        }
-        if s.qualifier.async_ {
-            p.push_raw("async ");
-        }
-        if s.qualifier.unsafe_ {
-            p.push_raw("unsafe ");
-        }
-        if s.qualifier.safe {
-            p.push_raw("safe ");
-        }
-        if let Some(extern_) = &s.qualifier.extern_ {
-            p.push_raw("extern ");
-            if let Some(abi) = extern_ {
-                p.push_u(abi);
-            }
-        }
-
-        p.push_raw("fn ");
-        p.push_u(&s.name);
-
-        if let Some(generics) = &s.generics {
-            p.push_u(generics);
-        }
-
-        p.push_raw("(");
-        if let Some(self_param) = &s.self_param {
-            p.push_u(self_param);
-            if !s.params.is_empty() {
-                p.push_raw(", ");
-            }
-        }
-        for (i, param) in s.params.iter().enumerate() {
-            p.push_u(&param.outer_attrs);
-            if let Some(pat) = &param.pat {
-                p.push_u(pat);
-            } else {
-                p.push_u(&param.name);
-            }
-            p.push_raw(": ");
-            p.push_u(&param.type_);
-            if i != s.params.len() - 1 {
-                p.push_raw(", ");
-            }
-        }
-        p.push_raw(")");
-
-        if let Some(return_type) = &s.return_type {
-            p.push_raw(" -> ");
-            p.push_u(return_type);
-        }
-
-        if let Some(where_) = &s.where_ {
-            p.push_u(where_);
-        }
-
-        // body
-        if let Some(body) = &s.body {
-            p.push_raw(" {\n");
-            p.inc_indent();
-            p.push_u(&body.inner_attrs);
-
-            if !s.no_s && s.self_param.is_some() && !body.stmts.is_empty() {
-                p.indent();
-                p.push_raw("let s = self;\n");
-            }
-
-            for item in &body.stmts {
-                p.push_u(item);
-            }
-            p.dec_indent();
-            p.indent();
-            p.push_raw("}");
-        } else {
-            p.push_raw(";");
-        }
-    }
 }
 #[derive(Debug, Default)]
 pub struct FuncQualifier {
@@ -891,41 +670,6 @@ impl ToLang for SelfParam {
                 if a.mut_ {
                     p.push_str("mut", a.span_mut.unwrap());
                     p.push_raw(" ");
-                }
-                p.push_raw("self");
-            }
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.outer_attrs);
-        match &s.payload {
-            SelfParamPayload::Type(a) => {
-                if let Some(span) = a.span_mut {
-                    p.push_str("mut ", span);
-                    if a.typ.is_none() {
-                        p.push_raw("self");
-                        return;
-                    }
-                }
-                p.push_raw("self: ");
-                if let Some(typ) = &a.typ {
-                    p.push_rust(typ);
-                }
-            }
-            SelfParamPayload::Short(a) => {
-                if let Some(span) = a.span_self {
-                    p.push_str("self", span);
-                    return;
-                }
-                p.push_raw("&");
-                if let Some(label) = &a.label {
-                    p.push_u(label);
-                    p.push_raw(" ");
-                }
-                if a.mut_ {
-                    p.push_raw("mut ");
                 }
                 p.push_raw("self");
             }
@@ -1011,30 +755,6 @@ impl ToLang for TypeAlias {
         }
         p.push_raw(";");
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("type ");
-        p.push_u(&s.name);
-        if let Some(generics) = &s.generics {
-            p.push_u(generics);
-        }
-        if !s.bounds.items.is_empty() {
-            p.push_raw(": ");
-            p.push_u(&s.bounds);
-        }
-        if let Some(where_) = &s.where_ {
-            p.push_u(where_);
-        }
-        if let Some(type_) = &s.type_ {
-            p.push_raw(" = ");
-            p.push_u(type_);
-            if let Some(where_) = &s.type_where {
-                p.push_rust(where_);
-            }
-        }
-        p.push_raw(";");
-    }
 }
 
 #[derive(Debug, Default)]
@@ -1106,58 +826,6 @@ impl ToLang for Struct {
             p.push_raw(";");
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("struct ");
-        p.push_u(&s.name);
-        if let Some(generics) = &s.generics {
-            p.push_u(generics);
-        }
-
-        if let Some(payload) = &s.payload {
-            match payload {
-                StructPayload::Struct(a) => {
-                    if let Some(where_) = &s.where_ {
-                        p.push_u(where_);
-                    }
-                    p.push_raw(" {\n");
-
-                    p.inc_indent();
-                    for item in a {
-                        p.push_u(&item.outer_attrs);
-                        p.indent();
-                        p.push_u(&item.public);
-                        p.push_u(&item.name);
-                        p.push_raw(": ");
-                        p.push_u(&item.type_);
-                        p.push_raw(",\n");
-                    }
-                    p.dec_indent();
-                    p.indent();
-                    p.push_raw("}");
-                }
-                StructPayload::Tuple(a) => {
-                    p.push_raw("(");
-                    for (i, item) in a.iter().enumerate() {
-                        if i != 0 {
-                            p.push_raw(", ");
-                        }
-                        p.push_u(&item.outer_attrs);
-                        p.push_u(&item.public);
-                        p.push_u(&item.type_);
-                    }
-                    p.push_raw(")");
-                    if let Some(where_) = &s.where_ {
-                        p.push_u(where_);
-                    }
-                    p.push_raw(";");
-                }
-            }
-        } else {
-            p.push_raw(";");
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -1216,28 +884,6 @@ impl ToLang for Enum {
         p.indent();
         p.push_str("}", s.span_brace_close.unwrap());
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("enum ");
-        p.push_u(&s.name);
-        if let Some(generics) = &s.generics {
-            p.push_u(generics);
-        }
-        if let Some(where_) = &s.where_ {
-            p.push_u(where_);
-        }
-        p.push_raw(" {\n");
-
-        p.inc_indent();
-        for item in &s.items {
-            p.push_u(item);
-            p.push_raw(",\n");
-        }
-        p.dec_indent();
-        p.indent();
-        p.push_raw("}");
-    }
 }
 #[derive(Debug, Default)]
 pub struct EnumItem {
@@ -1255,53 +901,6 @@ pub struct EnumItem {
 }
 impl ToLang for EnumItem {
     fn to_rust(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_rust(&s.outer_attrs);
-        p.indent();
-        // p.push_rust(&s.public);
-        p.push_rust(&s.name);
-
-        match &s.payload {
-            EnumItemPayload::Struct(a) => {
-                p.push_raw(" ");
-                p.push_str("{", s.span_brace_open.unwrap());
-                p.push_raw("\n");
-                p.inc_indent();
-                for item in a {
-                    p.indent();
-                    // p.push_rust(&item.public);
-                    p.push_rust(&item.name);
-                    p.push_raw(": ");
-                    p.push_rust(&item.type_);
-                    p.push_raw(",\n");
-                }
-                p.dec_indent();
-                p.indent();
-                p.push_str("}", s.span_brace_close.unwrap());
-            }
-            EnumItemPayload::Tuple(a) => {
-                p.push_str("(", s.span_paren_open.unwrap());
-                for (i, item) in a.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(", ");
-                    }
-                    p.push_rust(&item.outer_attrs);
-                    // p.push_rust(&item.public);
-                    p.push_rust(&item.type_);
-                }
-                p.push_str(")", s.span_paren_close.unwrap());
-            }
-            EnumItemPayload::None => {}
-        }
-        if let Some(a) = &s.discriminant {
-            p.push_raw(" ");
-            p.push_str("=", s.span_eq.unwrap());
-            p.push_raw(" ");
-            p.push_rust(a);
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
         p.push_rust(&s.outer_attrs);
@@ -1400,34 +999,6 @@ impl ToLang for Union {
         p.indent();
         p.push_str("}", s.span_brace_close.unwrap());
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("union ");
-        p.push_u(&s.name);
-        if let Some(generics) = &s.generics {
-            p.push_u(generics);
-        }
-
-        if let Some(where_) = &s.where_ {
-            p.push_u(where_);
-        }
-        p.push_raw(" {\n");
-
-        p.inc_indent();
-        for item in &s.fields {
-            p.push_u(&item.outer_attrs);
-            p.indent();
-            p.push_u(&item.public);
-            p.push_u(&item.name);
-            p.push_raw(": ");
-            p.push_u(&item.type_);
-            p.push_raw(",\n");
-        }
-        p.dec_indent();
-        p.indent();
-        p.push_raw("}");
-    }
 }
 
 #[derive(Debug, Default)]
@@ -1455,17 +1026,6 @@ impl ToLang for Const {
             p.push_rust(expr);
         }
         p.push_raw(";");
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.name);
-        p.push_raw(" const ");
-        p.push_u(&s.type_);
-        if let Some(expr) = &s.expr {
-            p.push_raw(" = ");
-            p.push_u(expr);
-        }
     }
 }
 
@@ -1506,24 +1066,6 @@ impl ToLang for Static {
             p.push_rust(expr);
         }
         p.push_raw(";");
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if s.safe {
-            p.push_raw("safe");
-        }
-        p.push_raw(" static ");
-        if s.mut_ {
-            p.push_raw("mut ");
-        }
-        p.push_u(&s.name);
-        p.push_raw(": ");
-        p.push_u(&s.type_);
-        if let Some(expr) = &s.expr {
-            p.push_raw(" = ");
-            p.push_u(expr);
-        }
     }
 }
 
@@ -1578,35 +1120,6 @@ impl ToLang for Interface {
         p.indent();
         p.push_str("}", s.span_brace_close);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if s.unsafe_ {
-            p.push_raw("unsafe ");
-        }
-        p.push_raw("trait ");
-        p.push_u(&s.name);
-        if let Some(generics) = &s.generics {
-            p.push_u(generics);
-        }
-        if !s.bounds.items.is_empty() {
-            p.push_raw(": ");
-            p.push_u(&s.bounds);
-        }
-        if let Some(where_) = &s.where_ {
-            p.push_u(where_);
-        }
-
-        p.push_raw("{\n");
-        p.inc_indent();
-        p.push_u(&s.inner_attrs);
-        for item in &s.items {
-            p.push_u(item);
-        }
-        p.dec_indent();
-        p.indent();
-        p.push_raw("}");
-    }
 }
 
 #[derive(Debug)]
@@ -1633,24 +1146,6 @@ impl ToLang for AssociatedItem {
             AssociatedItemPayload::TypeAlias(a) => p.push_rust(a),
             AssociatedItemPayload::MacroCall(a) => {
                 p.push_rust(a);
-                if !matches!(a.body, MacroCallBody::Stmt(_)) {
-                    p.push_raw(";");
-                }
-            }
-        }
-        p.push_raw("\n");
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.indent();
-        p.push_u(&s.outer_attrs);
-        match &s.payload {
-            AssociatedItemPayload::Func(a) => p.push_u(a),
-            AssociatedItemPayload::Const(a) => p.push_u(a),
-            AssociatedItemPayload::TypeAlias(a) => p.push_u(a),
-            AssociatedItemPayload::MacroCall(a) => {
-                p.push_u(a);
                 if !matches!(a.body, MacroCallBody::Stmt(_)) {
                     p.push_raw(";");
                 }
@@ -1732,46 +1227,6 @@ impl ToLang for Impl {
         p.indent();
         p.push_str("}", s.span_brace_close);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if let ImplPayload::Interface(a) = &s.payload {
-            if a.unsafe_ {
-                p.push_raw("unsafe ");
-            }
-        }
-        p.push_raw("impl");
-
-        if let Some(generics) = &s.generics {
-            p.push_u(generics);
-        }
-
-        p.push_raw(" ");
-        match &s.payload {
-            ImplPayload::Static => {
-                p.push_u(&s.type_);
-            }
-            ImplPayload::Interface(a) => {
-                p.push_u(&a.type_path);
-                p.push_raw(" for ");
-                p.push_u(&s.type_);
-            }
-        }
-
-        if let Some(where_) = &s.where_ {
-            p.push_u(where_);
-        }
-
-        p.push_raw(" {\n");
-        p.inc_indent();
-        p.push_u(&s.inner_attrs);
-        for item in &s.items {
-            p.push_u(item);
-        }
-        p.dec_indent();
-        p.indent();
-        p.push_raw("}");
-    }
 }
 
 #[derive(Debug, Default)]
@@ -1815,18 +1270,6 @@ impl ToLang for Macro {
         tokens_to_rust(s.span_brace_open, &s.tokens, s.span_brace_close, p);
 
         p.push_str("}", s.span_brace_close);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("macro_rules! ");
-        p.push_u(&s.name);
-
-        p.push_raw(" {\n");
-
-        tokens_to_rust(s.span_brace_open, &s.tokens, s.span_brace_close, p);
-
-        p.push_raw("}");
     }
 }
 
@@ -1939,45 +1382,6 @@ impl ToLang for MacroCall {
             }
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.path);
-        p.push_raw("!");
-
-        match &s.body {
-            MacroCallBody::Token(list) => {
-                let pairs = match s.delim {
-                    1 => ("(", ")"),
-                    2 => ("[", "]"),
-                    _ => ("{", "}"),
-                };
-                p.push_str(pairs.0, s.span_delim_open);
-                tokens_to_rust(s.span_delim_open, list, s.span_delim_close, p);
-                p.push_str(pairs.1, s.span_delim_close);
-            }
-            MacroCallBody::Expr(list) => {
-                p.push_raw("(");
-                for (i, item) in list.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(", ");
-                    }
-                    p.push_u(item);
-                }
-                p.push_raw(")");
-            }
-            MacroCallBody::Stmt(list) => {
-                p.push_raw("{\n");
-                p.inc_indent();
-                for item in list {
-                    p.push_u(item);
-                }
-                p.dec_indent();
-                p.indent();
-                p.push_raw("}");
-            }
-        }
-    }
 }
 #[derive(Debug)]
 pub enum MacroCallBody {
@@ -2060,28 +1464,6 @@ impl ToLang for ExternalBlock {
         p.indent();
         p.push_str("}", s.span_brace_close);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.indent();
-        if s.unsafe_ {
-            p.push_raw("unsafe ");
-        }
-        p.push_raw("extern ");
-        if let Some(abi) = &s.extern_ {
-            p.push_u(abi);
-        }
-        p.push_raw(" {\n");
-
-        p.inc_indent();
-        for item in &s.items {
-            p.push_u(item);
-            p.push_raw("\n");
-        }
-        p.dec_indent();
-        p.indent();
-        p.push_raw("}");
-    }
 }
 #[derive(Debug)]
 pub struct ExternalBlockItem {
@@ -2100,18 +1482,6 @@ impl ToLang for ExternalBlockItem {
             ExternalBlockItemPayload::Func(a) => p.push_rust(a),
             ExternalBlockItemPayload::Static(a) => p.push_rust(a),
             ExternalBlockItemPayload::MacroCall(a) => p.push_rust(a),
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.outer_attrs);
-        p.indent();
-        p.push_rust(&s.public);
-        match &s.payload {
-            ExternalBlockItemPayload::Func(a) => p.push_u(a),
-            ExternalBlockItemPayload::Static(a) => p.push_u(a),
-            ExternalBlockItemPayload::MacroCall(a) => p.push_u(a),
         }
     }
 }
@@ -2135,15 +1505,6 @@ impl ToLang for Attrs {
         for item in &s.items {
             p.indent();
             p.push_rust(item);
-            p.push_raw("\n");
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        for item in &s.items {
-            p.indent();
-            p.push_u(item);
             p.push_raw("\n");
         }
     }
@@ -2174,12 +1535,6 @@ impl ToLang for Attr {
         }
         p.push_str("]", s.span_end);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-        for token in &s.tokens {
-            p.push_u(token);
-        }
-    }
 }
 
 // --------------------------------------------------------------------------------
@@ -2202,18 +1557,6 @@ impl ToLang for Generics {
             p.push_rust(item);
         }
         p.push_str(">", s.span_square_close);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("<");
-        for (i, item) in s.params.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
-            }
-            p.push_u(item);
-        }
-        p.push_raw(">");
     }
 }
 #[derive(Debug, Default)]
@@ -2263,48 +1606,6 @@ impl ToLang for GenericParam {
             }
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.outer_attrs);
-        match &s.payload {
-            GenericParamPayload::Lifetime(a) => {
-                p.push_raw("'");
-                p.push_u(&a.lifetime);
-                if !a.lifetime_bounds.is_empty() {
-                    p.push_raw(": ");
-                    for (i, item) in a.lifetime_bounds.iter().enumerate() {
-                        if i != 0 {
-                            p.push_raw(" + ");
-                        }
-                        p.push_u(&item.name);
-                    }
-                }
-            }
-            GenericParamPayload::Type(a) => {
-                p.push_u(&a.name);
-                if !a.bounds.items.is_empty() {
-                    p.push_raw(": ");
-                    p.push_u(&a.bounds);
-                }
-                if let Some(type_) = &a.type_ {
-                    p.push_raw(" = ");
-                    p.push_u(type_);
-                }
-            }
-            GenericParamPayload::Const(a) => {
-                p.push_str("const", a.span_const);
-                p.push_raw(" ");
-                p.push_u(&a.name);
-                p.push_raw(": ");
-                p.push_u(&a.type_);
-                if let Some(expr) = &a.expr {
-                    p.push_raw(" = ");
-                    p.push_u(expr);
-                }
-            }
-        }
-    }
 }
 #[derive(Debug)]
 pub enum GenericParamPayload {
@@ -2332,11 +1633,6 @@ impl ToLang for Lifetime {
         let s = self;
 
         p.push_rust(&s.name);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.name);
     }
 }
 #[derive(Debug, Default)]
@@ -2375,17 +1671,6 @@ impl ToLang for Where {
             p.push_rust(item);
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw(" where ");
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
-            }
-            p.push_u(item);
-        }
-    }
 }
 #[derive(Debug)]
 pub enum WhereItem {
@@ -2422,30 +1707,6 @@ impl ToLang for WhereItem {
             }
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match &s {
-            WhereItem::Lifetime(a) => {
-                p.push_u(&a.lifetime);
-                p.push_raw(": ");
-                for (i, item) in a.lifetime_bounds.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(" + ");
-                    }
-                    p.push_u(item);
-                }
-            }
-            WhereItem::TypeBound(a) => {
-                if let Some(for_) = &a.for_lifetimes {
-                    p.push_u(for_);
-                }
-                p.push_u(&a.type_);
-                p.push_raw(": ");
-                p.push_u(&a.bounds);
-            }
-        }
-    }
 }
 #[derive(Debug, Default)]
 pub struct WhereItemLifetime {
@@ -2475,16 +1736,6 @@ impl ToLang for TypeParamBounds {
             p.push_rust(item);
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(" + ");
-            }
-            p.push_u(item);
-        }
-    }
 }
 #[derive(Debug)]
 pub enum TypeParamBound {
@@ -2500,15 +1751,6 @@ impl ToLang for TypeParamBound {
             TypeParamBound::Lifetime(a) => p.push_rust(a),
             TypeParamBound::InterfaceBound(a) => p.push_rust(a),
             TypeParamBound::UseBound(a) => p.push_rust(a),
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            TypeParamBound::Lifetime(a) => p.push_u(a),
-            TypeParamBound::InterfaceBound(a) => p.push_u(a),
-            TypeParamBound::UseBound(a) => p.push_u(a),
         }
     }
 }
@@ -2541,31 +1783,9 @@ impl ToLang for UseBound {
         }
         p.push_str(">", s.span_square_close);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_str("use", s.span_use);
-        p.push_str("<", s.span_square_open);
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
-            }
-            p.push_u(item);
-        }
-        p.push_str(">", s.span_square_close);
-    }
 }
 impl ToLang for UseBoundGenericArg {
     fn to_rust(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            UseBoundGenericArg::Lifetime(a) => p.push_rust(a),
-            UseBoundGenericArg::Id(a) => p.push_rust(a),
-            UseBoundGenericArg::Self_(a) => p.push_str("Self", *a),
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
         match s {
@@ -2596,17 +1816,6 @@ impl ToLang for InterfaceBound {
         }
         p.push_rust(&s.type_path);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if s.unsized_ {
-            p.push_raw("?");
-        }
-        if let Some(for_) = &s.for_lifetimes {
-            p.push_u(for_);
-        }
-        p.push_u(&s.type_path);
-    }
 }
 
 #[derive(Debug, Default)]
@@ -2622,12 +1831,6 @@ impl ToLang for ForLifetimes {
         p.push_str("for", s.span_for);
         p.push_raw(" ");
         p.push_rust(&s.for_);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("for ");
-        p.push_u(&s.for_);
     }
 }
 
@@ -2650,16 +1853,6 @@ impl ToLang for SimplePath {
             p.push_rust(item);
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw("::");
-            }
-            p.push_u(item);
-        }
-    }
 }
 #[derive(Debug)]
 pub enum SimplePathSegment {
@@ -2677,16 +1870,6 @@ impl ToLang for SimplePathSegment {
             SimplePathSegment::Super(span) => p.push_str("super", *span),
             SimplePathSegment::SelfValue(span) => p.push_str("self", *span),
             SimplePathSegment::Crate(span) => p.push_str("crate", *span),
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            SimplePathSegment::Identifier(a) => p.push_u(a),
-            SimplePathSegment::Super(_) => p.push_raw("super"),
-            SimplePathSegment::SelfValue(_) => p.push_raw("self"),
-            SimplePathSegment::Crate(_) => p.push_raw("crate"),
         }
     }
 }
@@ -2732,17 +1915,6 @@ impl ToLang for PathIdentSegment {
             PathIdentSegment::Crate(span) => p.push_str("crate", *span),
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            PathIdentSegment::Identifier(a) => p.push_u(a),
-            PathIdentSegment::Super(_) => p.push_raw("super"),
-            PathIdentSegment::SelfValue(_) => p.push_raw("self"),
-            PathIdentSegment::SelfType(_) => p.push_raw("Self"),
-            PathIdentSegment::Crate(_) => p.push_raw("crate"),
-        }
-    }
 }
 
 #[derive(Debug, Default)]
@@ -2761,16 +1933,6 @@ impl ToLang for PathInExpr {
                 continue;
             }
             p.push_rust(item);
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw("::");
-            }
-            p.push_u(item);
         }
     }
 }
@@ -2804,15 +1966,6 @@ impl ToLang for PathExprSegment {
             p.push_rust(&s.generic_args);
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.name);
-        if !s.generic_args.items.is_empty() {
-            p.push_raw("::");
-            p.push_u(&s.generic_args);
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -2830,15 +1983,6 @@ impl ToLang for QualifiedPathInExpr {
             p.push_rust(item);
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.type_);
-        for item in &s.items {
-            p.push_raw("::");
-            p.push_u(item);
-        }
-    }
 }
 #[derive(Debug)]
 pub struct QualifiedPathInType {
@@ -2853,15 +1997,6 @@ impl ToLang for QualifiedPathInType {
         for item in &s.items {
             p.push_raw("::");
             p.push_rust(item);
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.type_);
-        for item in &s.items {
-            p.push_raw("..");
-            p.push_u(item);
         }
     }
 }
@@ -2885,18 +2020,6 @@ impl ToLang for QualifiedPathType {
         }
         p.push_str(">", s.span_square_close);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("[");
-        p.push_u(&s.type_);
-        if let Some(type_path) = &s.type_path {
-            p.push_raw(".(");
-            p.push_u(type_path);
-            p.push_raw(")");
-        }
-        p.push_raw("]");
-    }
 }
 
 #[derive(Debug, Default)]
@@ -2917,16 +2040,6 @@ impl ToLang for TypePath {
             p.push_rust(item);
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw("..");
-            }
-            p.push_u(item);
-        }
-    }
 }
 #[derive(Debug, Default)]
 pub struct TypePathSegment {
@@ -2942,17 +2055,6 @@ impl ToLang for TypePathSegment {
             match a {
                 TypePathSegmentPayload::GenericArgs(a) => p.push_rust(a),
                 TypePathSegmentPayload::TypePathFunc(a) => p.push_rust(a),
-            }
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.name);
-        if let Some(a) = &s.payload {
-            match a {
-                TypePathSegmentPayload::GenericArgs(a) => p.push_u(a),
-                TypePathSegmentPayload::TypePathFunc(a) => p.push_u(a),
             }
         }
     }
@@ -2994,23 +2096,6 @@ impl ToLang for TypePathFunc {
             p.push_rust(return_type);
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("(");
-        for (i, item) in s.inputs.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
-            }
-            p.push_u(item);
-        }
-        p.push_raw(")");
-
-        if let Some(return_type) = &s.return_type {
-            p.push_raw(" ");
-            p.push_u(return_type);
-        }
-    }
 }
 
 #[derive(Debug, Default)]
@@ -3032,18 +2117,6 @@ impl ToLang for GenericArgs {
             p.push_rust(item);
         }
         p.push_str(">", s.span_square_close);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("[");
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
-            }
-            p.push_u(item);
-        }
-        p.push_raw("]");
     }
 }
 
@@ -3077,25 +2150,6 @@ impl ToLang for GenericArg {
             }
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            GenericArg::Lifetime(a) => p.push_u(a),
-            GenericArg::Type(a) => p.push_u(a),
-            GenericArg::Const(a) => p.push_u(a),
-            GenericArg::Binding(a) => {
-                p.push_u(&a.name);
-                p.push_raw(" = ");
-                p.push_u(&a.type_);
-            }
-            GenericArg::Bounds(a) => {
-                p.push_u(&a.name);
-                p.push_raw(": ");
-                p.push_u(&a.bounds);
-            }
-        }
-    }
 }
 #[derive(Debug)]
 pub enum GenericArgsConst {
@@ -3114,15 +2168,6 @@ impl ToLang for GenericArgsConst {
                 p.push_raw("-");
                 p.push_rust(a);
             }
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            GenericArgsConst::BlockExpr(a) => p.push_u(a),
-            GenericArgsConst::LiteralExpr(a) => p.push_u(a),
-            GenericArgsConst::MinusLiteralExpr(a, _) => p.push_u(a),
         }
     }
 }
@@ -3155,16 +2200,6 @@ impl ToLang for Pattern {
             p.push_rust(item);
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(" | ");
-            }
-            p.push_rust(item);
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -3184,14 +2219,6 @@ impl ToLang for PatternNoTopAlt {
         match s {
             PatternNoTopAlt::WithoutRange(a) => p.push_rust(a),
             PatternNoTopAlt::WithRange(a) => p.push_rust(a),
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            PatternNoTopAlt::WithoutRange(a) => p.push_u(a),
-            PatternNoTopAlt::WithRange(a) => p.push_u(a),
         }
     }
 }
@@ -3319,105 +2346,6 @@ impl ToLang for PatternWithoutRange {
             PatternWithoutRange::MacroCall(a) => p.push_rust(a),
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            PatternWithoutRange::Literal(a) => p.push_u(a),
-            PatternWithoutRange::Identifier(a) => {
-                if a.ref_ {
-                    p.push_raw("ref ");
-                }
-                if a.mut_ {
-                    p.push_raw("mut ");
-                }
-                p.push_u(&a.name);
-                if let Some(pattern) = &a.pattern {
-                    p.push_raw(" @ ");
-                    p.push_u(pattern.as_ref());
-                }
-            }
-            PatternWithoutRange::Rest(_) => p.push_raw(".."),
-            PatternWithoutRange::Obsolete(a) => {
-                if let Some(start) = &a.start {
-                    p.push_u(start);
-                }
-                p.push_raw("...");
-                if let Some(end) = &a.end {
-                    p.push_rust(end);
-                }
-            }
-            PatternWithoutRange::Reference(a) => {
-                p.push_raw("&");
-                if a.mut_ {
-                    p.push_raw("mut ");
-                }
-                p.push_u(a.pattern_without_range.as_ref());
-            }
-            PatternWithoutRange::Struct(a) => {
-                p.push_u(&a.path);
-                p.push_raw("{");
-                for (i, item) in a.items.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(", ");
-                    }
-                    p.push_u(item);
-                }
-                p.push_raw("}");
-            }
-            PatternWithoutRange::TupleStruct(a) => {
-                p.push_u(&a.path);
-                p.push_raw("(");
-                for (i, item) in a.items.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(", ");
-                    }
-                    p.push_u(item);
-                }
-                p.push_raw(")");
-            }
-            PatternWithoutRange::Tuple(a) => {
-                p.push_raw("(");
-                match &a.payload {
-                    PatternTuplePayload::Patterns(b) => {
-                        for (i, item) in b.iter().enumerate() {
-                            if i != 0 {
-                                p.push_raw(", ");
-                            }
-                            p.push_u(item);
-                        }
-                        if b.len() == 1 {
-                            p.push_raw(", ");
-                        }
-                    }
-                    PatternTuplePayload::Rest(_) => {
-                        p.push_raw(" .. ");
-                    }
-                }
-                p.push_raw(")");
-            }
-            PatternWithoutRange::Grouped(a) => {
-                p.push_raw("(");
-                p.push_u(a.pattern.as_ref());
-                p.push_raw(")");
-            }
-            PatternWithoutRange::Slice(a) => {
-                p.push_raw("[");
-                for (i, item) in a.items.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(", ");
-                    }
-                    p.push_u(item);
-                }
-                p.push_raw("]");
-            }
-            PatternWithoutRange::Path(a) => match a {
-                PatternPath::Path(b) => p.push_u(b),
-                PatternPath::QualifiedPath(b) => p.push_u(b),
-            },
-            PatternWithoutRange::MacroCall(a) => p.push_u(a),
-        }
-    }
 }
 #[derive(Debug)]
 pub struct PatternLiteral {
@@ -3434,14 +2362,6 @@ impl ToLang for PatternLiteral {
             p.push_str("-", s.span_minus.unwrap());
         }
         p.push_rust(&s.name);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if s.minus {
-            p.push_raw("-");
-        }
-        p.push_u(&s.name);
     }
 }
 #[derive(Debug, Default)]
@@ -3517,40 +2437,6 @@ impl ToLang for PatternStructItem {
             PatternStructItem::Etc(a, span) => {
                 p.push_rust(a);
                 p.push_str("..", *span);
-            }
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            PatternStructItem::Field(f) => {
-                p.push_u(&f.outer_attrs);
-                match &f.payload {
-                    PatternStructFieldPayload::A(a) => {
-                        p.push_raw(&a.tuple_index);
-                        p.push_raw(": ");
-                        p.push_u(&a.pattern);
-                    }
-                    PatternStructFieldPayload::B(b) => {
-                        p.push_u(&b.name);
-                        p.push_raw(": ");
-                        p.push_u(&b.pattern);
-                    }
-                    PatternStructFieldPayload::C(c) => {
-                        if c.ref_ {
-                            p.push_raw("ref ");
-                        }
-                        if c.mut_ {
-                            p.push_raw("mut ");
-                        }
-                        p.push_u(&c.name);
-                    }
-                }
-            }
-            PatternStructItem::Etc(a, _) => {
-                p.push_u(a);
-                p.push_raw("..");
             }
         }
     }
@@ -3658,21 +2544,6 @@ impl ToLang for PatternRange {
             p.push_rust(end);
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if let Some(start) = &s.start {
-            p.push_u(start);
-        }
-        if s.inclusive {
-            p.push_str("..=", s.span);
-        } else {
-            p.push_str("..", s.span);
-        }
-        if let Some(end) = &s.end {
-            p.push_u(end);
-        }
-    }
 }
 #[derive(Debug)]
 pub enum PatternRangeBound {
@@ -3690,15 +2561,6 @@ impl ToLang for PatternRangeBound {
             PatternRangeBound::QualifiedPath(a) => p.push_rust(a),
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            PatternRangeBound::Literal(a) => p.push_u(a),
-            PatternRangeBound::Path(a) => p.push_u(a),
-            PatternRangeBound::QualifiedPath(a) => p.push_u(a),
-        }
-    }
 }
 
 // --------------------------------------------------------------------------------
@@ -3711,10 +2573,6 @@ impl ToLang for Type {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
         p.push_rust(&s.payload);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-        p.push_u(&s.payload);
     }
 }
 #[derive(Debug)]
@@ -3743,21 +2601,6 @@ impl ToLang for TypePayload {
                 p.push_str("dyn", a.span);
                 p.push_raw(" ");
                 p.push_rust(&a.bounds);
-            }
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            TypePayload::TypeNoBounds(a) => p.push_u(a.as_ref()),
-            TypePayload::ImplInterface(a, _) => {
-                p.push_raw("impl ");
-                p.push_u(a);
-            }
-            TypePayload::InterfaceObject(a) => {
-                p.push_raw("dyn ");
-                p.push_u(&a.bounds);
             }
         }
     }
@@ -3857,75 +2700,6 @@ impl ToLang for TypeNoBounds {
             TypeNoBounds::Never(span) => p.push_str("!", *span),
             TypeNoBounds::BareFunction(a) => p.push_rust(a.as_ref()),
             TypeNoBounds::MacroCall(a) => p.push_rust(a),
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            TypeNoBounds::Parenthesized(a) => {
-                p.push_raw("(");
-                p.push_u(&a.type_);
-                p.push_raw(")");
-            }
-            TypeNoBounds::ImplInterfaceOneBound(a) => {
-                p.push_raw("impl ");
-                p.push_u(&a.bound);
-            }
-            TypeNoBounds::InterfaceObjectOneBound(a) => {
-                p.push_raw("dyn ");
-                p.push_u(&a.bound);
-            }
-            TypeNoBounds::Tuple(a) => {
-                p.push_raw("(");
-                for (i, item) in a.items.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(", ");
-                    }
-                    p.push_u(item);
-                }
-                if a.items.len() == 1 {
-                    p.push_raw(", ");
-                }
-                p.push_raw(")");
-            }
-            TypeNoBounds::RawPointer(a) => {
-                p.push_raw("*");
-                if a.mut_ {
-                    p.push_raw("mut ");
-                } else {
-                    p.push_raw("const ");
-                }
-                p.push_u(&*a.type_no_bounds);
-            }
-            TypeNoBounds::Reference(a) => {
-                p.push_raw("&");
-                if let Some(lifetime) = &a.lifetime {
-                    p.push_u(lifetime);
-                    p.push_raw(" ");
-                }
-                if a.mut_ {
-                    p.push_raw("mut ");
-                }
-                p.push_u(&*a.type_no_bounds);
-            }
-            TypeNoBounds::Array(a) => {
-                p.push_raw("{{");
-                p.push_u(&a.type_);
-                p.push_raw(": ");
-                p.push_u(&a.expr);
-                p.push_raw("}}");
-            }
-            TypeNoBounds::Slice(a) => {
-                p.push_raw("{{");
-                p.push_u(&a.type_);
-                p.push_raw("}}");
-            }
-            TypeNoBounds::TypePath(a) => p.push_u(a),
-            TypeNoBounds::QualifiedPathInType(a) => p.push_u(a),
-            TypeNoBounds::Never(_) => p.push_raw("!"),
-            TypeNoBounds::BareFunction(a) => p.push_u(a.as_ref()),
-            TypeNoBounds::MacroCall(a) => p.push_u(a),
         }
     }
 }
@@ -4066,47 +2840,6 @@ impl ToLang for TypeBareFunction {
             p.push_rust(return_type);
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if let Some(for_) = &s.for_lifetimes {
-            p.push_u(for_);
-        }
-
-        match s.func_type {
-            FuncType::Func(_) => p.push_raw("func"),
-            FuncType::Other => {}
-        }
-
-        if s.qualifier.unsafe_ {
-            p.push_raw("unsafe ");
-        }
-        if let Some(extern_) = &s.qualifier.extern_ {
-            p.push_raw("extern ");
-            if let Some(abi) = extern_ {
-                p.push_u(abi);
-            }
-        }
-
-        p.push_raw("(");
-        for (i, param) in s.params.iter().enumerate() {
-            p.push_u(&param.outer_attrs);
-            if let Some(name) = &param.name {
-                p.push_u(name);
-                p.push_raw(" ");
-            }
-            p.push_u(&param.type_);
-            if i != s.params.len() - 1 {
-                p.push_raw(", ");
-            }
-        }
-        p.push_raw(")");
-
-        if let Some(return_type) = &s.return_type {
-            p.push_raw(" ");
-            p.push_u(return_type);
-        }
-    }
 }
 #[derive(Debug, Default)]
 pub enum FuncType {
@@ -4167,27 +2900,6 @@ impl ToLang for Stmt {
             }
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match &s {
-            Stmt::Item(a) => p.push_u(a),
-            Stmt::Let(a) => p.push_u(a),
-            Stmt::Expr(a) => {
-                p.indent();
-                p.push_u(a);
-                if matches!(a.payload, ExprPayload::WithoutBlock(_)) {
-                    p.push_raw(";");
-                }
-                p.push_raw("\n");
-            }
-            Stmt::Value(a) => {
-                p.indent();
-                p.push_u(a);
-                p.push_raw("\n");
-            }
-        }
-    }
 }
 
 #[derive(Debug, Default)]
@@ -4227,27 +2939,6 @@ impl ToLang for StmtLet {
         }
         p.push_raw(";\n");
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.outer_attrs);
-        p.indent();
-        p.push_u(&s.pattern);
-        p.push_raw(" let");
-        if let Some(type_) = &s.type_ {
-            p.push_raw(" ");
-            p.push_u(type_);
-        }
-        if let Some(expr) = &s.expr {
-            p.push_raw(" = ");
-            p.push_u(expr);
-        }
-        if let Some(else_) = &s.else_ {
-            p.push_raw(" else ");
-            p.push_u(else_);
-        }
-        p.push_raw("\n");
-    }
 }
 
 #[derive(Debug)]
@@ -4260,11 +2951,6 @@ impl ToLang for StmtValue {
         let s = self;
 
         p.push_rust(&s.expr);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.expr);
     }
 }
 
@@ -4282,15 +2968,6 @@ impl ToLang for Expr {
         match &s.payload {
             ExprPayload::WithBlock(a) => p.push_rust(a.as_ref()),
             ExprPayload::WithoutBlock(a) => p.push_rust(a.as_ref()),
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.outer_attrs);
-        match &s.payload {
-            ExprPayload::WithBlock(a) => p.push_u(a.as_ref()),
-            ExprPayload::WithoutBlock(a) => p.push_u(a.as_ref()),
         }
     }
 }
@@ -4338,24 +3015,6 @@ impl ToLang for BlockExpr {
         p.indent();
         p.push_str("}", s.span_brace_close);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if let Some(label) = &s.label {
-            p.push_u(label);
-            p.push_raw(": ");
-        }
-
-        p.push_raw("{\n");
-        p.inc_indent();
-        p.push_u(&s.inner_attrs);
-        for item in &s.stmts {
-            p.push_u(item);
-        }
-        p.dec_indent();
-        p.indent();
-        p.push_raw("}");
-    }
 }
 
 #[derive(Debug)]
@@ -4382,19 +3041,6 @@ impl ToLang for ExprWithBlock {
             ExprWithBlock::Match(a) => p.push_rust(a),
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            ExprWithBlock::BlockExpr(a) => p.push_u(a),
-            ExprWithBlock::AsyncBlock(a) => p.push_u(a),
-            ExprWithBlock::UnsafeBlock(a) => p.push_u(a),
-            ExprWithBlock::ConstBlock(a) => p.push_u(a),
-            ExprWithBlock::Loop(a) => p.push_u(a.as_ref()),
-            ExprWithBlock::If(a) => p.push_u(a),
-            ExprWithBlock::Match(a) => p.push_u(a),
-        }
-    }
 }
 #[derive(Debug, Default)]
 pub struct ExprAsyncBlock {
@@ -4416,15 +3062,6 @@ impl ToLang for ExprAsyncBlock {
         p.push_raw(" ");
         p.push_rust(&s.block);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("async");
-        if s.move_ {
-            p.push_raw(" move");
-        }
-        p.push_u(&s.block);
-    }
 }
 #[derive(Debug)]
 pub struct ExprUnsafeBlock {
@@ -4440,12 +3077,6 @@ impl ToLang for ExprUnsafeBlock {
         p.push_raw(" ");
         p.push_rust(&s.block);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("unsafe");
-        p.push_u(&s.block);
-    }
 }
 #[derive(Debug)]
 pub struct ExprConstBlock {
@@ -4460,12 +3091,6 @@ impl ToLang for ExprConstBlock {
         p.push_str("const", s.span_const);
         p.push_raw(" ");
         p.push_rust(&s.block);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("const");
-        p.push_u(&s.block);
     }
 }
 #[derive(Debug, Default)]
@@ -4505,30 +3130,6 @@ impl ToLang for ExprLoop {
 
         p.push_raw(" ");
         p.push_rust(&s.body);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if let Some(label) = &s.label {
-            p.push_u(label);
-            p.push_raw(": ");
-        }
-
-        match &s.payload {
-            ExprLoopPayload::Loop => p.push_raw("loop"),
-            ExprLoopPayload::While(a) => {
-                p.push_raw("while ");
-                p.push_u(&a.conditions);
-            }
-            ExprLoopPayload::In(a) => {
-                p.push_raw("for ");
-                p.push_u(&a.pattern);
-                p.push_raw(" in ");
-                p.push_u(&a.in_expr);
-            }
-        }
-
-        p.push_u(&s.body);
     }
 }
 #[derive(Debug, Default)]
@@ -4593,36 +3194,6 @@ impl ToLang for Conditions {
         }
         p.push_raw(" ");
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw(" ");
-        match &s {
-            Conditions::Expr(expr) => {
-                p.push_u(expr);
-            }
-            Conditions::LetChain(list) => {
-                for (i, item) in list.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw("&& ");
-                    }
-                    match item {
-                        LetChainCondition::Expr(expr) => {
-                            p.push_u(expr);
-                        }
-                        LetChainCondition::Condition(a) => {
-                            p.push_u(&a.outer_attrs);
-                            p.push_raw("let ");
-                            p.push_u(&a.pattern);
-                            p.push_raw(" = ");
-                            p.push_u(&a.scrutinee);
-                        }
-                    }
-                }
-            }
-        }
-        p.push_raw(" ");
-    }
 }
 
 #[derive(Debug)]
@@ -4666,21 +3237,6 @@ impl ToLang for ExprIf {
             match else_ {
                 ExprIfElse::BlockExpr(a) => p.push_rust(a),
                 ExprIfElse::If(a) => p.push_rust(a.as_ref()),
-            }
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("if ");
-        p.push_u(&s.conditions);
-        p.push_u(&s.body);
-
-        if let Some(else_) = &s.else_ {
-            p.push_raw(" else ");
-            match else_ {
-                ExprIfElse::BlockExpr(a) => p.push_u(a),
-                ExprIfElse::If(a) => p.push_u(a.as_ref()),
             }
         }
     }
@@ -4733,28 +3289,6 @@ impl ToLang for ExprMatch {
         p.push_str("}", s.span_brace_close);
         p.push_raw("\n");
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("match ");
-        p.push_u(&s.expr);
-
-        p.push_raw(" {\n");
-        p.inc_indent();
-
-        p.push_u(&s.inner_attrs);
-        for item in &s.arms {
-            p.indent();
-            p.push_u(&item.arm);
-            p.push_raw(" => ");
-            p.push_u(&item.expr);
-            p.push_raw(",\n");
-        }
-
-        p.dec_indent();
-        p.indent();
-        p.push_raw("}\n");
-    }
 }
 #[derive(Debug, Default)]
 pub struct ExprMatchItem {
@@ -4778,16 +3312,6 @@ impl ToLang for ExprMatchArm {
             p.push_str("if", guard.span_if);
             p.push_raw(" ");
             p.push_rust(&guard.conditions);
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.outer_attrs);
-        p.push_u(&s.pattern);
-        if let Some(guard) = &s.guard {
-            p.push_raw(" if ");
-            p.push_u(&guard.conditions);
         }
     }
 }
@@ -4851,31 +3375,6 @@ impl ToLang for ExprWithoutBlock {
             ExprWithoutBlock::MacroCall(a) => p.push_rust(a),
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            ExprWithoutBlock::Literal(a) => p.push_u(a),
-            ExprWithoutBlock::Path(a) => p.push_u(a),
-            ExprWithoutBlock::Operator(a) => p.push_u(a),
-            ExprWithoutBlock::Grouped(a) => p.push_u(a),
-            ExprWithoutBlock::Array(a) => p.push_u(a),
-            ExprWithoutBlock::Await(a) => p.push_u(a),
-            ExprWithoutBlock::Index(a) => p.push_u(a),
-            ExprWithoutBlock::Tuple(a) => p.push_u(a),
-            ExprWithoutBlock::TupleIndexing(a) => p.push_u(a),
-            ExprWithoutBlock::Struct(a) => p.push_u(a),
-            ExprWithoutBlock::Call(a) => p.push_u(a),
-            ExprWithoutBlock::MethodCall(a) => p.push_u(a),
-            ExprWithoutBlock::Field(a) => p.push_u(a),
-            ExprWithoutBlock::Closure(a) => p.push_u(a),
-            ExprWithoutBlock::Continue(a) => p.push_u(a),
-            ExprWithoutBlock::Break(a) => p.push_u(a),
-            ExprWithoutBlock::Range(a) => p.push_u(a),
-            ExprWithoutBlock::Return(a) => p.push_u(a),
-            ExprWithoutBlock::MacroCall(a) => p.push_u(a),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -4885,11 +3384,6 @@ impl ToLang for ExprLiteral {
         let s = self;
 
         p.push_rust(&s.0);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.0);
     }
 }
 
@@ -4905,14 +3399,6 @@ impl ToLang for ExprPath {
         match s {
             ExprPath::Path(a) => p.push_rust(a),
             ExprPath::QualifiedPath(a) => p.push_rust(a),
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            ExprPath::Path(a) => p.push_u(a),
-            ExprPath::QualifiedPath(a) => p.push_u(a),
         }
     }
 }
@@ -5051,126 +3537,6 @@ impl ToLang for ExprOperator {
             }
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            ExprOperator::Borrow(a) => {
-                p.push_raw("&");
-                if a.raw {
-                    p.push_raw("raw ");
-                }
-                if a.mut_ {
-                    p.push_raw("mut ");
-                } else if a.raw {
-                    p.push_raw("const ");
-                }
-                p.push_u(&a.expr);
-            }
-            ExprOperator::Dereference(a) => {
-                p.push_raw("*");
-                p.push_u(&a.expr);
-            }
-            ExprOperator::ErrorPropagation(a) => {
-                p.push_u(&a.expr);
-                p.push_raw("?");
-            }
-            ExprOperator::Negation(a) => {
-                if a.not {
-                    p.push_raw("!");
-                } else {
-                    p.push_raw("-");
-                }
-                p.push_u(&a.expr);
-            }
-            ExprOperator::ArithmeticOrLogical(a) => {
-                p.push_u(&a.left);
-                p.push_raw(" ");
-                if let TokenCode::Op(op) = &a.op {
-                    match op {
-                        Op::Add => p.push_raw("+"),
-                        Op::Sub => p.push_raw("-"),
-                        Op::Star => p.push_raw("*"),
-                        Op::Div => p.push_raw("/"),
-                        Op::Rem => p.push_raw("%"),
-                        Op::BitAnd => p.push_raw("&"),
-                        Op::BitOr => p.push_raw("|"),
-                        Op::BitXor => p.push_raw("^"),
-                        Op::LeftShift => p.push_raw("<<"),
-                        Op::RightShift => p.push_raw(">>"),
-                        _ => {}
-                    }
-                }
-                p.push_raw(" ");
-                p.push_u(&a.right);
-            }
-            ExprOperator::Comparison(a) => {
-                p.push_u(&a.left);
-                p.push_raw(" ");
-                if let TokenCode::Op(op) = &a.op {
-                    match op {
-                        Op::Eq => p.push_raw("=="),
-                        Op::Neq => p.push_raw("!="),
-                        Op::Greater => p.push_raw(">"),
-                        Op::Less => p.push_raw("<"),
-                        Op::GreaterEq => p.push_raw(">="),
-                        Op::LessEq => p.push_raw("<="),
-                        _ => {}
-                    }
-                }
-                p.push_raw(" ");
-                p.push_u(&a.right);
-            }
-            ExprOperator::LazyBoolean(a) => {
-                p.push_u(&a.left);
-                p.push_raw(" ");
-                if let TokenCode::Op(op) = &a.op {
-                    match op {
-                        Op::And => p.push_raw("&&"),
-                        Op::Or => p.push_raw("||"),
-                        _ => {}
-                    }
-                }
-                p.push_raw(" ");
-                p.push_u(&a.right);
-            }
-            ExprOperator::TypeCast(a) => {
-                p.push_u(&a.expr);
-                p.push_raw(" as ");
-                if let TypeNoBounds::Parenthesized(a) = &a.type_no_bounds {
-                    p.push_u(&a.type_);
-                } else {
-                    p.push_u(&a.type_no_bounds);
-                }
-            }
-            ExprOperator::Assignment(a) => {
-                p.push_u(&a.left);
-                p.push_raw(" = ");
-                p.push_u(&a.right);
-            }
-            ExprOperator::CompoundAssignment(a) => {
-                p.push_u(&a.left);
-                p.push_raw(" ");
-                if let TokenCode::Assign(assign) = &a.op {
-                    match assign {
-                        Assign::Add => p.push_raw("+="),
-                        Assign::Sub => p.push_raw("-="),
-                        Assign::Star => p.push_raw("*="),
-                        Assign::Div => p.push_raw("/="),
-                        Assign::Rem => p.push_raw("%="),
-                        Assign::BitAnd => p.push_raw("&="),
-                        Assign::BitOr => p.push_raw("|="),
-                        Assign::BitXor => p.push_raw("^="),
-                        Assign::LeftShift => p.push_raw("<<="),
-                        Assign::RightShift => p.push_raw(">>="),
-                        _ => {}
-                    }
-                }
-                p.push_raw(" ");
-                p.push_u(&a.right);
-            }
-        }
-    }
 }
 
 #[derive(Debug, Default)]
@@ -5266,14 +3632,6 @@ impl ToLang for ExprGrouped {
         p.push_rust(&s.expr);
         p.push_str(")", s.span_paren_close);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("(");
-        p.push_u(&s.inner_attrs);
-        p.push_u(&s.expr);
-        p.push_raw(")");
-    }
 }
 #[derive(Debug)]
 pub struct ExprArray {
@@ -5307,28 +3665,6 @@ impl ToLang for ExprArray {
         }
         p.push_str("]", s.span_double_brace_close);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("[");
-        p.push_u(&s.inner_attrs);
-        match &s.payload {
-            ExprArrayPayload::One(a) => {
-                p.push_u(&a.value);
-                p.push_raw("; ");
-                p.push_u(&a.len);
-            }
-            ExprArrayPayload::Many(a) => {
-                for (i, item) in a.0.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(", ");
-                    }
-                    p.push_u(item);
-                }
-            }
-        }
-        p.push_raw("]");
-    }
 }
 #[derive(Debug)]
 pub enum ExprArrayPayload {
@@ -5358,12 +3694,6 @@ impl ToLang for ExprAwait {
         p.push_rust(&s.expr);
         p.push_str(".await", s.span);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.expr);
-        p.push_raw(".await");
-    }
 }
 
 #[derive(Debug)]
@@ -5382,14 +3712,6 @@ impl ToLang for ExprIndex {
         p.push_str("[", s.span_double_brace_open);
         p.push_rust(&s.right);
         p.push_str("]", s.span_double_brace_close);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.left);
-        p.push_raw("[");
-        p.push_u(&s.right);
-        p.push_raw("]");
     }
 }
 #[derive(Debug)]
@@ -5417,22 +3739,6 @@ impl ToLang for ExprTuple {
         }
         p.push_str(")", s.span_paren_close);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("(");
-        p.push_u(&s.inner_attrs);
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
-            }
-            p.push_u(item);
-        }
-        if s.items.len() == 1 {
-            p.push_raw(", ");
-        }
-        p.push_raw(")");
-    }
 }
 #[derive(Debug)]
 pub struct ExprTupleIndexing {
@@ -5450,13 +3756,6 @@ impl ToLang for ExprTupleIndexing {
         p.push_str(".", s.span_dot);
         p.push_str(&s.index, s.span_index);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.left);
-        p.push_raw(".");
-        p.push_raw(&s.index);
-    }
 }
 #[derive(Debug)]
 pub enum ExprStruct {
@@ -5470,14 +3769,6 @@ impl ToLang for ExprStruct {
         match s {
             ExprStruct::Struct(a) => p.push_rust(a),
             ExprStruct::Tuple(a) => p.push_rust(a),
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            ExprStruct::Struct(a) => p.push_u(a),
-            ExprStruct::Tuple(a) => p.push_u(a),
         }
     }
 }
@@ -5504,20 +3795,6 @@ impl ToLang for ExprStructStruct {
             p.push_rust(item);
         }
         p.push_str("}", s.span_brace_close);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.path);
-        p.push_raw("{");
-        p.push_u(&s.inner_attrs);
-        for (i, item) in s.fields.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
-            }
-            p.push_u(item);
-        }
-        p.push_raw("}");
     }
 }
 #[derive(Debug)]
@@ -5549,29 +3826,6 @@ impl ToLang for ExprStructField {
                     p.push_rust(a);
                 } else {
                     p.push_raw("Default::default()")
-                }
-            }
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            ExprStructField::A(a) => p.push_u(&a.name),
-            ExprStructField::B(a) => {
-                p.push_u(&a.name);
-                p.push_raw(": ");
-                p.push_u(&a.expr);
-            }
-            ExprStructField::C(a) => {
-                p.push_raw(&a.tuple_index);
-                p.push_raw(": ");
-                p.push_u(&a.expr);
-            }
-            ExprStructField::Base(a, _) => {
-                p.push_raw("..");
-                if let Some(a) = a {
-                    p.push_u(a);
                 }
             }
         }
@@ -5622,20 +3876,6 @@ impl ToLang for ExprStructTuple {
         }
         p.push_str(")", s.span_paren_close);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.path);
-        p.push_raw("(");
-        p.push_u(&s.inner_attrs);
-        for (i, item) in s.exprs.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
-            }
-            p.push_u(item);
-        }
-        p.push_raw(")");
-    }
 }
 
 #[derive(Debug)]
@@ -5659,19 +3899,6 @@ impl ToLang for ExprCall {
             p.push_rust(item);
         }
         p.push_str(")", s.span_paren_close);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.left);
-        p.push_raw("(");
-        for (i, item) in s.params.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
-            }
-            p.push_u(item);
-        }
-        p.push_raw(")");
     }
 }
 #[derive(Debug, Default)]
@@ -5700,21 +3927,6 @@ impl ToLang for ExprMethodCall {
         }
         p.push_str(")", s.span_paren_close);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.left);
-        p.push_raw(".");
-        p.push_u(&s.path_expr_segment);
-        p.push_raw("(");
-        for (i, item) in s.params.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
-            }
-            p.push_u(item);
-        }
-        p.push_raw(")");
-    }
 }
 #[derive(Debug)]
 pub struct ExprField {
@@ -5730,13 +3942,6 @@ impl ToLang for ExprField {
         p.push_rust(&s.left);
         p.push_str(".", s.span_dot);
         p.push_rust(&s.name);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_u(&s.left);
-        p.push_raw(".");
-        p.push_u(&s.name);
     }
 }
 #[derive(Debug, Default)]
@@ -5797,40 +4002,6 @@ impl ToLang for ExprClosure {
         p.push_raw(" ");
         p.push_rust(&s.expr);
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if s.async_ {
-            p.push_raw("async ");
-        }
-        if s.move_ {
-            p.push_raw("move ");
-        }
-
-        p.push_raw("|");
-        for (i, item) in s.params.iter().enumerate() {
-            p.push_u(&item.outer_attrs);
-            if let Some(pat) = &item.pat {
-                p.push_u(pat);
-            } else {
-                p.push_u(&item.name);
-            }
-            if let Some(type_) = &item.type_ {
-                p.push_raw(": ");
-                p.push_u(type_);
-            }
-            if i != s.params.len() - 1 {
-                p.push_raw(", ");
-            }
-        }
-        p.push_raw("|");
-
-        if let Some(return_type) = &s.return_type {
-            p.push_raw(" -> ");
-            p.push_u(return_type);
-        }
-        p.push_u(&s.expr);
-    }
 }
 #[derive(Debug, Default)]
 pub struct ExprContinue {
@@ -5847,15 +4018,6 @@ impl ToLang for ExprContinue {
         if let Some(identifier) = &s.label {
             p.push_raw(" ");
             p.push_rust(identifier);
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("continue");
-        if let Some(identifier) = &s.label {
-            p.push_raw(" ");
-            p.push_u(identifier);
         }
     }
 }
@@ -5881,19 +4043,6 @@ impl ToLang for ExprBreak {
             p.push_rust(expr);
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("break");
-        if let Some(identifier) = &s.label {
-            p.push_raw(" ");
-            p.push_u(identifier);
-        }
-        if let Some(expr) = &s.expr {
-            p.push_raw(" ");
-            p.push_u(expr);
-        }
-    }
 }
 #[derive(Debug, Default)]
 pub struct ExprReturn {
@@ -5909,15 +4058,6 @@ impl ToLang for ExprReturn {
         if let Some(expr) = &s.expr {
             p.push_raw(" ");
             p.push_rust(expr);
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("return");
-        if let Some(expr) = &s.expr {
-            p.push_raw(" ");
-            p.push_u(expr);
         }
     }
 }
@@ -5943,21 +4083,6 @@ impl ToLang for ExprRange {
         }
         if let Some(end) = &s.end {
             p.push_rust(end);
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if let Some(start) = &s.start {
-            p.push_u(start);
-        }
-        if s.inclusive {
-            p.push_raw("..=");
-        } else {
-            p.push_raw("..");
-        }
-        if let Some(end) = &s.end {
-            p.push_u(end);
         }
     }
 }

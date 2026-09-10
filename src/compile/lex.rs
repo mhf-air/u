@@ -1546,10 +1546,6 @@ impl ToLang for Token {
             }
         }
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-        p.push_raw(&s.u);
-    }
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
@@ -1621,19 +1617,6 @@ impl ToLang for LiteralString {
 
         p.push_raw(&s.to_rust_string());
     }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        for _ in 0..s.raw_count {
-            p.push_raw("#");
-        }
-        p.push_raw("\"");
-        p.push_raw(&s.text);
-        p.push_raw("\"");
-        for _ in 0..s.raw_count {
-            p.push_raw("#");
-        }
-    }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LiteralChar {
@@ -1657,13 +1640,6 @@ impl ToLang for LiteralChar {
         let s = self;
 
         p.push_raw(&s.to_rust_string());
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw("'");
-        p.push_raw(&s.text);
-        p.push_raw("'");
     }
 }
 
@@ -1755,17 +1731,6 @@ impl ToLang for Literal {
 
             // bool literal has neither prefix nor suffix
             LiteralPayload::Bool(a) => p.push_str(a, s.span),
-        }
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match &s.payload {
-            LiteralPayload::String(a) => p.push_u(a),
-            LiteralPayload::Char(a) => p.push_u(a),
-            LiteralPayload::Int(a) => p.push_raw(a),
-            LiteralPayload::Float(a) => p.push_raw(a),
-            LiteralPayload::Bool(a) => p.push_raw(a),
         }
     }
 }
@@ -1875,10 +1840,6 @@ impl ToLang for Identifier {
         }
         r.push_str(&Identifier::id_to_rust(&s.id));
         p.push_str(&r, s.span);
-    }
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-        p.push_raw(&s.id);
     }
 }
 
