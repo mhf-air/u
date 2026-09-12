@@ -628,30 +628,33 @@ impl Fmt {
         let mut group_m = BTreeMap::new();
 
         for item in &fields {
-            let span_right = if item.public.is_default {
-                0
-            } else {
-                match &item.public.payload {
-                    cc::VisibilityPayload::Private => 7, // +(self)
-                    cc::VisibilityPayload::Pub => 1,     // +
-                    cc::VisibilityPayload::Super => 8,   // +(super)
-                    cc::VisibilityPayload::Crate => 8,   // +(crate)
-                    cc::VisibilityPayload::SimplePath(path) => {
-                        // +(in crate..a)
-                        let mut sum = 6;
-                        for (i, a) in path.items.iter().enumerate() {
-                            if i != 0 {
-                                sum += 2;
-                            }
-                            sum += match a {
-                                cc::SimplePathSegment::Identifier(a) => a.id.len(),
-                                cc::SimplePathSegment::Super(_) => 5,
-                                cc::SimplePathSegment::SelfValue(_) => 4,
-                                cc::SimplePathSegment::Crate(_) => 5,
-                            }
-                        }
-                        sum
+            let span_right = match &item.vis.payload {
+                cc::VisibilityPayload::Private(is_self) => {
+                    if *is_self {
+                        // +(self)
+                        7
+                    } else {
+                        0
                     }
+                }
+                cc::VisibilityPayload::Pub => 1,   // +
+                cc::VisibilityPayload::Super => 8, // +(super)
+                cc::VisibilityPayload::Crate => 1, // ^
+                cc::VisibilityPayload::SimplePath(path) => {
+                    // +(in crate..a)
+                    let mut sum = 6;
+                    for (i, a) in path.items.iter().enumerate() {
+                        if i != 0 {
+                            sum += 2;
+                        }
+                        sum += match a {
+                            cc::SimplePathSegment::Identifier(a) => a.id.len(),
+                            cc::SimplePathSegment::Super(_) => 5,
+                            cc::SimplePathSegment::SelfValue(_) => 4,
+                            cc::SimplePathSegment::Crate(_) => 5,
+                        }
+                    }
+                    sum
                 }
             };
             let param = GetMaxLenParam {

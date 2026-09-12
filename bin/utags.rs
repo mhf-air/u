@@ -97,7 +97,7 @@ impl<'a> TagField<'a> {
             u::VisibilityPayload::Crate => {
                 s.access = Some("protected");
             }
-            u::VisibilityPayload::Private => {
+            u::VisibilityPayload::Private(_) => {
                 s.access = Some("");
             }
             u::VisibilityPayload::Super | u::VisibilityPayload::SimplePath(_) => {

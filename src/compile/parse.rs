@@ -403,15 +403,13 @@ impl Parse {
         if first_special_token.is_none() {
             // parse expr
             let expr = s.parse_expr()?;
-            let token = s.current();
-            let macro_start_line = token.span.line;
             s.expect(T![;])?;
 
             if let ExprPayload::WithoutBlock(b) = expr.payload {
                 if let ExprWithoutBlock::MacroCall(call) = *b {
                     return Ok(Stmt::Item(Item {
                         outer_attrs,
-                        public: Visibility::new_default(macro_start_line),
+                        vis: Visibility::default(),
                         payload: ItemPayload::MacroCall(call),
                     }));
                 } else {
@@ -458,11 +456,10 @@ impl Parse {
             }
             TokenCode::Keyword(keyword) => match keyword {
                 Keyword::Crate => {
-                    s.expect(T![crate])?;
                     let a = s.parse_crate()?;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        public: Visibility::new_default(special_token.span.line),
+                        vis: Visibility::default(),
                         payload: ItemPayload::Crate(a),
                     });
                 }
@@ -471,7 +468,7 @@ impl Parse {
                     let a = s.parse_import(false)?;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        public: Visibility::new_default(special_token.span.line),
+                        vis: Visibility::default(),
                         payload: ItemPayload::Import(a),
                     });
                 }
@@ -481,7 +478,7 @@ impl Parse {
                     a.span_extern = special_token.span;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        public: Visibility::new_default(special_token.span.line),
+                        vis: Visibility::default(),
                         payload: ItemPayload::Extern(a),
                     });
                 }
@@ -493,7 +490,7 @@ impl Parse {
                     a.span_const = special_token.span;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        public: n.public,
+                        vis: n.vis,
                         payload: ItemPayload::Const(a),
                     });
                 }
@@ -506,7 +503,7 @@ impl Parse {
                     a.span_enum = special_token.span;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        public: n.public,
+                        vis: n.vis,
                         payload: ItemPayload::Enum(a),
                     });
                 }
@@ -528,7 +525,7 @@ impl Parse {
                     a.no_s = outer_attrs.sp_list.iter().any(|it| it == r#""no-s""#);
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        public: n.public,
+                        vis: n.vis,
                         payload: ItemPayload::Func(Box::new(a)),
                     });
                 }
@@ -541,7 +538,7 @@ impl Parse {
                     a.span_impl = special_token.span;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        public: Visibility::new_default(special_token.span.line),
+                        vis: Visibility::default(),
                         payload: ItemPayload::Impl(a),
                     });
                 }
@@ -554,7 +551,7 @@ impl Parse {
                     a.span_interface = special_token.span;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        public: n.public,
+                        vis: n.vis,
                         payload: ItemPayload::Interface(a),
                     });
                 }
@@ -566,7 +563,7 @@ impl Parse {
                     a.span_macro = special_token.span;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        public: n.public,
+                        vis: n.vis,
                         payload: ItemPayload::Macro(a),
                     });
                 }
@@ -579,7 +576,7 @@ impl Parse {
                     a.span_mod = span_mod;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        public: n.public,
+                        vis: n.vis,
                         payload: ItemPayload::Mod(a),
                     });
                 }
@@ -591,7 +588,7 @@ impl Parse {
                     a.span_static = special_token.span;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        public: n.public,
+                        vis: n.vis,
                         payload: ItemPayload::Static(a),
                     });
                 }
@@ -604,7 +601,7 @@ impl Parse {
                     a.span_struct = special_token.span;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        public: n.public,
+                        vis: n.vis,
                         payload: ItemPayload::Struct(a),
                     });
                 }
@@ -617,7 +614,7 @@ impl Parse {
                     a.span_union = special_token.span;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        public: n.public,
+                        vis: n.vis,
                         payload: ItemPayload::Union(a),
                     });
                 }
@@ -630,7 +627,7 @@ impl Parse {
                     a.span_type = special_token.span;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        public: n.public,
+                        vis: n.vis,
                         payload: ItemPayload::TypeAlias(a),
                     });
                 }
@@ -760,12 +757,7 @@ impl Parse {
     // --------------------------------------------------------------------------------
     // parse lhs of first special token
 
-    fn parse_pub(&self) -> ParseResult<Visibility> {
-        let s = self;
-        s.parse_pub_with_default(VisibilityPayload::Private)
-    }
-
-    fn parse_pub_with_default(&self, payload: VisibilityPayload) -> ParseResult<Visibility> {
+    fn parse_vis(&self) -> ParseResult<Visibility> {
         let s = self;
 
         // default
@@ -777,36 +769,24 @@ impl Parse {
             T![^] => {
                 s.plusplus();
                 return Ok(Visibility {
-                    span: plus_token.span,
                     payload: VisibilityPayload::Crate,
-                    is_default: false,
                 });
             }
             _ => {
-                return Ok(Visibility {
-                    span: Span {
-                        line: plus_token.span.line,
-                        column: 0,
-                        width: 0,
-                        end_line: plus_token.span.line,
-                        end_column: 0,
-                    },
-                    payload,
-                    is_default: true,
-                });
+                return Ok(Visibility::default());
             }
         }
 
         // +
         if !matches!(s.current().code, T!["("]) {
-            return pub_vis(&plus_token);
+            return pub_vis();
         };
 
         // the token after '+('
         let token = s.nth(1);
         // + ()
         if matches!(token.code, T![")"]) {
-            return pub_vis(&plus_token);
+            return pub_vis();
         }
 
         // +(sth)
@@ -814,27 +794,19 @@ impl Parse {
             s.inc(3);
             let r = match token.code {
                 T![self] => Visibility {
-                    span: token.span,
-                    payload: VisibilityPayload::Private,
-                    is_default: false,
+                    payload: VisibilityPayload::Private(true),
                 },
                 T![super] => Visibility {
-                    span: token.span,
                     payload: VisibilityPayload::Super,
-                    is_default: false,
                 },
                 T![crate] => Visibility {
-                    span: token.span,
                     payload: VisibilityPayload::Crate,
-                    is_default: false,
                 },
                 _ => {
                     // not part of +()
                     s.dec(3);
                     Visibility {
-                        span: token.span,
                         payload: VisibilityPayload::Pub,
-                        is_default: false,
                     }
                 }
             };
@@ -851,30 +823,24 @@ impl Parse {
                     return Err(s.panic(token, "pub can't contain generic params"));
                 }
                 let result = SimplePathSegment::try_from(item.name);
-                if let Ok(a) = result {
-                    path.items.push(a);
-                } else {
+                let Ok(a) = result else {
                     return Err(s.panic(token, "pub can't contain Self"));
-                }
+                };
+                path.items.push(a);
             }
             s.plusplus();
             let r = Visibility {
-                span: token.span,
                 payload: VisibilityPayload::SimplePath(path),
-                is_default: false,
             };
             return Ok(r);
         }
 
-        return pub_vis(&plus_token);
+        return pub_vis();
 
-        fn pub_vis(token: &Token) -> ParseResult<Visibility> {
-            let r = Visibility {
-                span: token.span,
+        fn pub_vis() -> ParseResult<Visibility> {
+            return Ok(Visibility {
                 payload: VisibilityPayload::Pub,
-                is_default: false,
-            };
-            return Ok(r);
+            });
         }
     }
 
@@ -893,7 +859,7 @@ impl Parse {
             return Err(s.panic(token, &format!("expected identifier, but got {:?}", token)));
         }
 
-        r.public = s.parse_pub()?;
+        r.vis = s.parse_vis()?;
 
         Ok(r)
     }
@@ -913,7 +879,7 @@ impl Parse {
             return Err(s.panic(token, &format!("expected identifier, but got {:?}", token)));
         }
 
-        r.public = s.parse_pub()?;
+        r.vis = s.parse_vis()?;
 
         // possible [
         let mut generic_span = None;
@@ -1354,35 +1320,37 @@ impl Parse {
 
         let mut r = Crate::default();
 
-        let token = s.current();
-        let TokenCode::Identifier(a) = &token.code else {
-            return Err(s.panic(token, &format!("expected identifier, but got {:?}", token)));
-        };
+        r.t_crate = s.current().clone();
         s.plusplus();
-        let mut alias = None;
-        let token = s.current();
-        if matches!(&token.code, T![as]) {
+
+        r.name = s.current().clone();
+        if !matches!(&r.name.code, TokenCode::Identifier(_)) {
+            return Err(s.panic(&r.name,
+                &format!("expected identifier after 'crate', but got {:?}", r.name)));
+        }
+        s.plusplus();
+
+        let t_as = s.current();
+        if matches!(&t_as.code, T![as]) {
             s.plusplus();
             let token = s.current();
-            if let TokenCode::Identifier(a) = &token.code {
-                alias = Some(a.clone());
-                s.plusplus();
+            if !matches!(&token.code, TokenCode::Identifier(_)) {
+                return Err(s.panic(&token,
+                    &format!("expected identifier after 'as', but got {:?}", token)));
             }
+            r.alias = Some((t_as.clone(), token.clone()));
+            s.plusplus();
         }
-        r.items.push(CrateItem {
-            alias,
-            name: a.clone(),
-        });
         s.expect(T![;])?;
 
-        Ok(r)
+        return Ok(r);
     }
 
     fn parse_import(&self, err_on_pub: bool) -> ParseResult<Import> {
         let s = self;
 
         let mut r = Import::default();
-        let outer_public = s.parse_pub()?;
+        let outer_vis = s.parse_vis()?;
 
         // import[block] {}
         let token = s.current();
@@ -1398,24 +1366,24 @@ impl Parse {
         let token = s.current();
         if !matches!(&token.code, T!["{"]) {
             let mut item = parse_import_item(s)?;
-            item.public = outer_public;
+            item.vis = outer_vis;
             r.items.push(item);
             return Ok(r);
         }
 
         // {  }
-        r.public = outer_public;
+        r.vis = outer_vis;
         s.plusplus();
         // first token is }, +, ^, self, super, crate or identifier
         while s.has_more() {
-            let public = s.parse_pub()?;
-            if err_on_pub && !matches!(public.payload, VisibilityPayload::Private) {
+            let vis = s.parse_vis()?;
+            if err_on_pub && !matches!(vis.payload, VisibilityPayload::Private(false)) {
                 return Err(s.panic(token, "not expected pub in sub-imports"));
             }
 
             let token = s.current();
             if matches!(&token.code, T!["}"]) {
-                if !matches!(public.payload, VisibilityPayload::Private) {
+                if !matches!(vis.payload, VisibilityPayload::Private(false)) {
                     return Err(s.panic(token, "expected path after + in import"));
                 }
                 s.plusplus();
@@ -1424,7 +1392,7 @@ impl Parse {
             }
 
             let mut item = parse_import_item(s)?;
-            item.public = public;
+            item.vis = vis;
 
             r.items.push(item);
         }
@@ -1594,21 +1562,21 @@ impl Parse {
                         r.items.push(ExternalBlockItem {
                             outer_attrs: item.outer_attrs,
                             payload: ExternalBlockItemPayload::Func(*a),
-                            public: item.public,
+                            vis: item.vis,
                         });
                     }
                     ItemPayload::Static(a) => {
                         r.items.push(ExternalBlockItem {
                             outer_attrs: item.outer_attrs,
                             payload: ExternalBlockItemPayload::Static(a),
-                            public: item.public,
+                            vis: item.vis,
                         });
                     }
                     ItemPayload::MacroCall(a) => {
                         r.items.push(ExternalBlockItem {
                             outer_attrs: item.outer_attrs,
                             payload: ExternalBlockItemPayload::MacroCall(a),
-                            public: item.public,
+                            vis: item.vis,
                         });
                     }
                     _ => return Err(s.panic(token, "illegal extern item")),
@@ -2066,7 +2034,7 @@ impl Parse {
                 return Err(s.panic(token, &format!("expected identifier but got {:?}", token)));
             }
 
-            field.public = s.parse_pub()?;
+            field.vis = s.parse_vis()?;
 
             field.type_ = s.parse_type()?;
             s.expect(T![;])?;
@@ -2089,7 +2057,7 @@ impl Parse {
             let mut field = TupleField::default();
             field.outer_attrs = s.parse_outer_attrs()?;
 
-            field.public = s.parse_pub()?;
+            field.vis = s.parse_vis()?;
 
             field.type_ = s.parse_type()?;
             r.push(field);
@@ -2171,7 +2139,7 @@ impl Parse {
                     return Err(s.panic(token, &format!("expected identifier but got {:?}", token)));
                 }
 
-                // field.public = s.parse_pub()?;
+                // field.vis = s.parse_vis()?;
 
                 let token = s.current();
                 match &token.code {
@@ -2370,7 +2338,7 @@ impl Parse {
                     ItemPayload::Func(f) => {
                         let a = AssociatedItem {
                             outer_attrs: item.outer_attrs,
-                            public: item.public,
+                            vis: item.vis,
                             payload: AssociatedItemPayload::Func(*f),
                         };
                         r.items.push(a);
@@ -2378,7 +2346,7 @@ impl Parse {
                     ItemPayload::Const(f) => {
                         let a = AssociatedItem {
                             outer_attrs: item.outer_attrs,
-                            public: item.public,
+                            vis: item.vis,
                             payload: AssociatedItemPayload::Const(f),
                         };
                         r.items.push(a);
@@ -2386,7 +2354,7 @@ impl Parse {
                     ItemPayload::TypeAlias(f) => {
                         let a = AssociatedItem {
                             outer_attrs: item.outer_attrs,
-                            public: item.public,
+                            vis: item.vis,
                             payload: AssociatedItemPayload::TypeAlias(f),
                         };
                         r.items.push(a);
@@ -2394,7 +2362,7 @@ impl Parse {
                     ItemPayload::MacroCall(f) => {
                         let a = AssociatedItem {
                             outer_attrs: item.outer_attrs,
-                            public: item.public,
+                            vis: item.vis,
                             payload: AssociatedItemPayload::MacroCall(f),
                         };
                         r.items.push(a);
@@ -2477,7 +2445,7 @@ impl Parse {
                 };
                 r.items.push(AssociatedItem {
                     outer_attrs: item.outer_attrs,
-                    public: item.public,
+                    vis: item.vis,
                     payload,
                 });
             } else {
@@ -6144,9 +6112,14 @@ impl Parse {
                 }
             }
             s.plusplus();
-            let mut attr = parse_attr(s)?;
-            attr.span_start = token.span;
-            attr.span_end = s.current().span;
+            let tokens = parse_attr(s)?;
+            let mut t_end = s.current().clone();
+            t_end.code = TokenCode::Pair(Pair::EndAttr);
+            let attr = Attr {
+                tokens,
+                t_start: token.clone(),
+                t_end,
+            };
             s.expect(T!["]"])?;
             r.items.push(attr);
         }
@@ -6169,7 +6142,7 @@ impl Parse {
         }
 
         // after #[ or #![
-        fn parse_attr(s: &Parse) -> ParseResult<Attr> {
+        fn parse_attr(s: &Parse) -> ParseResult<Vec<Token>> {
             let mut r: Vec<Token> = Vec::new();
             let mut square_count = 0;
             while s.has_more() {
@@ -6190,12 +6163,7 @@ impl Parse {
                 s.plusplus();
                 r.push(token.clone());
             }
-
-            Ok(Attr {
-                span_start: Span::default(),
-                tokens: r,
-                span_end: Span::default(),
-            })
+            Ok(r)
         }
     }
 }
@@ -6226,13 +6194,13 @@ pub type ParseResult<T> = Result<T, ParseError>;
 #[derive(Debug, Default)]
 struct IdentifierPlus {
     name: Identifier,
-    public: Visibility,
+    vis: Visibility,
 }
 
 #[derive(Debug, Default)]
 struct IdentifierPlusGenerics {
     name: Identifier,
-    public: Visibility,
+    vis: Visibility,
     generics: Option<Generics>,
 }
 

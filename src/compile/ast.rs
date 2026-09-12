@@ -25,6 +25,7 @@ pub struct SpanPair {
 #[derive(Debug, Clone)]
 pub struct RustSpan {
     pub byte_start: usize,
+    // width in bytes
     pub width: usize,
     pub line: usize,
     pub column: usize,
@@ -109,7 +110,32 @@ impl<'a> LangFormatter<'a> {
         }
     }
 
-    pub fn push_str(&mut self, a: &str, span: Span) {
+    pub fn push_token(&mut self, rs: &str, delta_line: usize, span: Span) {
+        let s = self;
+
+        let rust_span = RustSpan {
+            byte_start: s.buf.len(),
+            width: rs.len(),
+            line: s.line,
+            column: s.column,
+            #[cfg(debug_assertions)]
+            text: rs.to_string(),
+        };
+        s.span_pairs.push(SpanPair{
+            u: span,
+            rust: rust_span,
+        });
+
+        s.line += delta_line;
+        if delta_line > 0 {
+            s.column = span.end_column;
+        } else {
+            s.column += rs.len();
+        }
+        s.buf.push_str(rs);
+    }
+
+    pub fn push_s(&mut self, a: &str, span: Span) {
         let s = self;
 
         s.span_pairs.push(SpanPair {
@@ -157,7 +183,6 @@ impl<'a> LangFormatter<'a> {
         }
         s.column += s.indent as usize;
     }
-
     pub fn inc_indent(&mut self) {
         let s = self;
         s.indent += 1;
@@ -192,16 +217,16 @@ impl ToLang for Package {
         let s = self;
 
         if let Some(a) = &s.shebang {
-            p.push_rust(a);
+            a.to_rust(p);
         }
 
-        p.push_rust(&s.inner_attrs);
-        for item in &s.items {
-            p.push_rust(item);
+        s.inner_attrs.to_rust(p);
+        for it in &s.items {
+            it.to_rust(p);
         }
 
         for it in &s.end_tokens {
-            p.push_rust(it);
+            it.to_rust(p);
         }
     }
 }
@@ -215,58 +240,49 @@ impl Package {
     }
 }
 
+/// NOTE the form is fixed: pub(crate)
+/// no whitespaces or comments within Visibility
 #[derive(Debug, Default)]
 pub struct Visibility {
-    pub span: Span,
     pub payload: VisibilityPayload,
-    pub is_default: bool, // true for none
 }
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub enum VisibilityPayload {
-    #[default]
-    Private,
+    Private(bool),
     Pub,
-    Super,
     Crate,
+    Super,
     SimplePath(SimplePath),
 }
-impl Visibility {
-    pub fn new_default(line: usize) -> Visibility {
-        Visibility {
-            span: Span {
-                line,
-                column: 0,
-                width: 0,
-                end_line: line,
-                end_column: 0,
-            },
-            payload: VisibilityPayload::Crate,
-            is_default: true,
-        }
+impl Default for VisibilityPayload {
+    fn default() -> Self {
+        Self::Private(false)
     }
 }
 impl ToLang for Visibility {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
+        use VisibilityPayload as A;
 
         match &s.payload {
-            VisibilityPayload::Private => {}
-            VisibilityPayload::Pub => {
-                p.push_str("pub", s.span);
-                p.push_raw(" ");
+            A::Private(is_self) => {
+                if *is_self {
+                    p.push_raw("pub(self)");
+                }
             }
-            VisibilityPayload::Super => {
-                p.push_str("pub(super)", s.span);
-                p.push_raw(" ");
+            A::Pub => {
+                p.push_raw("pub");
             }
-            VisibilityPayload::Crate => {
-                p.push_str("pub(crate)", s.span);
-                p.push_raw(" ");
+            A::Crate => {
+                p.push_raw("pub(crate)");
             }
-            VisibilityPayload::SimplePath(path) => {
-                p.push_raw("pub(in ");
-                p.push_rust(path);
-                p.push_raw(") ");
+            A::Super => {
+                p.push_raw("pub(super)");
+            }
+            A::SimplePath(path) => {
+                p.push_raw("pub(in");
+                path.to_rust(p);
+                p.push_raw(")");
             }
         }
     }
@@ -275,69 +291,32 @@ impl ToLang for Visibility {
 #[derive(Debug, Default)]
 pub struct Item {
     pub outer_attrs: Attrs,
-    pub public: Visibility,
+    pub vis: Visibility,
     pub payload: ItemPayload,
 }
 impl ToLang for Item {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        match &s.payload {
-            // add #[derive(Debug)] for all struct and enum
-            ItemPayload::Struct(_) | ItemPayload::Enum(_) => {
-                let mut derive = true;
-                for sp in &s.outer_attrs.sp_list {
-                    if sp == r#""no-derive-debug""# {
-                        derive = false;
-                        break;
-                    }
-                }
-                if derive {
-                    p.indent();
-                    p.push_raw("#[derive(Debug)]\n");
+        // add #[derive(Debug)] for all struct and enum
+        if matches!(&s.payload, ItemPayload::Struct(_) | ItemPayload::Enum(_)) {
+            let mut derive = true;
+            for sp in &s.outer_attrs.sp_list {
+                if sp == r#""no-derive-debug""# {
+                    derive = false;
+                    break;
                 }
             }
-            _ => {}
-        }
-        p.push_rust(&s.outer_attrs);
-
-        p.indent();
-        if !matches!(
-            &s.payload,
-                ItemPayload::Crate(_)
-                | ItemPayload::Import(_)
-                | ItemPayload::Impl(_)
-                | ItemPayload::Extern(_)
-                | ItemPayload::Macro(_)
-                | ItemPayload::MacroCall(_)
-        ) {
-            p.push_rust(&s.public);
-        }
-
-        match &s.payload {
-            ItemPayload::Mod(a) => p.push_rust(a),
-            ItemPayload::Crate(a) => p.push_rust(a),
-            ItemPayload::Extern(a) => p.push_rust(a),
-            ItemPayload::Import(a) => p.push_rust(a),
-            ItemPayload::Func(a) => p.push_rust(a.as_ref()),
-            ItemPayload::TypeAlias(a) => p.push_rust(a),
-            ItemPayload::Struct(a) => p.push_rust(a),
-            ItemPayload::Enum(a) => p.push_rust(a),
-            ItemPayload::Union(a) => p.push_rust(a),
-            ItemPayload::Const(a) => p.push_rust(a),
-            ItemPayload::Static(a) => p.push_rust(a),
-            ItemPayload::Interface(a) => p.push_rust(a),
-            ItemPayload::Impl(a) => p.push_rust(a),
-            ItemPayload::Macro(a) => p.push_rust(a),
-            ItemPayload::MacroCall(a) => {
-                p.push_rust(a);
-                // for macro calls in item
-                if matches!(a.body, MacroCallBody::Expr(_)) {
-                    p.push_raw(";");
-                }
+            if derive {
+                p.indent();
+                p.push_raw("#[derive(Debug)]\n");
             }
         }
-        p.push_raw("\n");
+        s.outer_attrs.to_rust(p);
+
+        s.payload.to_rust_before(p);
+        s.vis.to_rust(p);
+        s.payload.to_rust(p);
     }
 }
 
@@ -365,6 +344,65 @@ impl Default for ItemPayload {
     }
 }
 
+impl ItemPayload {
+    fn to_rust_before(&self, p: &mut LangFormatter) {
+        let s = self;
+        use ItemPayload as A;
+
+        let t_a = Token::default();
+
+        let first_u_token = match s {
+            A::Mod(_a) => &t_a,
+            A::Crate(a) => &a.t_crate,
+            A::Extern(_a) => &t_a,
+            A::Import(_a) => &t_a,
+            A::Func(_a) => &t_a,
+            A::TypeAlias(_a) => &t_a,
+            A::Struct(_a) => &t_a,
+            A::Enum(_a) => &t_a,
+            A::Union(_a) => &t_a,
+            A::Const(_a) => &t_a,
+            A::Static(_a) => &t_a,
+            A::Interface(_a) => &t_a,
+            A::Impl(_a) => &t_a,
+            A::Macro(_a) => &t_a,
+            A::MacroCall(_a) => &t_a,
+        };
+        first_u_token.to_rs_before(p);
+    }
+}
+
+impl ToLang for ItemPayload {
+    fn to_rust(&self, p: &mut LangFormatter) {
+        let s = self;
+        use ItemPayload as A;
+
+        match s {
+            A::Mod(a) => a.to_rust(p),
+            A::Crate(a) => a.to_rust(p),
+            A::Extern(a) => a.to_rust(p),
+            A::Import(a) => a.to_rust(p),
+            A::Func(a) => a.to_rust(p),
+            A::TypeAlias(a) => a.to_rust(p),
+            A::Struct(a) => a.to_rust(p),
+            A::Enum(a) => a.to_rust(p),
+            A::Union(a) => a.to_rust(p),
+            A::Const(a) => a.to_rust(p),
+            A::Static(a) => a.to_rust(p),
+            A::Interface(a) => a.to_rust(p),
+            A::Impl(a) => a.to_rust(p),
+            A::Macro(a) => a.to_rust(p),
+            A::MacroCall(a) => {
+                a.to_rust(p);
+                // for macro calls in item
+                if matches!(a.body, MacroCallBody::Expr(_)) {
+                    p.push_raw(";");
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Mod {
     pub name: Identifier,
@@ -380,7 +418,7 @@ impl ToLang for Mod {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("mod", s.span_mod);
+        p.push_s("mod", s.span_mod);
         p.push_raw(" ");
         p.push_rust(&s.name);
         let Some(items) = &s.items else {
@@ -389,7 +427,7 @@ impl ToLang for Mod {
         };
 
         p.push_raw(" ");
-        p.push_str("{", s.span_brace_open.unwrap());
+        p.push_s("{", s.span_brace_open.unwrap());
         p.push_raw("\n");
 
         p.inc_indent();
@@ -399,40 +437,36 @@ impl ToLang for Mod {
         }
         p.dec_indent();
         p.indent();
-        p.push_str("}", s.span_brace_close.unwrap());
+        p.push_s("}", s.span_brace_close.unwrap());
     }
 }
 
 #[derive(Debug, Default)]
 pub struct Crate {
-    pub items: Vec<CrateItem>, // items.len() > 0
+    pub name: Token,
+    // AS, ALIAS
+    pub alias: Option<(Token, Token)>,
+
+    pub t_crate: Token,
 }
 impl ToLang for Crate {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        for item in &s.items {
-            p.indent();
-            p.push_raw("extern crate ");
-            p.push_rust(&item.name);
-            if let Some(alias) = &item.alias {
-                p.push_raw(" as ");
-                p.push_rust(alias);
-            }
-            p.push_raw(";\n");
+        p.push_raw("extern crate ");
+        s.name.to_rs_one(p);
+        if let Some(alias) = &s.alias {
+            alias.0.to_rust(p);
+            alias.1.to_rust(p);
         }
+        p.push_raw(";");
     }
-}
-#[derive(Debug)]
-pub struct CrateItem {
-    pub alias: Option<Identifier>,
-    pub name: Identifier,
 }
 
 #[derive(Debug, Default)]
 pub struct Import {
     pub items: Vec<ImportItem>, // items.len() > 0
-    pub public: Visibility,
+    pub vis: Visibility,
     pub is_block: bool,
 }
 impl ToLang for Import {
@@ -440,7 +474,7 @@ impl ToLang for Import {
         let s = self;
 
         if s.is_block {
-            p.push_rust(&s.public);
+            p.push_rust(&s.vis);
             p.push_raw("use {\n");
             p.inc_indent();
             for item in &s.items {
@@ -455,7 +489,7 @@ impl ToLang for Import {
         }
 
         for item in &s.items {
-            p.push_rust(&item.public);
+            p.push_rust(&item.vis);
             p.push_raw("use ");
             p.push_rust(item);
             p.push_raw(";\n");
@@ -464,7 +498,7 @@ impl ToLang for Import {
 }
 #[derive(Debug, Default)]
 pub struct ImportItem {
-    pub public: Visibility,
+    pub vis: Visibility,
     pub alias: Option<Identifier>,
     pub paths: Vec<Identifier>, // path.len() > 0
     pub sub: Vec<ImportItem>,
@@ -526,23 +560,23 @@ impl ToLang for Func {
         let s = self;
 
         if s.qualifier.const_ {
-            p.push_str("const", s.qualifier.span_const.unwrap());
+            p.push_s("const", s.qualifier.span_const.unwrap());
             p.push_raw(" ");
         }
         if s.qualifier.async_ {
-            p.push_str("async", s.qualifier.span_async.unwrap());
+            p.push_s("async", s.qualifier.span_async.unwrap());
             p.push_raw(" ");
         }
         if s.qualifier.unsafe_ {
-            p.push_str("unsafe", s.qualifier.span_unsafe.unwrap());
+            p.push_s("unsafe", s.qualifier.span_unsafe.unwrap());
             p.push_raw(" ");
         }
         if s.qualifier.safe {
-            p.push_str("safe", s.qualifier.span_safe.unwrap());
+            p.push_s("safe", s.qualifier.span_safe.unwrap());
             p.push_raw(" ");
         }
         if let Some(extern_) = &s.qualifier.extern_ {
-            p.push_str("extern", s.qualifier.span_extern.unwrap());
+            p.push_s("extern", s.qualifier.span_extern.unwrap());
             p.push_raw(" ");
             if let Some(abi) = extern_ {
                 abi.push_span(p, s.qualifier.span_abi.unwrap());
@@ -550,7 +584,7 @@ impl ToLang for Func {
             }
         }
 
-        p.push_str("fn", s.span_func);
+        p.push_s("fn", s.span_func);
         p.push_raw(" ");
         p.push_rust(&s.name);
 
@@ -558,7 +592,7 @@ impl ToLang for Func {
             p.push_rust(generics);
         }
 
-        p.push_str("(", s.span_paren_open);
+        p.push_s("(", s.span_paren_open);
         if let Some(self_param) = &s.self_param {
             p.push_rust(self_param);
             if !s.params.is_empty() {
@@ -581,9 +615,9 @@ impl ToLang for Func {
         if let Some(v) = &s.variadics {
             p.push_raw(", ");
             p.push_rust(&v.outer_attrs);
-            p.push_str("...", v.span);
+            p.push_s("...", v.span);
         }
-        p.push_str(")", s.span_paren_close);
+        p.push_s(")", s.span_paren_close);
 
         if let Some(return_type) = &s.return_type {
             p.push_raw(" -> ");
@@ -597,7 +631,7 @@ impl ToLang for Func {
         // body
         if let Some(body) = &s.body {
             p.push_raw(" ");
-            p.push_str("{", body.span_brace_open);
+            p.push_s("{", body.span_brace_open);
             p.push_raw("\n");
             p.inc_indent();
             p.push_rust(&body.inner_attrs);
@@ -612,7 +646,7 @@ impl ToLang for Func {
             }
             p.dec_indent();
             p.indent();
-            p.push_str("}", body.span_brace_close);
+            p.push_s("}", body.span_brace_close);
         } else {
             p.push_raw(";");
         }
@@ -646,7 +680,7 @@ impl ToLang for SelfParam {
         match &s.payload {
             SelfParamPayload::Type(a) => {
                 if let Some(span) = a.span_mut {
-                    p.push_str("mut ", span);
+                    p.push_s("mut ", span);
                     if a.typ.is_none() {
                         p.push_raw("self");
                         return;
@@ -659,16 +693,16 @@ impl ToLang for SelfParam {
             }
             SelfParamPayload::Short(a) => {
                 if let Some(span) = a.span_self {
-                    p.push_str("self", span);
+                    p.push_s("self", span);
                     return;
                 }
-                p.push_str("&", a.span_ref);
+                p.push_s("&", a.span_ref);
                 if let Some(label) = &a.label {
                     p.push_rust(label);
                     p.push_raw(" ");
                 }
                 if a.mut_ {
-                    p.push_str("mut", a.span_mut.unwrap());
+                    p.push_s("mut", a.span_mut.unwrap());
                     p.push_raw(" ");
                 }
                 p.push_raw("self");
@@ -731,7 +765,7 @@ impl ToLang for TypeAlias {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("type", s.span_type);
+        p.push_s("type", s.span_type);
         p.push_raw(" ");
         p.push_rust(&s.name);
         if let Some(generics) = &s.generics {
@@ -746,7 +780,7 @@ impl ToLang for TypeAlias {
         }
         if let Some(type_) = &s.type_ {
             p.push_raw(" ");
-            p.push_str("=", s.span_eq.unwrap());
+            p.push_s("=", s.span_eq.unwrap());
             p.push_raw(" ");
             p.push_rust(type_);
             if let Some(where_) = &s.type_where {
@@ -774,7 +808,7 @@ impl ToLang for Struct {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("struct", s.span_struct);
+        p.push_s("struct", s.span_struct);
         p.push_raw(" ");
         p.push_rust(&s.name);
         if let Some(generics) = &s.generics {
@@ -788,14 +822,14 @@ impl ToLang for Struct {
                         p.push_rust(where_);
                     }
                     p.push_raw(" ");
-                    p.push_str("{", s.span_brace_open.unwrap());
+                    p.push_s("{", s.span_brace_open.unwrap());
                     p.push_raw("\n");
 
                     p.inc_indent();
                     for item in a {
                         p.push_rust(&item.outer_attrs);
                         p.indent();
-                        p.push_rust(&item.public);
+                        p.push_rust(&item.vis);
                         p.push_rust(&item.name);
                         p.push_raw(": ");
                         p.push_rust(&item.type_);
@@ -803,19 +837,19 @@ impl ToLang for Struct {
                     }
                     p.dec_indent();
                     p.indent();
-                    p.push_str("}", s.span_brace_close.unwrap());
+                    p.push_s("}", s.span_brace_close.unwrap());
                 }
                 StructPayload::Tuple(a) => {
-                    p.push_str("(", s.span_paren_open.unwrap());
+                    p.push_s("(", s.span_paren_open.unwrap());
                     for (i, item) in a.iter().enumerate() {
                         if i != 0 {
                             p.push_raw(", ");
                         }
                         p.push_rust(&item.outer_attrs);
-                        p.push_rust(&item.public);
+                        p.push_rust(&item.vis);
                         p.push_rust(&item.type_);
                     }
-                    p.push_str(")", s.span_paren_close.unwrap());
+                    p.push_s(")", s.span_paren_close.unwrap());
                     if let Some(where_) = &s.where_ {
                         p.push_rust(where_);
                     }
@@ -837,13 +871,13 @@ pub enum StructPayload {
 pub struct StructField {
     pub outer_attrs: Attrs,
     pub name: Identifier,
-    pub public: Visibility,
+    pub vis: Visibility,
     pub type_: Type,
 }
 #[derive(Debug, Default)]
 pub struct TupleField {
     pub outer_attrs: Attrs,
-    pub public: Visibility,
+    pub vis: Visibility,
     pub type_: Type,
 }
 
@@ -862,7 +896,7 @@ impl ToLang for Enum {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("enum", s.span_enum);
+        p.push_s("enum", s.span_enum);
         p.push_raw(" ");
         p.push_rust(&s.name);
         if let Some(generics) = &s.generics {
@@ -872,7 +906,7 @@ impl ToLang for Enum {
             p.push_rust(where_);
         }
         p.push_raw(" ");
-        p.push_str("{", s.span_brace_open.unwrap());
+        p.push_s("{", s.span_brace_open.unwrap());
         p.push_raw("\n");
 
         p.inc_indent();
@@ -882,14 +916,14 @@ impl ToLang for Enum {
         }
         p.dec_indent();
         p.indent();
-        p.push_str("}", s.span_brace_close.unwrap());
+        p.push_s("}", s.span_brace_close.unwrap());
     }
 }
 #[derive(Debug, Default)]
 pub struct EnumItem {
     pub outer_attrs: Attrs,
     pub name: Identifier,
-    // pub public: Visibility, // it's not needed
+    // pub vis: Visibility, // it's not needed
     pub payload: EnumItemPayload,
     pub discriminant: Option<Expr>,
 
@@ -905,18 +939,18 @@ impl ToLang for EnumItem {
 
         p.push_rust(&s.outer_attrs);
         p.indent();
-        // p.push_rust(&s.public);
+        // p.push_rust(&s.vis);
         p.push_rust(&s.name);
 
         match &s.payload {
             EnumItemPayload::Struct(a) => {
                 p.push_raw(" ");
-                p.push_str("{", s.span_brace_open.unwrap());
+                p.push_s("{", s.span_brace_open.unwrap());
                 p.push_raw("\n");
                 p.inc_indent();
                 for item in a {
                     p.indent();
-                    // p.push_rust(&item.public);
+                    // p.push_rust(&item.vis);
                     p.push_rust(&item.name);
                     p.push_raw(": ");
                     p.push_rust(&item.type_);
@@ -924,25 +958,25 @@ impl ToLang for EnumItem {
                 }
                 p.dec_indent();
                 p.indent();
-                p.push_str("}", s.span_brace_close.unwrap());
+                p.push_s("}", s.span_brace_close.unwrap());
             }
             EnumItemPayload::Tuple(a) => {
-                p.push_str("(", s.span_paren_open.unwrap());
+                p.push_s("(", s.span_paren_open.unwrap());
                 for (i, item) in a.iter().enumerate() {
                     if i != 0 {
                         p.push_raw(", ");
                     }
                     p.push_rust(&item.outer_attrs);
-                    // p.push_rust(&item.public);
+                    // p.push_rust(&item.vis);
                     p.push_rust(&item.type_);
                 }
-                p.push_str(")", s.span_paren_close.unwrap());
+                p.push_s(")", s.span_paren_close.unwrap());
             }
             EnumItemPayload::None => {}
         }
         if let Some(a) = &s.discriminant {
             p.push_raw(" ");
-            p.push_str("=", s.span_eq.unwrap());
+            p.push_s("=", s.span_eq.unwrap());
             p.push_raw(" ");
             p.push_rust(a);
         }
@@ -971,7 +1005,7 @@ impl ToLang for Union {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("union", s.span_union);
+        p.push_s("union", s.span_union);
         p.push_raw(" ");
         p.push_rust(&s.name);
         if let Some(generics) = &s.generics {
@@ -982,14 +1016,14 @@ impl ToLang for Union {
             p.push_rust(where_);
         }
         p.push_raw(" ");
-        p.push_str("{", s.span_brace_open.unwrap());
+        p.push_s("{", s.span_brace_open.unwrap());
         p.push_raw("\n");
 
         p.inc_indent();
         for item in &s.fields {
             p.push_rust(&item.outer_attrs);
             p.indent();
-            p.push_rust(&item.public);
+            p.push_rust(&item.vis);
             p.push_rust(&item.name);
             p.push_raw(": ");
             p.push_rust(&item.type_);
@@ -997,7 +1031,7 @@ impl ToLang for Union {
         }
         p.dec_indent();
         p.indent();
-        p.push_str("}", s.span_brace_close.unwrap());
+        p.push_s("}", s.span_brace_close.unwrap());
     }
 }
 
@@ -1014,14 +1048,14 @@ impl ToLang for Const {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("const", s.span_const);
+        p.push_s("const", s.span_const);
         p.push_raw(" ");
         p.push_rust(&s.name);
         p.push_raw(": ");
         p.push_rust(&s.type_);
         if let Some(expr) = &s.expr {
             p.push_raw(" ");
-            p.push_str("=", s.span_eq.unwrap());
+            p.push_s("=", s.span_eq.unwrap());
             p.push_raw(" ");
             p.push_rust(expr);
         }
@@ -1047,13 +1081,13 @@ impl ToLang for Static {
         let s = self;
 
         if s.safe {
-            p.push_str("safe", s.span_safe.unwrap());
+            p.push_s("safe", s.span_safe.unwrap());
             p.push_raw(" ");
         }
-        p.push_str("static", s.span_static);
+        p.push_s("static", s.span_static);
         p.push_raw(" ");
         if s.mut_ {
-            p.push_str("mut", s.span_mut.unwrap());
+            p.push_s("mut", s.span_mut.unwrap());
             p.push_raw(" ");
         }
         p.push_rust(&s.name);
@@ -1061,7 +1095,7 @@ impl ToLang for Static {
         p.push_rust(&s.type_);
         if let Some(expr) = &s.expr {
             p.push_raw(" ");
-            p.push_str("=", s.span_eq.unwrap());
+            p.push_s("=", s.span_eq.unwrap());
             p.push_raw(" ");
             p.push_rust(expr);
         }
@@ -1091,10 +1125,10 @@ impl ToLang for Interface {
         let s = self;
 
         if s.unsafe_ {
-            p.push_str("unsafe", s.span_unsafe.unwrap());
+            p.push_s("unsafe", s.span_unsafe.unwrap());
             p.push_raw(" ");
         }
-        p.push_str("trait", s.span_interface);
+        p.push_s("trait", s.span_interface);
         p.push_raw(" ");
         p.push_rust(&s.name);
         if let Some(generics) = &s.generics {
@@ -1109,7 +1143,7 @@ impl ToLang for Interface {
         }
 
         p.push_raw(" ");
-        p.push_str("{", s.span_brace_open);
+        p.push_s("{", s.span_brace_open);
         p.push_raw("\n");
         p.inc_indent();
         p.push_rust(&s.inner_attrs);
@@ -1118,14 +1152,14 @@ impl ToLang for Interface {
         }
         p.dec_indent();
         p.indent();
-        p.push_str("}", s.span_brace_close);
+        p.push_s("}", s.span_brace_close);
     }
 }
 
 #[derive(Debug)]
 pub struct AssociatedItem {
     pub outer_attrs: Attrs,
-    pub public: Visibility,
+    pub vis: Visibility,
     pub payload: AssociatedItemPayload,
 }
 impl ToLang for AssociatedItem {
@@ -1134,10 +1168,10 @@ impl ToLang for AssociatedItem {
 
         p.indent();
         p.push_rust(&s.outer_attrs);
-        // public only needed here
+        // vis only needed here
         if p.in_impl_static {
             if !matches!(&s.payload, AssociatedItemPayload::MacroCall(_)) {
-                p.push_rust(&s.public);
+                p.push_rust(&s.vis);
             }
         }
         match &s.payload {
@@ -1183,11 +1217,11 @@ impl ToLang for Impl {
 
         if let ImplPayload::Interface(a) = &s.payload {
             if a.unsafe_ {
-                p.push_str("unsafe", a.span_unsafe);
+                p.push_s("unsafe", a.span_unsafe);
                 p.push_raw(" ");
             }
         }
-        p.push_str("impl", s.span_impl);
+        p.push_s("impl", s.span_impl);
 
         if let Some(generics) = &s.generics {
             p.push_rust(generics);
@@ -1210,7 +1244,7 @@ impl ToLang for Impl {
         }
 
         p.push_raw(" ");
-        p.push_str("{", s.span_brace_open);
+        p.push_s("{", s.span_brace_open);
         p.push_raw("\n");
         p.inc_indent();
         p.push_rust(&s.inner_attrs);
@@ -1225,7 +1259,7 @@ impl ToLang for Impl {
         }
         p.dec_indent();
         p.indent();
-        p.push_str("}", s.span_brace_close);
+        p.push_s("}", s.span_brace_close);
     }
 }
 
@@ -1260,16 +1294,16 @@ impl ToLang for Macro {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("macro_rules!", s.span_macro);
+        p.push_s("macro_rules!", s.span_macro);
         p.push_raw(" ");
         p.push_rust(&s.name);
 
         p.push_raw(" ");
-        p.push_str("{", s.span_brace_open);
+        p.push_s("{", s.span_brace_open);
 
         tokens_to_rust(s.span_brace_open, &s.tokens, s.span_brace_close, p);
 
-        p.push_str("}", s.span_brace_close);
+        p.push_s("}", s.span_brace_close);
     }
 }
 
@@ -1347,7 +1381,7 @@ impl ToLang for MacroCall {
         let s = self;
 
         p.push_rust(&s.path);
-        p.push_str("!", s.span_macro_call);
+        p.push_s("!", s.span_macro_call);
 
         match &s.body {
             MacroCallBody::Token(list) => {
@@ -1356,9 +1390,9 @@ impl ToLang for MacroCall {
                     2 => ("[", "]"),
                     _ => ("{", "}"),
                 };
-                p.push_str(pairs.0, s.span_delim_open);
+                p.push_s(pairs.0, s.span_delim_open);
                 tokens_to_rust(s.span_delim_open, list, s.span_delim_close, p);
-                p.push_str(pairs.1, s.span_delim_close);
+                p.push_s(pairs.1, s.span_delim_close);
             }
             MacroCallBody::Expr(list) => {
                 p.push_raw("(");
@@ -1443,16 +1477,16 @@ impl ToLang for ExternalBlock {
 
         p.indent();
         if s.unsafe_ {
-            p.push_str("unsafe", s.span_unsafe.unwrap());
+            p.push_s("unsafe", s.span_unsafe.unwrap());
             p.push_raw(" ");
         }
-        p.push_str("extern", s.span_extern);
+        p.push_s("extern", s.span_extern);
         p.push_raw(" ");
         if let Some(abi) = &s.extern_ {
             abi.push_span(p, s.span_abi.unwrap());
             p.push_raw(" ");
         }
-        p.push_str("{", s.span_brace_open);
+        p.push_s("{", s.span_brace_open);
         p.push_raw("\n");
 
         p.inc_indent();
@@ -1462,13 +1496,13 @@ impl ToLang for ExternalBlock {
         }
         p.dec_indent();
         p.indent();
-        p.push_str("}", s.span_brace_close);
+        p.push_s("}", s.span_brace_close);
     }
 }
 #[derive(Debug)]
 pub struct ExternalBlockItem {
     pub outer_attrs: Attrs,
-    pub public: Visibility,
+    pub vis: Visibility,
     pub payload: ExternalBlockItemPayload,
 }
 impl ToLang for ExternalBlockItem {
@@ -1477,7 +1511,7 @@ impl ToLang for ExternalBlockItem {
 
         p.push_rust(&s.outer_attrs);
         p.indent();
-        p.push_rust(&s.public);
+        p.push_rust(&s.vis);
         match &s.payload {
             ExternalBlockItemPayload::Func(a) => p.push_rust(a),
             ExternalBlockItemPayload::Static(a) => p.push_rust(a),
@@ -1502,10 +1536,8 @@ impl ToLang for Attrs {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        for item in &s.items {
-            p.indent();
-            p.push_rust(item);
-            p.push_raw("\n");
+        for it in &s.items {
+            it.to_rust(p);
         }
     }
 }
@@ -1514,8 +1546,8 @@ impl ToLang for Attrs {
 pub struct Attr {
     pub tokens: Vec<Token>,
 
-    pub span_start: Span,
-    pub span_end: Span,
+    pub t_start: Token,
+    pub t_end: Token,
 }
 impl ToLang for Attr {
     fn to_rust(&self, p: &mut LangFormatter) {
@@ -1525,15 +1557,11 @@ impl ToLang for Attr {
             return;
         }
 
-        if s.span_start.width == 3 {
-            p.push_str("#![", s.span_start);
-        } else {
-            p.push_str("#[", s.span_start);
+        s.t_start.to_rust(p);
+        for it in &s.tokens {
+            it.to_rust(p);
         }
-        for token in &s.tokens {
-            p.push_rust(token);
-        }
-        p.push_str("]", s.span_end);
+        s.t_end.to_rust(p);
     }
 }
 
@@ -1549,14 +1577,14 @@ impl ToLang for Generics {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("<", s.span_square_open);
+        p.push_s("<", s.span_square_open);
         for (i, item) in s.params.iter().enumerate() {
             if i != 0 {
                 p.push_raw(", ");
             }
             p.push_rust(item);
         }
-        p.push_str(">", s.span_square_close);
+        p.push_s(">", s.span_square_close);
     }
 }
 #[derive(Debug, Default)]
@@ -1594,7 +1622,7 @@ impl ToLang for GenericParam {
                 }
             }
             GenericParamPayload::Const(a) => {
-                p.push_str("const", a.span_const);
+                p.push_s("const", a.span_const);
                 p.push_raw(" ");
                 p.push_rust(&a.name);
                 p.push_raw(": ");
@@ -1662,7 +1690,7 @@ impl ToLang for Where {
         let s = self;
 
         p.push_raw(" ");
-        p.push_str("where", s.span_where);
+        p.push_s("where", s.span_where);
         p.push_raw(" ");
         for (i, item) in s.items.iter().enumerate() {
             if i != 0 {
@@ -1773,15 +1801,15 @@ impl ToLang for UseBound {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("use", s.span_use);
-        p.push_str("<", s.span_square_open);
+        p.push_s("use", s.span_use);
+        p.push_s("<", s.span_square_open);
         for (i, item) in s.items.iter().enumerate() {
             if i != 0 {
                 p.push_raw(", ");
             }
             p.push_rust(item);
         }
-        p.push_str(">", s.span_square_close);
+        p.push_s(">", s.span_square_close);
     }
 }
 impl ToLang for UseBoundGenericArg {
@@ -1791,7 +1819,7 @@ impl ToLang for UseBoundGenericArg {
         match s {
             UseBoundGenericArg::Lifetime(a) => p.push_rust(a),
             UseBoundGenericArg::Id(a) => p.push_rust(a),
-            UseBoundGenericArg::Self_(a) => p.push_str("Self", *a),
+            UseBoundGenericArg::Self_(a) => p.push_s("Self", *a),
         }
     }
 }
@@ -1809,7 +1837,7 @@ impl ToLang for InterfaceBound {
         let s = self;
 
         if s.unsized_ {
-            p.push_str("?", s.span_unsized.unwrap());
+            p.push_s("?", s.span_unsized.unwrap());
         }
         if let Some(for_) = &s.for_lifetimes {
             p.push_rust(for_);
@@ -1828,7 +1856,7 @@ impl ToLang for ForLifetimes {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("for", s.span_for);
+        p.push_s("for", s.span_for);
         p.push_raw(" ");
         p.push_rust(&s.for_);
     }
@@ -1867,9 +1895,9 @@ impl ToLang for SimplePathSegment {
 
         match s {
             SimplePathSegment::Identifier(a) => p.push_rust(a),
-            SimplePathSegment::Super(span) => p.push_str("super", *span),
-            SimplePathSegment::SelfValue(span) => p.push_str("self", *span),
-            SimplePathSegment::Crate(span) => p.push_str("crate", *span),
+            SimplePathSegment::Super(span) => p.push_s("super", *span),
+            SimplePathSegment::SelfValue(span) => p.push_s("self", *span),
+            SimplePathSegment::Crate(span) => p.push_s("crate", *span),
         }
     }
 }
@@ -1909,10 +1937,10 @@ impl ToLang for PathIdentSegment {
 
         match s {
             PathIdentSegment::Identifier(a) => p.push_rust(a),
-            PathIdentSegment::Super(span) => p.push_str("super", *span),
-            PathIdentSegment::SelfValue(span) => p.push_str("self", *span),
-            PathIdentSegment::SelfType(span) => p.push_str("Self", *span),
-            PathIdentSegment::Crate(span) => p.push_str("crate", *span),
+            PathIdentSegment::Super(span) => p.push_s("super", *span),
+            PathIdentSegment::SelfValue(span) => p.push_s("self", *span),
+            PathIdentSegment::SelfType(span) => p.push_s("Self", *span),
+            PathIdentSegment::Crate(span) => p.push_s("crate", *span),
         }
     }
 }
@@ -2012,13 +2040,13 @@ impl ToLang for QualifiedPathType {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("<", s.span_square_open);
+        p.push_s("<", s.span_square_open);
         p.push_rust(&s.type_);
         if let Some(type_path) = &s.type_path {
             p.push_raw(" as ");
             p.push_rust(type_path);
         }
-        p.push_str(">", s.span_square_close);
+        p.push_s(">", s.span_square_close);
     }
 }
 
@@ -2082,14 +2110,14 @@ impl ToLang for TypePathFunc {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("(", s.span_paren_open);
+        p.push_s("(", s.span_paren_open);
         for (i, item) in s.inputs.iter().enumerate() {
             if i != 0 {
                 p.push_raw(", ");
             }
             p.push_rust(item);
         }
-        p.push_str(")", s.span_paren_close);
+        p.push_s(")", s.span_paren_close);
 
         if let Some(return_type) = &s.return_type {
             p.push_raw(" -> ");
@@ -2109,14 +2137,14 @@ impl ToLang for GenericArgs {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("<", s.span_square_open);
+        p.push_s("<", s.span_square_open);
         for (i, item) in s.items.iter().enumerate() {
             if i != 0 {
                 p.push_raw(", ");
             }
             p.push_rust(item);
         }
-        p.push_str(">", s.span_square_close);
+        p.push_s(">", s.span_square_close);
     }
 }
 
@@ -2139,7 +2167,7 @@ impl ToLang for GenericArg {
             GenericArg::Binding(a) => {
                 p.push_rust(&a.name);
                 p.push_raw(" ");
-                p.push_str("=", a.span_eq);
+                p.push_s("=", a.span_eq);
                 p.push_raw(" ");
                 p.push_rust(&a.type_);
             }
@@ -2247,63 +2275,63 @@ impl ToLang for PatternWithoutRange {
             PatternWithoutRange::Literal(a) => p.push_rust(a),
             PatternWithoutRange::Identifier(a) => {
                 if a.ref_ {
-                    p.push_str("ref", a.span_ref.unwrap());
+                    p.push_s("ref", a.span_ref.unwrap());
                     p.push_raw(" ");
                 }
                 if a.mut_ {
-                    p.push_str("mut", a.span_mut.unwrap());
+                    p.push_s("mut", a.span_mut.unwrap());
                     p.push_raw(" ");
                 }
                 p.push_rust(&a.name);
                 if let Some(pattern) = &a.pattern {
                     p.push_raw(" ");
-                    p.push_str("@", a.span_at.unwrap());
+                    p.push_s("@", a.span_at.unwrap());
                     p.push_raw(" ");
                     p.push_rust(pattern.as_ref());
                 }
             }
-            PatternWithoutRange::Rest(span) => p.push_str("..", *span),
+            PatternWithoutRange::Rest(span) => p.push_s("..", *span),
             PatternWithoutRange::Obsolete(a) => {
                 if let Some(start) = &a.start {
                     p.push_rust(start);
                 }
-                p.push_str("...", a.span);
+                p.push_s("...", a.span);
                 if let Some(end) = &a.end {
                     p.push_rust(end);
                 }
             }
             PatternWithoutRange::Reference(a) => {
-                p.push_str("&", a.span_ref);
+                p.push_s("&", a.span_ref);
                 if a.mut_ {
-                    p.push_str("mut", a.span_mut.unwrap());
+                    p.push_s("mut", a.span_mut.unwrap());
                     p.push_raw(" ");
                 }
                 p.push_rust(a.pattern_without_range.as_ref());
             }
             PatternWithoutRange::Struct(a) => {
                 p.push_rust(&a.path);
-                p.push_str("{", a.span_brace_open);
+                p.push_s("{", a.span_brace_open);
                 for (i, item) in a.items.iter().enumerate() {
                     if i != 0 {
                         p.push_raw(", ");
                     }
                     p.push_rust(item);
                 }
-                p.push_str("}", a.span_brace_close);
+                p.push_s("}", a.span_brace_close);
             }
             PatternWithoutRange::TupleStruct(a) => {
                 p.push_rust(&a.path);
-                p.push_str("(", a.span_paren_open);
+                p.push_s("(", a.span_paren_open);
                 for (i, item) in a.items.iter().enumerate() {
                     if i != 0 {
                         p.push_raw(", ");
                     }
                     p.push_rust(item);
                 }
-                p.push_str(")", a.span_paren_close);
+                p.push_s(")", a.span_paren_close);
             }
             PatternWithoutRange::Tuple(a) => {
-                p.push_str("(", a.span_paren_open);
+                p.push_s("(", a.span_paren_open);
                 match &a.payload {
                     PatternTuplePayload::Patterns(b) => {
                         for (i, item) in b.iter().enumerate() {
@@ -2318,26 +2346,26 @@ impl ToLang for PatternWithoutRange {
                     }
                     PatternTuplePayload::Rest(span) => {
                         p.push_raw(" ");
-                        p.push_str("..", *span);
+                        p.push_s("..", *span);
                         p.push_raw(" ");
                     }
                 }
-                p.push_str(")", a.span_paren_close);
+                p.push_s(")", a.span_paren_close);
             }
             PatternWithoutRange::Grouped(a) => {
-                p.push_str("(", a.span_paren_open);
+                p.push_s("(", a.span_paren_open);
                 p.push_rust(a.pattern.as_ref());
-                p.push_str(")", a.span_paren_close);
+                p.push_s(")", a.span_paren_close);
             }
             PatternWithoutRange::Slice(a) => {
-                p.push_str("[", a.span_square_open);
+                p.push_s("[", a.span_square_open);
                 for (i, item) in a.items.iter().enumerate() {
                     if i != 0 {
                         p.push_raw(", ");
                     }
                     p.push_rust(item);
                 }
-                p.push_str("]", a.span_square_close);
+                p.push_s("]", a.span_square_close);
             }
             PatternWithoutRange::Path(a) => match a {
                 PatternPath::Path(b) => p.push_rust(b),
@@ -2359,7 +2387,7 @@ impl ToLang for PatternLiteral {
         let s = self;
 
         if s.minus {
-            p.push_str("-", s.span_minus.unwrap());
+            p.push_s("-", s.span_minus.unwrap());
         }
         p.push_rust(&s.name);
     }
@@ -2412,7 +2440,7 @@ impl ToLang for PatternStructItem {
                 p.push_rust(&f.outer_attrs);
                 match &f.payload {
                     PatternStructFieldPayload::A(a) => {
-                        p.push_str(&a.tuple_index, a.span_tuple_index);
+                        p.push_s(&a.tuple_index, a.span_tuple_index);
                         p.push_raw(": ");
                         p.push_rust(&a.pattern);
                     }
@@ -2423,11 +2451,11 @@ impl ToLang for PatternStructItem {
                     }
                     PatternStructFieldPayload::C(c) => {
                         if c.ref_ {
-                            p.push_str("ref", c.span_ref.unwrap());
+                            p.push_s("ref", c.span_ref.unwrap());
                             p.push_raw(" ");
                         }
                         if c.mut_ {
-                            p.push_str("mut", c.span_mut.unwrap());
+                            p.push_s("mut", c.span_mut.unwrap());
                             p.push_raw(" ");
                         }
                         p.push_rust(&c.name);
@@ -2436,7 +2464,7 @@ impl ToLang for PatternStructItem {
             }
             PatternStructItem::Etc(a, span) => {
                 p.push_rust(a);
-                p.push_str("..", *span);
+                p.push_s("..", *span);
             }
         }
     }
@@ -2536,9 +2564,9 @@ impl ToLang for PatternRange {
             p.push_rust(start);
         }
         if s.inclusive {
-            p.push_str("..=", s.span);
+            p.push_s("..=", s.span);
         } else {
-            p.push_str("..", s.span);
+            p.push_s("..", s.span);
         }
         if let Some(end) = &s.end {
             p.push_rust(end);
@@ -2593,12 +2621,12 @@ impl ToLang for TypePayload {
         match s {
             TypePayload::TypeNoBounds(a) => p.push_rust(a.as_ref()),
             TypePayload::ImplInterface(a, span) => {
-                p.push_str("impl", *span);
+                p.push_s("impl", *span);
                 p.push_raw(" ");
                 p.push_rust(a);
             }
             TypePayload::InterfaceObject(a) => {
-                p.push_str("dyn", a.span);
+                p.push_s("dyn", a.span);
                 p.push_raw(" ");
                 p.push_rust(&a.bounds);
             }
@@ -2633,22 +2661,22 @@ impl ToLang for TypeNoBounds {
 
         match s {
             TypeNoBounds::Parenthesized(a) => {
-                p.push_str("(", a.span_paren_open);
+                p.push_s("(", a.span_paren_open);
                 p.push_rust(&a.type_);
-                p.push_str(")", a.span_paren_close);
+                p.push_s(")", a.span_paren_close);
             }
             TypeNoBounds::ImplInterfaceOneBound(a) => {
-                p.push_str("impl", a.span_impl);
+                p.push_s("impl", a.span_impl);
                 p.push_raw(" ");
                 p.push_rust(&a.bound);
             }
             TypeNoBounds::InterfaceObjectOneBound(a) => {
-                p.push_str("dyn", a.span_dyn);
+                p.push_s("dyn", a.span_dyn);
                 p.push_raw(" ");
                 p.push_rust(&a.bound);
             }
             TypeNoBounds::Tuple(a) => {
-                p.push_str("(", a.span_paren_open);
+                p.push_s("(", a.span_paren_open);
                 for (i, item) in a.items.iter().enumerate() {
                     if i != 0 {
                         p.push_raw(", ");
@@ -2658,46 +2686,46 @@ impl ToLang for TypeNoBounds {
                 if a.items.len() == 1 {
                     p.push_raw(", ");
                 }
-                p.push_str(")", a.span_paren_close);
+                p.push_s(")", a.span_paren_close);
             }
             TypeNoBounds::RawPointer(a) => {
-                p.push_str("*", a.span_pointer);
+                p.push_s("*", a.span_pointer);
                 if a.mut_ {
-                    p.push_str("mut", a.span_mut);
+                    p.push_s("mut", a.span_mut);
                 } else {
-                    p.push_str("const", a.span_mut);
+                    p.push_s("const", a.span_mut);
                 }
                 p.push_raw(" ");
                 p.push_rust(&*a.type_no_bounds);
             }
             TypeNoBounds::Reference(a) => {
-                p.push_str("&", a.span_ref);
+                p.push_s("&", a.span_ref);
                 if let Some(lifetime) = &a.lifetime {
                     p.push_rust(lifetime);
                     p.push_raw(" ");
                 }
                 if a.mut_ {
-                    p.push_str("mut", a.span_mut.unwrap());
+                    p.push_s("mut", a.span_mut.unwrap());
                     p.push_raw(" ");
                 }
                 p.push_rust(&*a.type_no_bounds);
             }
             TypeNoBounds::Array(a) => {
-                p.push_str("[", a.span_double_brace_open);
+                p.push_s("[", a.span_double_brace_open);
                 p.push_rust(&a.type_);
-                p.push_str(";", a.span_semicolon);
+                p.push_s(";", a.span_semicolon);
                 p.push_raw(" ");
                 p.push_rust(&a.expr);
-                p.push_str("]", a.span_double_brace_close);
+                p.push_s("]", a.span_double_brace_close);
             }
             TypeNoBounds::Slice(a) => {
-                p.push_str("[", a.span_double_brace_open);
+                p.push_s("[", a.span_double_brace_open);
                 p.push_rust(&a.type_);
-                p.push_str("]", a.span_double_brace_close);
+                p.push_s("]", a.span_double_brace_close);
             }
             TypeNoBounds::TypePath(a) => p.push_rust(a),
             TypeNoBounds::QualifiedPathInType(a) => p.push_rust(a),
-            TypeNoBounds::Never(span) => p.push_str("!", *span),
+            TypeNoBounds::Never(span) => p.push_s("!", *span),
             TypeNoBounds::BareFunction(a) => p.push_rust(a.as_ref()),
             TypeNoBounds::MacroCall(a) => p.push_rust(a),
         }
@@ -2799,11 +2827,11 @@ impl ToLang for TypeBareFunction {
         }
 
         if s.qualifier.unsafe_ {
-            p.push_str("unsafe", s.qualifier.span_unsafe.unwrap());
+            p.push_s("unsafe", s.qualifier.span_unsafe.unwrap());
             p.push_raw(" ");
         }
         if let Some(extern_) = &s.qualifier.extern_ {
-            p.push_str("extern", s.qualifier.span_extern.unwrap());
+            p.push_s("extern", s.qualifier.span_extern.unwrap());
             p.push_raw(" ");
             if let Some(abi) = extern_ {
                 abi.push_span(p, s.qualifier.span_abi.unwrap());
@@ -2812,11 +2840,11 @@ impl ToLang for TypeBareFunction {
         }
 
         match s.func_type {
-            FuncType::Func(span) => p.push_str("fn", span),
+            FuncType::Func(span) => p.push_s("fn", span),
             FuncType::Other => {}
         }
 
-        p.push_str("(", s.span_paren_open);
+        p.push_s("(", s.span_paren_open);
         for (i, param) in s.params.iter().enumerate() {
             p.push_rust(&param.outer_attrs);
             if let Some(name) = &param.name {
@@ -2831,9 +2859,9 @@ impl ToLang for TypeBareFunction {
         if let Some(v) = &s.variadics {
             p.push_raw(", ");
             p.push_rust(&v.outer_attrs);
-            p.push_str("...", v.span);
+            p.push_s("...", v.span);
         }
-        p.push_str(")", s.span_paren_close);
+        p.push_s(")", s.span_paren_close);
 
         if let Some(return_type) = &s.return_type {
             p.push_raw(" -> ");
@@ -2927,13 +2955,13 @@ impl ToLang for StmtLet {
         }
         if let Some(expr) = &s.expr {
             p.push_raw(" ");
-            p.push_str("=", s.span_eq);
+            p.push_s("=", s.span_eq);
             p.push_raw(" ");
             p.push_rust(expr);
         }
         if let Some(else_) = &s.else_ {
             p.push_raw(" ");
-            p.push_str("else", s.span_else.unwrap());
+            p.push_s("else", s.span_else.unwrap());
             p.push_raw(" ");
             p.push_rust(else_);
         }
@@ -3004,7 +3032,7 @@ impl ToLang for BlockExpr {
             p.push_raw(": ");
         }
 
-        p.push_str("{", s.span_brace_open);
+        p.push_s("{", s.span_brace_open);
         p.push_raw("\n");
         p.inc_indent();
         p.push_rust(&s.inner_attrs);
@@ -3013,7 +3041,7 @@ impl ToLang for BlockExpr {
         }
         p.dec_indent();
         p.indent();
-        p.push_str("}", s.span_brace_close);
+        p.push_s("}", s.span_brace_close);
     }
 }
 
@@ -3054,10 +3082,10 @@ impl ToLang for ExprAsyncBlock {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("async", s.span_async);
+        p.push_s("async", s.span_async);
         if s.move_ {
             p.push_raw(" ");
-            p.push_str("move", s.span_move.unwrap());
+            p.push_s("move", s.span_move.unwrap());
         }
         p.push_raw(" ");
         p.push_rust(&s.block);
@@ -3073,7 +3101,7 @@ impl ToLang for ExprUnsafeBlock {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("unsafe", s.span_unsafe);
+        p.push_s("unsafe", s.span_unsafe);
         p.push_raw(" ");
         p.push_rust(&s.block);
     }
@@ -3088,7 +3116,7 @@ impl ToLang for ExprConstBlock {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("const", s.span_const);
+        p.push_s("const", s.span_const);
         p.push_raw(" ");
         p.push_rust(&s.block);
     }
@@ -3112,17 +3140,17 @@ impl ToLang for ExprLoop {
         }
 
         match &s.payload {
-            ExprLoopPayload::Loop => p.push_str("loop", s.span_for),
+            ExprLoopPayload::Loop => p.push_s("loop", s.span_for),
             ExprLoopPayload::While(a) => {
-                p.push_str("while", s.span_for);
+                p.push_s("while", s.span_for);
                 p.push_rust(&a.conditions);
             }
             ExprLoopPayload::In(a) => {
-                p.push_str("for", s.span_for);
+                p.push_s("for", s.span_for);
                 p.push_raw(" ");
                 p.push_rust(&a.pattern);
                 p.push_raw(" ");
-                p.push_str("in", a.span_in);
+                p.push_s("in", a.span_in);
                 p.push_raw(" ");
                 p.push_rust(&a.in_expr);
             }
@@ -3226,13 +3254,13 @@ impl ToLang for ExprIf {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("if", s.span_if);
+        p.push_s("if", s.span_if);
         p.push_rust(&s.conditions);
         p.push_rust(&s.body);
 
         if let Some(else_) = &s.else_ {
             p.push_raw(" ");
-            p.push_str("else", s.span_else.unwrap());
+            p.push_s("else", s.span_else.unwrap());
             p.push_raw(" ");
             match else_ {
                 ExprIfElse::BlockExpr(a) => p.push_rust(a),
@@ -3266,12 +3294,12 @@ impl ToLang for ExprMatch {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("match", s.span_match);
+        p.push_s("match", s.span_match);
         p.push_raw(" ");
         p.push_rust(&s.expr);
 
         p.push_raw(" ");
-        p.push_str("{", s.span_brace_open);
+        p.push_s("{", s.span_brace_open);
         p.push_raw("\n");
         p.inc_indent();
 
@@ -3286,7 +3314,7 @@ impl ToLang for ExprMatch {
 
         p.dec_indent();
         p.indent();
-        p.push_str("}", s.span_brace_close);
+        p.push_s("}", s.span_brace_close);
         p.push_raw("\n");
     }
 }
@@ -3309,7 +3337,7 @@ impl ToLang for ExprMatchArm {
         p.push_rust(&s.pattern);
         if let Some(guard) = &s.guard {
             p.push_raw(" ");
-            p.push_str("if", guard.span_if);
+            p.push_s("if", guard.span_if);
             p.push_raw(" ");
             p.push_rust(&guard.conditions);
         }
@@ -3422,13 +3450,13 @@ impl ToLang for ExprOperator {
 
         match s {
             ExprOperator::Borrow(a) => {
-                p.push_str("&", a.span_ref);
+                p.push_s("&", a.span_ref);
                 if a.raw {
-                    p.push_str("raw", a.span_raw.unwrap());
+                    p.push_s("raw", a.span_raw.unwrap());
                     p.push_raw(" ");
                 }
                 if a.mut_ {
-                    p.push_str("mut", a.span_mut.unwrap());
+                    p.push_s("mut", a.span_mut.unwrap());
                     p.push_raw(" ");
                 } else if a.raw {
                     p.push_raw("const ");
@@ -3436,18 +3464,18 @@ impl ToLang for ExprOperator {
                 p.push_rust(&a.expr);
             }
             ExprOperator::Dereference(a) => {
-                p.push_str("*", a.span);
+                p.push_s("*", a.span);
                 p.push_rust(&a.expr);
             }
             ExprOperator::ErrorPropagation(a) => {
                 p.push_rust(&a.expr);
-                p.push_str("?", a.span);
+                p.push_s("?", a.span);
             }
             ExprOperator::Negation(a) => {
                 if a.not {
-                    p.push_str("!", a.span);
+                    p.push_s("!", a.span);
                 } else {
-                    p.push_str("-", a.span);
+                    p.push_s("-", a.span);
                 }
                 p.push_rust(&a.expr);
             }
@@ -3456,16 +3484,16 @@ impl ToLang for ExprOperator {
                 p.push_raw(" ");
                 if let TokenCode::Op(op) = &a.op {
                     match op {
-                        Op::Add => p.push_str("+", a.span_op),
-                        Op::Sub => p.push_str("-", a.span_op),
-                        Op::Star => p.push_str("*", a.span_op),
-                        Op::Div => p.push_str("/", a.span_op),
-                        Op::Rem => p.push_str("%", a.span_op),
-                        Op::BitAnd => p.push_str("&", a.span_op),
-                        Op::BitOr => p.push_str("|", a.span_op),
-                        Op::BitXor => p.push_str("^", a.span_op),
-                        Op::LeftShift => p.push_str("<<", a.span_op),
-                        Op::RightShift => p.push_str(">>", a.span_op),
+                        Op::Add => p.push_s("+", a.span_op),
+                        Op::Sub => p.push_s("-", a.span_op),
+                        Op::Star => p.push_s("*", a.span_op),
+                        Op::Div => p.push_s("/", a.span_op),
+                        Op::Rem => p.push_s("%", a.span_op),
+                        Op::BitAnd => p.push_s("&", a.span_op),
+                        Op::BitOr => p.push_s("|", a.span_op),
+                        Op::BitXor => p.push_s("^", a.span_op),
+                        Op::LeftShift => p.push_s("<<", a.span_op),
+                        Op::RightShift => p.push_s(">>", a.span_op),
                         _ => {}
                     }
                 }
@@ -3477,12 +3505,12 @@ impl ToLang for ExprOperator {
                 p.push_raw(" ");
                 if let TokenCode::Op(op) = &a.op {
                     match op {
-                        Op::Eq => p.push_str("==", a.span_op),
-                        Op::Neq => p.push_str("!=", a.span_op),
-                        Op::Greater => p.push_str(">", a.span_op),
-                        Op::Less => p.push_str("<", a.span_op),
-                        Op::GreaterEq => p.push_str(">=", a.span_op),
-                        Op::LessEq => p.push_str("<=", a.span_op),
+                        Op::Eq => p.push_s("==", a.span_op),
+                        Op::Neq => p.push_s("!=", a.span_op),
+                        Op::Greater => p.push_s(">", a.span_op),
+                        Op::Less => p.push_s("<", a.span_op),
+                        Op::GreaterEq => p.push_s(">=", a.span_op),
+                        Op::LessEq => p.push_s("<=", a.span_op),
                         _ => {}
                     }
                 }
@@ -3494,8 +3522,8 @@ impl ToLang for ExprOperator {
                 p.push_raw(" ");
                 if let TokenCode::Op(op) = &a.op {
                     match op {
-                        Op::And => p.push_str("&&", a.span_op),
-                        Op::Or => p.push_str("||", a.span_op),
+                        Op::And => p.push_s("&&", a.span_op),
+                        Op::Or => p.push_s("||", a.span_op),
                         _ => {}
                     }
                 }
@@ -3510,7 +3538,7 @@ impl ToLang for ExprOperator {
             ExprOperator::Assignment(a) => {
                 p.push_rust(&a.left);
                 p.push_raw(" ");
-                p.push_str("=", a.span_op);
+                p.push_s("=", a.span_op);
                 p.push_raw(" ");
                 p.push_rust(&a.right);
             }
@@ -3519,16 +3547,16 @@ impl ToLang for ExprOperator {
                 p.push_raw(" ");
                 if let TokenCode::Assign(assign) = &a.op {
                     match assign {
-                        Assign::Add => p.push_str("+=", a.span_op),
-                        Assign::Sub => p.push_str("-=", a.span_op),
-                        Assign::Star => p.push_str("*=", a.span_op),
-                        Assign::Div => p.push_str("/=", a.span_op),
-                        Assign::Rem => p.push_str("%=", a.span_op),
-                        Assign::BitAnd => p.push_str("&=", a.span_op),
-                        Assign::BitOr => p.push_str("|=", a.span_op),
-                        Assign::BitXor => p.push_str("^=", a.span_op),
-                        Assign::LeftShift => p.push_str("<<=", a.span_op),
-                        Assign::RightShift => p.push_str(">>=", a.span_op),
+                        Assign::Add => p.push_s("+=", a.span_op),
+                        Assign::Sub => p.push_s("-=", a.span_op),
+                        Assign::Star => p.push_s("*=", a.span_op),
+                        Assign::Div => p.push_s("/=", a.span_op),
+                        Assign::Rem => p.push_s("%=", a.span_op),
+                        Assign::BitAnd => p.push_s("&=", a.span_op),
+                        Assign::BitOr => p.push_s("|=", a.span_op),
+                        Assign::BitXor => p.push_s("^=", a.span_op),
+                        Assign::LeftShift => p.push_s("<<=", a.span_op),
+                        Assign::RightShift => p.push_s(">>=", a.span_op),
                         _ => {}
                     }
                 }
@@ -3627,10 +3655,10 @@ impl ToLang for ExprGrouped {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("(", s.span_paren_open);
+        p.push_s("(", s.span_paren_open);
         p.push_rust(&s.inner_attrs);
         p.push_rust(&s.expr);
-        p.push_str(")", s.span_paren_close);
+        p.push_s(")", s.span_paren_close);
     }
 }
 #[derive(Debug)]
@@ -3645,12 +3673,12 @@ impl ToLang for ExprArray {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("[", s.span_double_brace_open);
+        p.push_s("[", s.span_double_brace_open);
         p.push_rust(&s.inner_attrs);
         match &s.payload {
             ExprArrayPayload::One(a) => {
                 p.push_rust(&a.value);
-                p.push_str(";", a.span_semicolon);
+                p.push_s(";", a.span_semicolon);
                 p.push_raw(" ");
                 p.push_rust(&a.len);
             }
@@ -3663,7 +3691,7 @@ impl ToLang for ExprArray {
                 }
             }
         }
-        p.push_str("]", s.span_double_brace_close);
+        p.push_s("]", s.span_double_brace_close);
     }
 }
 #[derive(Debug)]
@@ -3692,7 +3720,7 @@ impl ToLang for ExprAwait {
         let s = self;
 
         p.push_rust(&s.expr);
-        p.push_str(".await", s.span);
+        p.push_s(".await", s.span);
     }
 }
 
@@ -3709,9 +3737,9 @@ impl ToLang for ExprIndex {
         let s = self;
 
         p.push_rust(&s.left);
-        p.push_str("[", s.span_double_brace_open);
+        p.push_s("[", s.span_double_brace_open);
         p.push_rust(&s.right);
-        p.push_str("]", s.span_double_brace_close);
+        p.push_s("]", s.span_double_brace_close);
     }
 }
 #[derive(Debug)]
@@ -3726,7 +3754,7 @@ impl ToLang for ExprTuple {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("(", s.span_paren_open);
+        p.push_s("(", s.span_paren_open);
         p.push_rust(&s.inner_attrs);
         for (i, item) in s.items.iter().enumerate() {
             if i != 0 {
@@ -3737,7 +3765,7 @@ impl ToLang for ExprTuple {
         if s.items.len() == 1 {
             p.push_raw(", ");
         }
-        p.push_str(")", s.span_paren_close);
+        p.push_s(")", s.span_paren_close);
     }
 }
 #[derive(Debug)]
@@ -3753,8 +3781,8 @@ impl ToLang for ExprTupleIndexing {
         let s = self;
 
         p.push_rust(&s.left);
-        p.push_str(".", s.span_dot);
-        p.push_str(&s.index, s.span_index);
+        p.push_s(".", s.span_dot);
+        p.push_s(&s.index, s.span_index);
     }
 }
 #[derive(Debug)]
@@ -3786,7 +3814,7 @@ impl ToLang for ExprStructStruct {
         let s = self;
 
         p.push_rust(&s.path);
-        p.push_str("{", s.span_brace_open);
+        p.push_s("{", s.span_brace_open);
         p.push_rust(&s.inner_attrs);
         for (i, item) in s.fields.iter().enumerate() {
             if i != 0 {
@@ -3794,7 +3822,7 @@ impl ToLang for ExprStructStruct {
             }
             p.push_rust(item);
         }
-        p.push_str("}", s.span_brace_close);
+        p.push_s("}", s.span_brace_close);
     }
 }
 #[derive(Debug)]
@@ -3816,12 +3844,12 @@ impl ToLang for ExprStructField {
                 p.push_rust(&a.expr);
             }
             ExprStructField::C(a) => {
-                p.push_str(&a.tuple_index, a.span_index);
+                p.push_s(&a.tuple_index, a.span_index);
                 p.push_raw(": ");
                 p.push_rust(&a.expr);
             }
             ExprStructField::Base(a, span) => {
-                p.push_str("..", *span);
+                p.push_s("..", *span);
                 if let Some(a) = a {
                     p.push_rust(a);
                 } else {
@@ -3866,7 +3894,7 @@ impl ToLang for ExprStructTuple {
         let s = self;
 
         p.push_rust(&s.path);
-        p.push_str("(", s.span_paren_open);
+        p.push_s("(", s.span_paren_open);
         p.push_rust(&s.inner_attrs);
         for (i, item) in s.exprs.iter().enumerate() {
             if i != 0 {
@@ -3874,7 +3902,7 @@ impl ToLang for ExprStructTuple {
             }
             p.push_rust(item);
         }
-        p.push_str(")", s.span_paren_close);
+        p.push_s(")", s.span_paren_close);
     }
 }
 
@@ -3891,14 +3919,14 @@ impl ToLang for ExprCall {
         let s = self;
 
         p.push_rust(&s.left);
-        p.push_str("(", s.span_paren_open);
+        p.push_s("(", s.span_paren_open);
         for (i, item) in s.params.iter().enumerate() {
             if i != 0 {
                 p.push_raw(", ");
             }
             p.push_rust(item);
         }
-        p.push_str(")", s.span_paren_close);
+        p.push_s(")", s.span_paren_close);
     }
 }
 #[derive(Debug, Default)]
@@ -3916,16 +3944,16 @@ impl ToLang for ExprMethodCall {
         let s = self;
 
         p.push_rust(&s.left);
-        p.push_str(".", s.span_dot);
+        p.push_s(".", s.span_dot);
         p.push_rust(&s.path_expr_segment);
-        p.push_str("(", s.span_paren_open);
+        p.push_s("(", s.span_paren_open);
         for (i, item) in s.params.iter().enumerate() {
             if i != 0 {
                 p.push_raw(", ");
             }
             p.push_rust(item);
         }
-        p.push_str(")", s.span_paren_close);
+        p.push_s(")", s.span_paren_close);
     }
 }
 #[derive(Debug)]
@@ -3940,7 +3968,7 @@ impl ToLang for ExprField {
         let s = self;
 
         p.push_rust(&s.left);
-        p.push_str(".", s.span_dot);
+        p.push_s(".", s.span_dot);
         p.push_rust(&s.name);
     }
 }
@@ -3969,15 +3997,15 @@ impl ToLang for ExprClosure {
         let s = self;
 
         if s.async_ {
-            p.push_str("async", s.span_async.unwrap());
+            p.push_s("async", s.span_async.unwrap());
             p.push_raw(" ");
         }
         if s.move_ {
-            p.push_str("move", s.span_move.unwrap());
+            p.push_s("move", s.span_move.unwrap());
             p.push_raw(" ");
         }
 
-        p.push_str("|", s.span_paren_open);
+        p.push_s("|", s.span_paren_open);
         for (i, item) in s.params.iter().enumerate() {
             p.push_rust(&item.outer_attrs);
             if let Some(pat) = &item.pat {
@@ -3993,7 +4021,7 @@ impl ToLang for ExprClosure {
                 p.push_raw(", ");
             }
         }
-        p.push_str("|", s.span_paren_close);
+        p.push_s("|", s.span_paren_close);
 
         if let Some(return_type) = &s.return_type {
             p.push_raw(" -> ");
@@ -4014,7 +4042,7 @@ impl ToLang for ExprContinue {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("continue", s.span_continue);
+        p.push_s("continue", s.span_continue);
         if let Some(identifier) = &s.label {
             p.push_raw(" ");
             p.push_rust(identifier);
@@ -4033,7 +4061,7 @@ impl ToLang for ExprBreak {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("break", s.span_break);
+        p.push_s("break", s.span_break);
         if let Some(identifier) = &s.label {
             p.push_raw(" ");
             p.push_rust(identifier);
@@ -4054,7 +4082,7 @@ impl ToLang for ExprReturn {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_str("return", s.span_return);
+        p.push_s("return", s.span_return);
         if let Some(expr) = &s.expr {
             p.push_raw(" ");
             p.push_rust(expr);
@@ -4077,9 +4105,9 @@ impl ToLang for ExprRange {
             p.push_rust(start);
         }
         if s.inclusive {
-            p.push_str("..=", s.span);
+            p.push_s("..=", s.span);
         } else {
-            p.push_str("..", s.span);
+            p.push_s("..", s.span);
         }
         if let Some(end) = &s.end {
             p.push_rust(end);

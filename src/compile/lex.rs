@@ -69,6 +69,7 @@ impl Lex {
     ) {
         let s = self;
 
+        // NOTE the width is in bytes, not in characters
         let width = u.len();
 
         let (end_line, end_column) = if check_nl {
@@ -1352,8 +1353,9 @@ pub struct Token {
 pub struct Span {
     pub line: usize,
     pub column: usize,
+    // width in bytes
     pub width: usize,
-    // some tokens have different ending, such as multi-line string and comment
+    // some tokens have a different ending, such as multi-line string and comment
     pub end_line: usize,
     pub end_column: usize,
 }
@@ -1363,6 +1365,14 @@ impl fmt::Debug for Token {
         let s = self;
         write!(f, "{:?}", s.code)
         // write!(f, "{:?}{}", s.code, s.column)
+    }
+}
+
+impl ToLang for Token {
+    fn to_rust(&self, p: &mut LangFormatter) {
+        let s = self;
+        s.to_rs_before(p);
+        s.to_rs_one(p);
     }
 }
 
@@ -1381,32 +1391,42 @@ impl Token {
         }
         false
     }
-}
-impl ToLang for Token {
-    fn to_rust(&self, p: &mut LangFormatter) {
+
+    pub fn to_rs_before(&self, p: &mut LangFormatter) {
         let s = self;
 
-        match &s.code {
-            TokenCode::Shebang => p.push_str(&s.u, s.span),
-            TokenCode::Blank => p.push_str(&s.u, s.span),
-            TokenCode::Comment(_) => p.push_str(&s.u, s.span),
-            TokenCode::Literal(literal) => p.push_rust(literal),
-            TokenCode::Identifier(identifier) => p.push_rust(identifier),
-            TokenCode::Lifetime(identifier) => {
-                p.push_str(
-                    "'",
-                    Span {
-                        line: s.span.line,
-                        column: s.span.column - 1,
-                        width: 1,
-                        end_line: s.span.line,
-                        end_column: s.span.column,
-                    },
-                );
-                p.push_rust(identifier);
+        for it in &s.tokens_before {
+            it.to_rs_one(p);
+        }
+    }
+
+    pub fn to_rs_one(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        let mut delta_line = 0;
+
+        let rs = match &s.code {
+            TokenCode::Shebang => &s.u,
+            TokenCode::Blank => {
+                delta_line = s.span.end_line - s.span.line;
+                &s.u
             }
+            TokenCode::Comment(_) => {
+                delta_line = s.span.end_line - s.span.line;
+                &s.u
+            }
+            TokenCode::Literal(literal) => {
+                delta_line = s.span.end_line - s.span.line;
+                &literal.to_rust_string()
+            }
+            TokenCode::Identifier(identifier) => &identifier.to_rust_string_with_prefix(),
+            TokenCode::Lifetime(identifier) => &{
+                let mut a = identifier.to_rust_string_with_prefix();
+                a.insert_str(0, "'");
+                a
+            },
             TokenCode::Keyword(keyword) => {
-                let a = match keyword {
+                match keyword {
                     Keyword::Async => "async",
                     Keyword::Await => "await",
                     Keyword::Break => "break",
@@ -1464,11 +1484,10 @@ impl ToLang for Token {
                     Keyword::Yield => "yield",
                     Keyword::Try => "try",
                     Keyword::Gen => "gen",
-                };
-                p.push_str(a, s.span);
+                }
             }
             TokenCode::Assign(assign) => {
-                let a = match assign {
+                match assign {
                     Assign::Assign => "=",
                     Assign::Declare => ":=",
                     Assign::Add => "+=",
@@ -1481,11 +1500,10 @@ impl ToLang for Token {
                     Assign::BitAnd => "&=",
                     Assign::BitOr => "|=",
                     Assign::BitXor => "^=",
-                };
-                p.push_str(a, s.span);
+                }
             }
             TokenCode::Op(op) => {
-                let a = match op {
+                match op {
                     Op::Add => "+",
                     Op::Sub => "-",
                     Op::Star => "*",
@@ -1526,11 +1544,10 @@ impl ToLang for Token {
                     Op::RArrow => "->",
                     Op::FatArrow => "=>",
                     Op::Dollar => "$",
-                };
-                p.push_str(a, s.span);
+                }
             }
             TokenCode::Pair(pair) => {
-                let a = match pair {
+                match pair {
                     Pair::ParenOpen => "(",
                     Pair::ParenClose => ")",
                     Pair::SquareOpen => "<",
@@ -1541,10 +1558,12 @@ impl ToLang for Token {
                     Pair::DoubleBraceClose => "]",
                     Pair::OuterAttr => "#[",
                     Pair::InnerAttr => "#![",
-                };
-                p.push_str(a, s.span);
+                    Pair::EndAttr => "]",
+                }
             }
-        }
+        };
+
+        p.push_token(rs, delta_line, s.span);
     }
 }
 
@@ -1561,86 +1580,6 @@ pub enum TokenCode {
     Assign(Assign),
     Op(Op),
     Pair(Pair),
-}
-
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct LiteralString {
-    raw_count: usize, // number of pound sign
-    text: String,
-}
-impl LiteralString {
-    fn to_rust_string(&self) -> String {
-        let s = self;
-
-        let mut p = String::new();
-
-        if s.raw_count > 0 {
-            for _ in 0..s.raw_count {
-                p.push('#');
-            }
-        }
-        p.push('"');
-        p.push_str(&s.text);
-        p.push('"');
-        for _ in 0..s.raw_count {
-            p.push('#');
-        }
-
-        p
-    }
-
-    pub fn push_span(&self, p: &mut LangFormatter, span: Span) {
-        let s = self;
-        let a = s.to_rust_string();
-        p.push_str(&a, span);
-    }
-}
-impl fmt::Debug for LiteralString {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let s = self;
-        let mut p = String::new();
-        for _ in 0..s.raw_count {
-            p.push('#');
-        }
-        p.push_str("\"");
-        p.push_str(&s.text);
-        p.push_str("\"");
-        for _ in 0..s.raw_count {
-            p.push('#');
-        }
-        write!(f, "{}", p)
-    }
-}
-impl ToLang for LiteralString {
-    fn to_rust(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw(&s.to_rust_string());
-    }
-}
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct LiteralChar {
-    text: String,
-}
-impl LiteralChar {
-    fn to_rust_string(&self) -> String {
-        let s = self;
-
-        let mut p = String::new();
-
-        p.push('\'');
-        p.push_str(&s.text);
-        p.push('\'');
-
-        p
-    }
-}
-impl ToLang for LiteralChar {
-    fn to_rust(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_raw(&s.to_rust_string());
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash, Default)]
@@ -1673,6 +1612,33 @@ impl Literal {
             span: Span::default(),
         }
     }
+    fn to_rust_string(&self) -> String {
+        let s = self;
+
+        let mut r = String::new();
+        if let Some(prefix) = &s.prefix {
+            let prefix = Identifier::to_rust_string_no_prefix(&prefix);
+            r.push_str(&prefix);
+            if matches!(s.payload, LiteralPayload::Int(_) | LiteralPayload::Float(_)) {
+                r.push('#');
+            }
+        }
+
+        let a = match &s.payload {
+            LiteralPayload::String(a) => &a.to_rust_string(),
+            LiteralPayload::Char(a) => &a.to_rust_string(),
+            LiteralPayload::Int(a) => a,
+            LiteralPayload::Float(a) => &a.replace("~", "-"),
+            LiteralPayload::Bool(a) => a,
+        };
+        r.push_str(a);
+
+        if let Some(suffix) = &s.suffix {
+            let suffix = Identifier::to_rust_string_no_prefix(&suffix);
+            r.push_str(&suffix);
+        }
+        r
+    }
 }
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum LiteralPayload {
@@ -1700,40 +1666,85 @@ impl fmt::Debug for Literal {
         }
     }
 }
-impl ToLang for Literal {
-    fn to_rust(&self, p: &mut LangFormatter) {
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct LiteralString {
+    raw_count: usize, // number of pound sign
+    text: String,
+}
+impl LiteralString {
+    fn to_rust_string(&self) -> String {
         let s = self;
 
-        let mut push_str = |a, is_num| {
-            let mut r = String::new();
-            if let Some(prefix) = &s.prefix {
-                let prefix = Identifier::id_to_rust(&prefix);
-                r.push_str(&prefix);
-                if is_num {
-                    r.push('#');
-                }
-            }
-            r.push_str(a);
-            if let Some(suffix) = &s.suffix {
-                let suffix = Identifier::id_to_rust(&suffix);
-                r.push_str(&suffix);
-            }
-            p.push_str(&r, s.span);
-        };
+        let mut p = String::new();
 
-        match &s.payload {
-            LiteralPayload::String(a) => {
-                push_str(&a.to_rust_string(), false);
+        if s.raw_count > 0 {
+            for _ in 0..s.raw_count {
+                p.push('#');
             }
-            LiteralPayload::Char(a) => push_str(&a.to_rust_string(), false),
-            LiteralPayload::Int(a) => push_str(a, true),
-            LiteralPayload::Float(a) => push_str(&a.replace("~", "-"), true),
-
-            // bool literal has neither prefix nor suffix
-            LiteralPayload::Bool(a) => p.push_str(a, s.span),
         }
+        p.push('"');
+        p.push_str(&s.text);
+        p.push('"');
+        for _ in 0..s.raw_count {
+            p.push('#');
+        }
+
+        p
+    }
+
+    pub fn push_span(&self, p: &mut LangFormatter, span: Span) {
+        let s = self;
+        let a = s.to_rust_string();
+        p.push_s(&a, span);
     }
 }
+impl fmt::Debug for LiteralString {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let s = self;
+        let mut p = String::new();
+        for _ in 0..s.raw_count {
+            p.push('#');
+        }
+        p.push_str("\"");
+        p.push_str(&s.text);
+        p.push_str("\"");
+        for _ in 0..s.raw_count {
+            p.push('#');
+        }
+        write!(f, "{}", p)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct LiteralChar {
+    text: String,
+}
+impl LiteralChar {
+    fn to_rust_string(&self) -> String {
+        let s = self;
+
+        let mut p = String::new();
+
+        p.push('\'');
+        p.push_str(&s.text);
+        p.push('\'');
+
+        p
+    }
+}
+
+// TODO
+impl ToLang for Identifier {
+    fn to_rust(&self, _p: &mut LangFormatter) {
+    }
+}
+impl ToLang for Literal {
+    fn to_rust(&self, _p: &mut LangFormatter) {
+    }
+}
+
+pub const ALLOWED_KEYWORD_NAMES: &[&'static str] = &["func", "import", "interface", "ret", "union"];
 
 #[derive(Clone, Default, PartialEq, Eq, Hash)]
 pub struct Identifier {
@@ -1752,7 +1763,19 @@ impl Identifier {
         }
     }
 
-    pub fn id_to_rust(id: &str) -> String {
+    pub fn to_rust_string_with_prefix(&self) -> String {
+        let s = self;
+
+        let mut r = String::new();
+        if let Some(prefix) = &s.prefix && !ALLOWED_KEYWORD_NAMES.contains(&s.id.as_str()) {
+            r.push_str(&Identifier::to_rust_string_no_prefix(prefix));
+            r.push('#');
+        }
+        r.push_str(&Identifier::to_rust_string_no_prefix(&s.id));
+        r
+    }
+
+    pub fn to_rust_string_no_prefix(id: &str) -> String {
         let mut p = String::new();
         if id.is_empty() {
             return "".to_string();
@@ -1826,20 +1849,6 @@ impl Identifier {
             }
         }
         return p;
-    }
-}
-pub const ALLOWED_KEYWORD_NAMES: &[&'static str] = &["func", "import", "interface", "ret", "union"];
-impl ToLang for Identifier {
-    fn to_rust(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        let mut r = String::new();
-        if let Some(prefix) = &s.prefix && !ALLOWED_KEYWORD_NAMES.contains(&s.id.as_str()) {
-            r.push_str(&Identifier::id_to_rust(prefix));
-            r.push('#');
-        }
-        r.push_str(&Identifier::id_to_rust(&s.id));
-        p.push_str(&r, s.span);
     }
 }
 
@@ -2178,6 +2187,7 @@ pub enum Pair {
     DoubleBraceClose,
     OuterAttr,
     InnerAttr,
+    EndAttr,
 }
 
 impl fmt::Debug for Pair {
@@ -2193,6 +2203,7 @@ impl fmt::Debug for Pair {
             Self::DoubleBraceClose => write!(f, "}}}}"),
             Self::OuterAttr => write!(f, "#["),
             Self::InnerAttr => write!(f, "#!["),
+            Self::EndAttr => write!(f, "]"),
         }
     }
 }
