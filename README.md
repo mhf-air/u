@@ -169,6 +169,8 @@ example
         .c
 ```
 
+- **drop colon and -> in declarations**
+
 - **use .. instead of :: for path separator**
 
     because it's easier to type and distinguishes path segments better
@@ -456,9 +458,7 @@ the following two expressions are the same
 
 ## Other Changes
 
-- **use func, interface, import instead of fn, trait, use**
-
-- **drop colon and -> in declarations**
+- **use func, ret instead of fn, return**
 
 - **new syntax for bare function type and closure type**
 
@@ -479,8 +479,6 @@ example
         < n
     })
 ```
-
-- **use ret instead of return**
 
 - **use : instead of => in match**
 
@@ -662,7 +660,7 @@ allow - in identifier for .u files
 | :-----------: | :---------------: | :-----------: |
 | struct        | Order-item        | OrderItem     |
 | enum          | Option            | Option        |
-| interface     | Copy              | Copy          |
+| trait         | Copy              | Copy          |
 | function      | set-name          | set_name      |
 | const         | const-name--c     | CONST_NAME    |
 | static        | static-name--c    | STATIC_NAME   |
@@ -693,8 +691,8 @@ allow - in identifier for .u files
 
 ## TODO
 
-- after writing "[Type] impl [Interface] {\n}", automatically query rust-analyzer to
-  generate all associated items for the interface
+- after writing "[Type] impl [Trait] {\n}", automatically query rust-analyzer to
+  generate all associated items for the trait
 - at present, goto-definition goes to .rs file, maybe I can map it back to .u file if it exists
 
 - a new u-analyzer: a wrapper around rust-analyzer, being both a server and a client

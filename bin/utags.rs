@@ -25,7 +25,7 @@ tag types:
     Static      v
     Alias       a
     Type        t
-    Interface   n
+    Trait       n
     Field       w
     Method      m
     Function    f
@@ -296,8 +296,8 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
                     type_char: 'v',
                 });
             }
-            u::ItemPayload::Interface(a) => {
-                field.type_ = Some("interface");
+            u::ItemPayload::Trait(a) => {
+                field.type_ = Some("trait");
                 ng = name_generics(&NameGenerics {
                     name: &a.name,
                     generics: &a.generics,
@@ -328,7 +328,7 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
             field.signature = Some(generics);
         } */
 
-        field.set_access(&item.public.payload);
+        field.set_access(&item.vis.payload);
         p.push_str(&field.to_string());
         p.push('\n');
 
@@ -471,7 +471,7 @@ fn struct_fields(a: &u::Struct, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse)
                 let ctype = nested_ctype(mod_, &a.name.u, &a.generics);
                 field.ctype = Some(&ctype);
 
-                field.set_access(&item.public.payload);
+                field.set_access(&item.vis.payload);
                 let type_ = &to_u(&item.type_, pa);
                 field.type_ = Some(type_);
                 p.push_str(&field.to_string());
@@ -488,7 +488,7 @@ fn struct_fields(a: &u::Struct, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse)
                 let ctype = nested_ctype(mod_, &a.name.u, &a.generics);
                 field.ctype = Some(&ctype);
 
-                field.set_access(&item.public.payload);
+                field.set_access(&item.vis.payload);
                 let type_ = &to_u(&item.type_, pa);
                 field.type_ = Some(type_);
                 p.push_str(&field.to_string());
@@ -564,7 +564,7 @@ fn union_fields(a: &u::Union, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse) -
         let ctype = nested_ctype(mod_, &a.name.u, &a.generics);
         field.ctype = Some(&ctype);
 
-        field.set_access(&item.public.payload);
+        field.set_access(&item.vis.payload);
         let type_ = &to_u(&item.type_, pa);
         field.type_ = Some(type_);
         p.push_str(&field.to_string());
@@ -574,7 +574,7 @@ fn union_fields(a: &u::Union, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse) -
     p
 }
 
-fn interface_fields(a: &u::Interface, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse) -> String {
+fn interface_fields(a: &u::Trait, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse) -> String {
     let mut p = String::new();
     for item in &a.items {
         let mut field = TagField::default();
@@ -619,7 +619,7 @@ fn interface_fields(a: &u::Interface, filepath: &str, mod_: &Vec<&str>, pa: &u::
             u::AssociatedItemPayload::MacroCall(_) => {}
         }
 
-        field.set_access(&item.public.payload);
+        field.set_access(&item.vis.payload);
         p.push_str(&field.to_string());
         p.push('\n');
     }
@@ -692,7 +692,7 @@ fn extern_items(
             field.signature = Some(generics);
         }
 
-        field.set_access(&item.public.payload);
+        field.set_access(&item.vis.payload);
 
         p.push_str(&field.to_string());
         p.push('\n');
@@ -774,7 +774,7 @@ fn impl_items(p: &mut String, a: &u::Impl, filepath: &str, mod_: &Vec<&str>, pa:
             field.signature = Some(generics);
         }
 
-        field.set_access(&item.public.payload);
+        field.set_access(&item.vis.payload);
 
         p.push_str(&field.to_string());
         p.push('\n');

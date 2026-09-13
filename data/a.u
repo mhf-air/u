@@ -9,7 +9,7 @@
 another form of inner doc comment
 */
 
-#![allow(unused-imports)]
+#![allow(unused-uses)]
 $!"inner, not useful now"
 
 // todo
@@ -46,11 +46,11 @@ $!"inner, not useful now"
 //      - method receiver
 // - goto-definition jump to the correct position in u
 
-crate std
-crate std as ruststd
-crate foo as -
+extern crate std
+extern crate std as ruststd
+extern crate foo as -
 
-import {
+use {
     + crate..a
     ^ crate..a..*
     +(super) crate..a
@@ -74,28 +74,23 @@ import {
     }
 }
 
-import+ crate..a
-import^ crate..a..*
-import+(super) crate..a
-import+(in crate..abc) crate..a
-import crate..a..*
-import super..a
-import self..a
-import -..crate-abc..a
+use+ crate..a
+use^ crate..a..*
+use+(super) crate..a
+use+(in crate..abc) crate..a
+use crate..a..*
+use super..a
+use self..a
+use -..crate-abc..a
 
-import std
-import std..env
-import std..env..consts as env-consts
-import super..Api-result as Result
-import std..option { Option, Option..Some, Option..None as nil }
-
-import+[block] {
-    std..env
-    std..option { Option, Option..Some, Option..None as nil }
-}
+use std
+use std..env
+use std..env..consts as env-consts
+use super..Api-result as Result
+use std..option { Option, Option..Some, Option..None as nil }
 
 f func() {
-    import -..crate-abc..Abc
+    use -..crate-abc..Abc
     Point type = -..crate-abc..Abc
     -..crate-abc..f()
 }
@@ -128,8 +123,6 @@ f func(:mut a: i32, b i32) {}
 
 f func() {
     r#func := a
-    r#import := a
-    r#interface := a
     r#ret := a
     r#union := a
 }
@@ -396,10 +389,10 @@ My-union[T] union {
     age i32
 }
 
-With-self interface Super[Self] where { Self Sized } {}
-Copy-iterator interface Iterator[Item Copy] {}
+With-self trait Super[Self] where { Self Sized } {}
+Copy-iterator trait Iterator[Item Copy] {}
 
-Seq[T] interface[unsafe] Display + Debug where { T Copy } {
+Seq[T] trait[unsafe] Display + Debug where { T Copy } {
     name--c const &str = "hello"
     Item type = T
     A type
@@ -418,7 +411,7 @@ Seq[T] interface[unsafe] Display + Debug where { T Copy } {
     call,,()
 }
 
-Foo interface {
+Foo trait {
     Bar['a] type
 
     Item['a] type where { Self 'a }

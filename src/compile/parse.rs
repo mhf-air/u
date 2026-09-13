@@ -455,16 +455,8 @@ impl Parse {
                 stmt = Stmt::Let(a);
             }
             TokenCode::Keyword(keyword) => match keyword {
-                Keyword::Crate => {
-                    let a = s.parse_crate()?;
-                    stmt = Stmt::Item(Item {
-                        outer_attrs,
-                        vis: Visibility::default(),
-                        payload: ItemPayload::Crate(a),
-                    });
-                }
-                Keyword::Import => {
-                    s.expect(T![import])?;
+                Keyword::Use => {
+                    s.expect(T![use])?;
                     let a = s.parse_import(false)?;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
@@ -473,14 +465,23 @@ impl Parse {
                     });
                 }
                 Keyword::Extern => {
-                    s.expect(T![extern])?;
-                    let mut a = s.parse_extern()?;
-                    a.span_extern = special_token.span;
-                    stmt = Stmt::Item(Item {
-                        outer_attrs,
-                        vis: Visibility::default(),
-                        payload: ItemPayload::Extern(a),
-                    });
+                    if matches!(s.nth(1).code, T![crate]) {
+                        let a = s.parse_crate()?;
+                        stmt = Stmt::Item(Item {
+                            outer_attrs,
+                            vis: Visibility::default(),
+                            payload: ItemPayload::Crate(a),
+                        });
+                    } else {
+                        s.expect(T![extern])?;
+                        let mut a = s.parse_extern()?;
+                        a.span_extern = special_token.span;
+                        stmt = Stmt::Item(Item {
+                            outer_attrs,
+                            vis: Visibility::default(),
+                            payload: ItemPayload::Extern(a),
+                        });
+                    }
                 }
                 Keyword::Const => {
                     let n = s.parse_identifier_pub()?;
@@ -542,17 +543,17 @@ impl Parse {
                         payload: ItemPayload::Impl(a),
                     });
                 }
-                Keyword::Interface => {
+                Keyword::Trait => {
                     let n = s.parse_identifier_pub_generics()?;
-                    s.expect(T![interface])?;
-                    let mut a = s.parse_interface()?;
+                    s.expect(T![trait])?;
+                    let mut a = s.parse_trait()?;
                     a.name = n.name;
                     a.generics = n.generics;
-                    a.span_interface = special_token.span;
+                    a.span_trait = special_token.span;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         vis: n.vis,
-                        payload: ItemPayload::Interface(a),
+                        payload: ItemPayload::Trait(a),
                     });
                 }
                 Keyword::Macro => {
@@ -693,7 +694,8 @@ impl Parse {
                         let prev_token = &s.tokens[start - 2];
                         match prev_token.code {
                             T![.] | T![..] => {
-                                // skip variables used in third-party code, like a.interface or a..interface
+                                // skip variables used in third-party code,
+                                // like a.trait or a..trait
                                 continue;
                             }
                             _ => (),
@@ -701,13 +703,6 @@ impl Parse {
                     }
 
                     match keyword {
-                        Keyword::Crate => {
-                            let next_token = &s.tokens[start];
-                            if !matches!(&next_token.code, T![..]) {
-                                first_special_token = Some(token);
-                                break;
-                            }
-                        }
                         Keyword::Const => {
                             if start >= 2 {
                                 // for case like that:
@@ -723,13 +718,13 @@ impl Parse {
                                 break;
                             }
                         }
-                        Keyword::Import
+                        Keyword::Use
                         | Keyword::Extern
                         | Keyword::Enum
                         | Keyword::Func
                         | Keyword::Impl
                         | Keyword::Let
-                        | Keyword::Interface
+                        | Keyword::Trait
                         | Keyword::Macro
                         | Keyword::Mod
                         | Keyword::Static
@@ -1199,7 +1194,7 @@ impl Parse {
                     }
                 }
             } else {
-                let mut bound = InterfaceBound::default();
+                let mut bound = TraitBound::default();
                 // possible ?
                 if matches!(&token.code, T![?]) {
                     bound.span_unsized = Some(token.span);
@@ -1215,7 +1210,7 @@ impl Parse {
                     bound.for_lifetimes = Some(f);
                 }
                 bound.type_path = s.parse_type_path()?;
-                r.items.push(TypeParamBound::InterfaceBound(bound));
+                r.items.push(TypeParamBound::TraitBound(bound));
             }
 
             let token = s.current();
@@ -1228,9 +1223,9 @@ impl Parse {
         Ok(r)
     }
 
-    fn parse_interface_bound(&self) -> ParseResult<InterfaceBound> {
+    fn parse_trait_bound(&self) -> ParseResult<TraitBound> {
         let s = self;
-        let mut r = InterfaceBound::default();
+        let mut r = TraitBound::default();
 
         let mut need_paren = false;
         let token = s.current();
@@ -1320,7 +1315,10 @@ impl Parse {
 
         let mut r = Crate::default();
 
-        r.t_crate = s.current().clone();
+        r.t_extern = s.current().clone();
+        s.plusplus();
+
+        // crate
         s.plusplus();
 
         r.name = s.current().clone();
@@ -2287,10 +2285,10 @@ impl Parse {
         Ok(r)
     }
 
-    fn parse_interface(&self) -> ParseResult<Interface> {
+    fn parse_trait(&self) -> ParseResult<Trait> {
         let s = self;
 
-        let mut r = Interface::default();
+        let mut r = Trait::default();
 
         // possible [unsafe]
         let token = s.current();
@@ -2368,11 +2366,11 @@ impl Parse {
                         r.items.push(a);
                     }
                     _ => {
-                        return Err(s.panic(token, "illegal interface item"));
+                        return Err(s.panic(token, "illegal trait item"));
                     }
                 },
                 Stmt::Let(_) | Stmt::Expr(_) | Stmt::Value(_) => {
-                    return Err(s.panic(token, "illegal interface item"));
+                    return Err(s.panic(token, "illegal trait item"));
                 }
             }
 
@@ -2390,25 +2388,25 @@ impl Parse {
 
         let mut r = Impl::default();
 
-        let mut impl_interface = ImplInterface::default();
+        let mut impl_trait = ImplTrait::default();
         // possible [unsafe]
         let token = s.current();
         if matches!(&token.code, T!["["]) {
             s.plusplus();
             let token = s.current();
-            impl_interface.span_unsafe = token.span;
+            impl_trait.span_unsafe = token.span;
             if !matches!(&token.code, T![unsafe]) {
                 return Err(s.panic(token, &format!("expected unsafe, but got {:?}", token)));
             }
-            impl_interface.unsafe_ = true;
+            impl_trait.unsafe_ = true;
             s.plusplus();
             s.expect(T!["]"])?;
         }
 
         // possible TypePath
         if !matches!(&s.current().code, T![where] | T!["{"]) {
-            impl_interface.type_path = s.parse_type_path()?;
-            r.payload = ImplPayload::Interface(impl_interface);
+            impl_trait.type_path = s.parse_type_path()?;
+            r.payload = ImplPayload::Trait(impl_trait);
         } else {
             r.payload = ImplPayload::Static;
         }
@@ -4634,18 +4632,18 @@ impl Parse {
                 )));
                 return Ok(payload);
             }
-            // impl interface or impl interface one bound
+            // impl trait or impl trait one bound
             T![impl] => {
                 let next_token = s.current();
                 if let TokenCode::Lifetime(_) = &next_token.code {
                     let bounds = s.parse_type_param_bounds()?;
-                    let payload = TypePayload::ImplInterface(bounds, token.span);
+                    let payload = TypePayload::ImplTrait(bounds, token.span);
                     return Ok(payload);
                 }
-                let bound = s.parse_interface_bound()?;
+                let bound = s.parse_trait_bound()?;
                 if !matches!(s.current().code, T![+]) {
                     let payload = TypePayload::TypeNoBounds(Box::new(
-                        TypeNoBounds::ImplInterfaceOneBound(TypeImplInterfaceOneBound {
+                        TypeNoBounds::ImplTraitOneBound(TypeImplTraitOneBound {
                             bound,
                             span_impl: token.span,
                         }),
@@ -4656,25 +4654,25 @@ impl Parse {
                 let mut bounds = s.parse_type_param_bounds()?;
                 bounds
                     .items
-                    .insert(0, TypeParamBound::InterfaceBound(bound));
-                let payload = TypePayload::ImplInterface(bounds, token.span);
+                    .insert(0, TypeParamBound::TraitBound(bound));
+                let payload = TypePayload::ImplTrait(bounds, token.span);
                 return Ok(payload);
             }
-            // interface object or interface object one bound
+            // trait object or trait object one bound
             T![dyn] => {
                 let next_token = s.current();
                 if let TokenCode::Lifetime(_) = &next_token.code {
                     let bounds = s.parse_type_param_bounds()?;
-                    let payload = TypePayload::InterfaceObject(TypeInterfaceObject {
+                    let payload = TypePayload::TraitObject(TypeTraitObject {
                         bounds,
                         span: token.span,
                     });
                     return Ok(payload);
                 }
-                let bound = s.parse_interface_bound()?;
+                let bound = s.parse_trait_bound()?;
                 if !matches!(s.current().code, T![+]) {
                     let payload = TypePayload::TypeNoBounds(Box::new(
-                        TypeNoBounds::InterfaceObjectOneBound(TypeInterfaceObjectOneBound {
+                        TypeNoBounds::TraitObjectOneBound(TypeTraitObjectOneBound {
                             bound,
                             span_dyn: token.span,
                         }),
@@ -4685,8 +4683,8 @@ impl Parse {
                 let mut bounds = s.parse_type_param_bounds()?;
                 bounds
                     .items
-                    .insert(0, TypeParamBound::InterfaceBound(bound));
-                let payload = TypePayload::InterfaceObject(TypeInterfaceObject {
+                    .insert(0, TypeParamBound::TraitBound(bound));
+                let payload = TypePayload::TraitObject(TypeTraitObject {
                     bounds,
                     span: token.span,
                 });

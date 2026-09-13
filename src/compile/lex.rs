@@ -1441,10 +1441,8 @@ impl Token {
                     Keyword::Func => "fn",
                     Keyword::If => "if",
                     Keyword::Impl => "impl",
-                    Keyword::Import => "use",
                     Keyword::In => "in",
                     Keyword::Let => "let",
-                    Keyword::Interface => "trait",
                     Keyword::Macro => "macro_rules",
                     Keyword::Mod => "mod",
                     Keyword::Mut => "mut",
@@ -1744,7 +1742,7 @@ impl ToLang for Literal {
     }
 }
 
-pub const ALLOWED_KEYWORD_NAMES: &[&'static str] = &["func", "import", "interface", "ret", "union"];
+pub const ALLOWED_KEYWORD_NAMES: &[&'static str] = &["func", "ret", "union"];
 
 #[derive(Clone, Default, PartialEq, Eq, Hash)]
 pub struct Identifier {
@@ -1874,10 +1872,8 @@ pub enum Keyword {
     Func,
     If,
     Impl,
-    Import,
     In,
     Let,
-    Interface,
     Macro,
     Mod,
     Mut,
@@ -1936,10 +1932,8 @@ impl fmt::Debug for Keyword {
             Self::Func => write!(f, "func"),
             Self::If => write!(f, "if"),
             Self::Impl => write!(f, "impl"),
-            Self::Import => write!(f, "import"),
             Self::In => write!(f, "in"),
             Self::Let => write!(f, "let"),
-            Self::Interface => write!(f, "interface"),
             Self::Macro => write!(f, "macro"),
             Self::Mod => write!(f, "mod"),
             Self::Mut => write!(f, "mut"),
@@ -2002,10 +1996,8 @@ impl FromStr for Keyword {
             "func" => Ok(Self::Func),
             "if" => Ok(Self::If),
             "impl" => Ok(Self::Impl),
-            "import" => Ok(Self::Import),
             "in" => Ok(Self::In),
             "let" => Ok(Self::Let),
-            "interface" => Ok(Self::Interface),
             "macro" => Ok(Self::Macro),
             "mod" => Ok(Self::Mod),
             "mut" => Ok(Self::Mut),
@@ -2234,10 +2226,8 @@ macro_rules! T {
 	[ func ] => { TokenCode::Keyword(Keyword::Func) };
 	[ if ] => { TokenCode::Keyword(Keyword::If) };
 	[ impl ] => { TokenCode::Keyword(Keyword::Impl) };
-	[ import ] => { TokenCode::Keyword(Keyword::Import) };
 	[ in ] => { TokenCode::Keyword(Keyword::In) };
 	[ let ] => { TokenCode::Keyword(Keyword::Let) };
-	[ interface ] => { TokenCode::Keyword(Keyword::Interface) };
 	[ macro ] => { TokenCode::Keyword(Keyword::Macro) };
 	[ mod ] => { TokenCode::Keyword(Keyword::Mod) };
 	[ mut ] => { TokenCode::Keyword(Keyword::Mut) };

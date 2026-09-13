@@ -333,7 +333,7 @@ pub enum ItemPayload {
     Union(Union),
     Const(Const),
     Static(Static),
-    Interface(Interface),
+    Trait(Trait),
     Impl(Impl),
     Macro(Macro),
     MacroCall(MacroCall),
@@ -353,7 +353,7 @@ impl ItemPayload {
 
         let first_u_token = match s {
             A::Mod(_a) => &t_a,
-            A::Crate(a) => &a.t_crate,
+            A::Crate(a) => &a.t_extern,
             A::Extern(_a) => &t_a,
             A::Import(_a) => &t_a,
             A::Func(_a) => &t_a,
@@ -363,7 +363,7 @@ impl ItemPayload {
             A::Union(_a) => &t_a,
             A::Const(_a) => &t_a,
             A::Static(_a) => &t_a,
-            A::Interface(_a) => &t_a,
+            A::Trait(_a) => &t_a,
             A::Impl(_a) => &t_a,
             A::Macro(_a) => &t_a,
             A::MacroCall(_a) => &t_a,
@@ -389,7 +389,7 @@ impl ToLang for ItemPayload {
             A::Union(a) => a.to_rust(p),
             A::Const(a) => a.to_rust(p),
             A::Static(a) => a.to_rust(p),
-            A::Interface(a) => a.to_rust(p),
+            A::Trait(a) => a.to_rust(p),
             A::Impl(a) => a.to_rust(p),
             A::Macro(a) => a.to_rust(p),
             A::MacroCall(a) => {
@@ -447,7 +447,7 @@ pub struct Crate {
     // AS, ALIAS
     pub alias: Option<(Token, Token)>,
 
-    pub t_crate: Token,
+    pub t_extern: Token,
 }
 impl ToLang for Crate {
     fn to_rust(&self, p: &mut LangFormatter) {
@@ -1105,7 +1105,7 @@ impl ToLang for Static {
 
 // --------------------------------------------------------------------------------
 #[derive(Debug, Default)]
-pub struct Interface {
+pub struct Trait {
     pub name: Identifier,
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
@@ -1115,12 +1115,12 @@ pub struct Interface {
     pub inner_attrs: Attrs,
     pub items: Vec<AssociatedItem>,
 
-    pub span_interface: Span,
+    pub span_trait: Span,
     pub span_unsafe: Option<Span>,
     pub span_brace_open: Span,
     pub span_brace_close: Span,
 }
-impl ToLang for Interface {
+impl ToLang for Trait {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
@@ -1128,7 +1128,7 @@ impl ToLang for Interface {
             p.push_s("unsafe", s.span_unsafe.unwrap());
             p.push_raw(" ");
         }
-        p.push_s("trait", s.span_interface);
+        p.push_s("trait", s.span_trait);
         p.push_raw(" ");
         p.push_rust(&s.name);
         if let Some(generics) = &s.generics {
@@ -1215,7 +1215,7 @@ impl ToLang for Impl {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if let ImplPayload::Interface(a) = &s.payload {
+        if let ImplPayload::Trait(a) = &s.payload {
             if a.unsafe_ {
                 p.push_s("unsafe", a.span_unsafe);
                 p.push_raw(" ");
@@ -1232,7 +1232,7 @@ impl ToLang for Impl {
             ImplPayload::Static => {
                 p.push_rust(&s.type_);
             }
-            ImplPayload::Interface(a) => {
+            ImplPayload::Trait(a) => {
                 p.push_rust(&a.type_path);
                 p.push_raw(" for ");
                 p.push_rust(&s.type_);
@@ -1267,11 +1267,11 @@ impl ToLang for Impl {
 pub enum ImplPayload {
     #[default]
     Static,
-    Interface(ImplInterface),
+    Trait(ImplTrait),
 }
 
 #[derive(Debug, Default)]
-pub struct ImplInterface {
+pub struct ImplTrait {
     pub unsafe_: bool,
     pub type_path: TypePath,
 
@@ -1768,7 +1768,7 @@ impl ToLang for TypeParamBounds {
 #[derive(Debug)]
 pub enum TypeParamBound {
     Lifetime(Lifetime),
-    InterfaceBound(InterfaceBound),
+    TraitBound(TraitBound),
     UseBound(UseBound),
 }
 impl ToLang for TypeParamBound {
@@ -1777,7 +1777,7 @@ impl ToLang for TypeParamBound {
 
         match s {
             TypeParamBound::Lifetime(a) => p.push_rust(a),
-            TypeParamBound::InterfaceBound(a) => p.push_rust(a),
+            TypeParamBound::TraitBound(a) => p.push_rust(a),
             TypeParamBound::UseBound(a) => p.push_rust(a),
         }
     }
@@ -1825,14 +1825,14 @@ impl ToLang for UseBoundGenericArg {
 }
 
 #[derive(Debug, Default)]
-pub struct InterfaceBound {
+pub struct TraitBound {
     pub unsized_: bool,
     pub for_lifetimes: Option<ForLifetimes>,
     pub type_path: TypePath,
 
     pub span_unsized: Option<Span>,
 }
-impl ToLang for InterfaceBound {
+impl ToLang for TraitBound {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
@@ -2606,12 +2606,12 @@ impl ToLang for Type {
 #[derive(Debug)]
 pub enum TypePayload {
     TypeNoBounds(Box<TypeNoBounds>),
-    ImplInterface(TypeParamBounds, Span),
-    InterfaceObject(TypeInterfaceObject),
+    ImplTrait(TypeParamBounds, Span),
+    TraitObject(TypeTraitObject),
 }
 impl Default for TypePayload {
     fn default() -> Self {
-        TypePayload::ImplInterface(TypeParamBounds::default(), Span::default())
+        TypePayload::ImplTrait(TypeParamBounds::default(), Span::default())
     }
 }
 impl ToLang for TypePayload {
@@ -2620,12 +2620,12 @@ impl ToLang for TypePayload {
 
         match s {
             TypePayload::TypeNoBounds(a) => p.push_rust(a.as_ref()),
-            TypePayload::ImplInterface(a, span) => {
+            TypePayload::ImplTrait(a, span) => {
                 p.push_s("impl", *span);
                 p.push_raw(" ");
                 p.push_rust(a);
             }
-            TypePayload::InterfaceObject(a) => {
+            TypePayload::TraitObject(a) => {
                 p.push_s("dyn", a.span);
                 p.push_raw(" ");
                 p.push_rust(&a.bounds);
@@ -2637,8 +2637,8 @@ impl ToLang for TypePayload {
 #[derive(Debug)]
 pub enum TypeNoBounds {
     Parenthesized(TypeParenthesized),                     // ( Type )
-    ImplInterfaceOneBound(TypeImplInterfaceOneBound),     // impl TraitBound
-    InterfaceObjectOneBound(TypeInterfaceObjectOneBound), // dyn TraitBound
+    ImplTraitOneBound(TypeImplTraitOneBound),     // impl TraitBound
+    TraitObjectOneBound(TypeTraitObjectOneBound), // dyn TraitBound
     Tuple(TypeTuple),                                     // () | ( (Type ,)+ Type? )
     RawPointer(TypeRawPointer),                           // *(mut | const) TypeNoBounds
     Reference(TypeReference),                             // & Lifetime? mut? TypeNoBounds
@@ -2665,12 +2665,12 @@ impl ToLang for TypeNoBounds {
                 p.push_rust(&a.type_);
                 p.push_s(")", a.span_paren_close);
             }
-            TypeNoBounds::ImplInterfaceOneBound(a) => {
+            TypeNoBounds::ImplTraitOneBound(a) => {
                 p.push_s("impl", a.span_impl);
                 p.push_raw(" ");
                 p.push_rust(&a.bound);
             }
-            TypeNoBounds::InterfaceObjectOneBound(a) => {
+            TypeNoBounds::TraitObjectOneBound(a) => {
                 p.push_s("dyn", a.span_dyn);
                 p.push_raw(" ");
                 p.push_rust(&a.bound);
@@ -2733,7 +2733,7 @@ impl ToLang for TypeNoBounds {
 }
 
 #[derive(Debug, Default)]
-pub struct TypeInterfaceObject {
+pub struct TypeTraitObject {
     pub bounds: TypeParamBounds,
 
     pub span: Span,
@@ -2748,15 +2748,15 @@ pub struct TypeParenthesized {
 }
 
 #[derive(Debug)]
-pub struct TypeImplInterfaceOneBound {
-    pub bound: InterfaceBound,
+pub struct TypeImplTraitOneBound {
+    pub bound: TraitBound,
 
     pub span_impl: Span,
 }
 
 #[derive(Debug)]
-pub struct TypeInterfaceObjectOneBound {
-    pub bound: InterfaceBound,
+pub struct TypeTraitObjectOneBound {
+    pub bound: TraitBound,
 
     pub span_dyn: Span,
 }

@@ -310,7 +310,7 @@ impl Fmt {
                     }
                 }
             }
-            cc::ItemPayload::Interface(a) => {
+            cc::ItemPayload::Trait(a) => {
                 for item in a.items {
                     match item.payload {
                         cc::AssociatedItemPayload::Func(a) => {
