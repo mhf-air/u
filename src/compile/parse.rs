@@ -456,12 +456,20 @@ impl Parse {
             }
             TokenCode::Keyword(keyword) => match keyword {
                 Keyword::Use => {
+                    let token = s.current();
                     s.expect(T![use])?;
-                    let a = s.parse_import(false)?;
+                    let vis = s.parse_vis()?;
+                    let mut a = s.parse_use()?;
+                    a.t_use = token.clone();
+                    a.has_vis = if let VisibilityPayload::Private(b) = vis.payload && !b {
+                        false
+                    } else {
+                        true
+                    };
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        vis: Visibility::default(),
-                        payload: ItemPayload::Import(a),
+                        vis,
+                        payload: ItemPayload::Use(a),
                     });
                 }
                 Keyword::Extern => {
@@ -1344,167 +1352,129 @@ impl Parse {
         return Ok(r);
     }
 
-    fn parse_import(&self, err_on_pub: bool) -> ParseResult<Import> {
+    fn parse_use(&self) -> ParseResult<Use> {
         let s = self;
 
-        let mut r = Import::default();
-        let outer_vis = s.parse_vis()?;
+        let mut r = Use::default();
+        r.item = parse_use_item(s)?;
+        return Ok(r);
 
-        // import[block] {}
-        let token = s.current();
-        if matches!(&token.code, T!["["]) {
-            s.plusplus();
-            // skips checking for "block"
-            s.plusplus();
-            s.expect(T!["]"])?;
-            r.is_block = true;
-        }
-
-        // import+ std..env
-        let token = s.current();
-        if !matches!(&token.code, T!["{"]) {
-            let mut item = parse_import_item(s)?;
-            item.vis = outer_vis;
-            r.items.push(item);
-            return Ok(r);
-        }
-
-        // {  }
-        r.vis = outer_vis;
-        s.plusplus();
-        // first token is }, +, ^, self, super, crate or identifier
-        while s.has_more() {
-            let vis = s.parse_vis()?;
-            if err_on_pub && !matches!(vis.payload, VisibilityPayload::Private(false)) {
-                return Err(s.panic(token, "not expected pub in sub-imports"));
-            }
+        fn parse_use_item(s: &Parse) -> ParseResult<UseItem> {
+            let mut r = UseItem::default();
 
             let token = s.current();
-            if matches!(&token.code, T!["}"]) {
-                if !matches!(vis.payload, VisibilityPayload::Private(false)) {
-                    return Err(s.panic(token, "expected path after + in import"));
-                }
-                s.plusplus();
-                s.skip_semicolons();
+            if matches!(&token.code, T!["{"]) {
+                r.sub = Some(parse_use_item_sub(s)?);
                 return Ok(r);
             }
 
-            let mut item = parse_import_item(s)?;
-            item.vis = vis;
-
-            r.items.push(item);
+            // identifier
+            while s.has_more() {
+                let token = s.current();
+                if matches!(&token.code, T![as]) {
+                    s.plusplus();
+                    r.alias = Some((token.clone(), s.current().clone()));
+                    s.plusplus(); // identifier
+                    return Ok(r);
+                }
+                if matches!(&token.code, T![*]) {
+                    s.plusplus();
+                    // needed this, because there's no auto-added ';' after '*'
+                    r.paths.push(token.clone());
+                    return Ok(r);
+                }
+                if matches!(&token.code, T![;] | T![,] | T!["}"]) {
+                    return Ok(r);
+                }
+                if matches!(&token.code, T!["{"]) {
+                    r.sub = Some(parse_use_item_sub(s)?);
+                    return Ok(r);
+                }
+                s.plusplus();
+                r.paths.push(token.clone());
+            }
+            // unreachable
+            return Ok(r);
         }
 
-        return Ok(r);
+        fn parse_use_item_sub(s: &Parse) -> ParseResult<UseItemSub> {
+            let mut r = UseItemSub::default();
 
-        fn parse_import_item(s: &Parse) -> ParseResult<ImportItem> {
-            // next token is } ; , .. { identifier
-            let mut r = ImportItem::default();
+            let token = s.current();
+            r.t_brace_open = token.clone();
+            s.plusplus();
 
             let token = s.current();
             // so that you can type {.. to trigger auto-completion
             r.leading_sep = if matches!(token.code, T![..]) {
                 s.plusplus();
-                if s.magic {
-                    Some(token.span)
-                } else {
-                    None
-                }
+                if s.magic { true } else { false }
             } else {
-                None
+                false
             };
 
-            let mut expect_identifier = true;
             while s.has_more() {
-                let token = s.current();
-                s.plusplus();
+                let it = parse_use_item(s)?;
 
-                if expect_identifier {
-                    if matches!(&token.code, T![*]) {
-                        // because no auto added semicolon exists after *\n, so return immediately
-                        let b = "*".to_owned();
-                        let mut a = Identifier::new(b.clone(), b);
-                        a.span = token.span;
-                        r.paths.push(a);
+                s.minusminus();
+                let before_token = s.current();
+                s.plusplus();
+                let token = s.current();
+                // add ',' after '*' if the next token after '*' is not at the same line
+                if matches!(&before_token.code, T![*]) &&
+                            token.span.line > before_token.span.line {
+                    let span = before_token.span;
+                    let t = Token {
+                        code: T![,],
+                        span: Span {
+                            column: span.column + 1,
+                            end_column: span.end_column + 1,
+                            ..span
+                        },
+                        tokens_before: Vec::new(),
+                        u: ",".to_owned(),
+                    };
+                    r.items.push((it, Some(t)));
+                    if matches!(&token.code, T!["}"]) {
+                        r.t_brace_close = token.clone();
+                        s.plusplus();
                         return Ok(r);
                     }
-                    let identifier = match &token.code {
-                        TokenCode::Identifier(a) => a.clone(),
-                        T![self] => {
-                            let b = "self".to_owned();
-                            let mut a = Identifier::new(b.clone(), b);
-                            a.span = token.span;
-                            a
-                        }
-                        T![crate] => {
-                            let b = "crate".to_owned();
-                            let mut a = Identifier::new(b.clone(), b);
-                            a.span = token.span;
-                            a
-                        }
-                        T![super] => {
-                            let b = "super".to_owned();
-                            let mut a = Identifier::new(b.clone(), b);
-                            a.span = token.span;
-                            a
-                        }
-                        _ => {
-                            return Err(s.panic(
-                                token,
-                                &format!("expected identifier but got {:?}", token),
-                            ));
-                        }
-                    };
-                    r.paths.push(identifier);
-                    expect_identifier = false;
                     continue;
                 }
 
-                if matches!(&token.code, T![..]) {
-                    expect_identifier = true;
-                    continue;
-                }
-
-                if matches!(&token.code, T![as]) {
-                    let token = s.current();
-                    s.plusplus();
-                    let TokenCode::Identifier(a) = &token.code else {
-                        return Err(s.panic(
-                            token,
-                            &format!("expected identifier after 'as' but got '{:?}'", token),
-                        ));
-                    };
-                    r.alias = Some(a.clone());
-                    let token = s.current();
-                    if !matches!(&token.code, T![;] | T![,] | T!["}"]) {
-                        return Err(s.panic(
-                            token,
-                            &format!("expected ':', ',', '}}', but got '{:?}'", token),
-                        ));
-                    }
-                    continue;
-                }
-
+                s.plusplus();
                 match &token.code {
-                    T![;] | T![,] => {}
+                    T![,] => {
+                        r.items.push((it, Some(token.clone())));
+                        let token = s.current();
+                        if matches!(&token.code, T!["}"]) {
+                            r.t_brace_close = token.clone();
+                            s.plusplus();
+                            return Ok(r);
+                        }
+                    }
+                    T![;] => {
+                        let mut t = token.clone();
+                        t.code = T![,];
+                        r.items.push((it, Some(t)));
+                        let token = s.current();
+                        if matches!(&token.code, T!["}"]) {
+                            r.t_brace_close = token.clone();
+                            s.plusplus();
+                            return Ok(r);
+                        }
+                    }
                     T!["}"] => {
-                        s.minusminus();
+                        r.items.push((it, None));
+                        r.t_brace_close = token.clone();
+                        return Ok(r);
                     }
-                    T!["{"] => {
-                        s.minusminus();
-                        r.sub = s.parse_import(true)?.items;
-                    }
-                    _ => {
-                        return Err(s.panic(
-                            token,
-                            &format!("illegal token {:?} in parse_import_item", token),
-                        ));
-                    }
+                    _ => {}
                 }
-                return Ok(r);
             }
 
-            unreachable!("not an import item");
+            return Ok(r);
         }
     }
 

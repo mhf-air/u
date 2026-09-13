@@ -213,7 +213,7 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
                 new_mod.push("extern");
                 extern_items(p, &a, filepath, &new_mod, pa);
             }
-            u::ItemPayload::Crate(_) | u::ItemPayload::Import(_) | u::ItemPayload::MacroCall(_) => {
+            u::ItemPayload::Crate(_) | u::ItemPayload::Use(_) | u::ItemPayload::MacroCall(_) => {
                 continue;
             }
             u::ItemPayload::Func(a) => {

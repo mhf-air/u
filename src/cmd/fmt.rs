@@ -361,8 +361,8 @@ impl Fmt {
             cc::ItemPayload::MacroCall(a) => {
                 s.fmt_macro_call(a);
             }
-            cc::ItemPayload::Import(a) => {
-                s.fmt_import(a.items);
+            cc::ItemPayload::Use(a) => {
+                s.fmt_use(a.item);
             }
             cc::ItemPayload::Crate(_)
             | cc::ItemPayload::Extern(_)
@@ -386,25 +386,7 @@ impl Fmt {
             cc::MacroCallBody::Token(_) => {}
         }
     }
-    fn fmt_import(&mut self, items: Vec<cc::ImportItem>) {
-        let s = self;
-        if items.is_empty() {
-            return;
-        }
-        for item in items {
-            if let Some(span) = item.leading_sep {
-                s.skipped_chars.insert(Pos {
-                    line: span.line,
-                    column: span.column,
-                });
-                s.skipped_chars.insert(Pos {
-                    line: span.line,
-                    column: span.column + 1,
-                });
-            }
-            s.fmt_import(item.sub);
-        }
-    }
+    fn fmt_use(&mut self, _items: cc::UseItem) {}
     fn fmt_stmt(&mut self, stmt: cc::Stmt) {
         let s = self;
         match stmt {

@@ -325,7 +325,7 @@ pub enum ItemPayload {
     Mod(Mod),
     Crate(Crate),
     Extern(ExternalBlock),
-    Import(Import),
+    Use(Use),
     Func(Box<Func>),
     TypeAlias(TypeAlias),
     Struct(Struct),
@@ -355,7 +355,7 @@ impl ItemPayload {
             A::Mod(_a) => &t_a,
             A::Crate(a) => &a.t_extern,
             A::Extern(_a) => &t_a,
-            A::Import(_a) => &t_a,
+            A::Use(a) => &a.t_use,
             A::Func(_a) => &t_a,
             A::TypeAlias(_a) => &t_a,
             A::Struct(_a) => &t_a,
@@ -381,7 +381,7 @@ impl ToLang for ItemPayload {
             A::Mod(a) => a.to_rust(p),
             A::Crate(a) => a.to_rust(p),
             A::Extern(a) => a.to_rust(p),
-            A::Import(a) => a.to_rust(p),
+            A::Use(a) => a.to_rust(p),
             A::Func(a) => a.to_rust(p),
             A::TypeAlias(a) => a.to_rust(p),
             A::Struct(a) => a.to_rust(p),
@@ -464,75 +464,77 @@ impl ToLang for Crate {
 }
 
 #[derive(Debug, Default)]
-pub struct Import {
-    pub items: Vec<ImportItem>, // items.len() > 0
-    pub vis: Visibility,
-    pub is_block: bool,
+pub struct Use {
+    pub item: UseItem,
+    pub has_vis: bool,
+    pub t_use: Token,
 }
-impl ToLang for Import {
+impl ToLang for Use {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if s.is_block {
-            p.push_rust(&s.vis);
-            p.push_raw("use {\n");
-            p.inc_indent();
-            for item in &s.items {
-                p.indent();
-                p.push_rust(item);
-                p.push_raw(",\n");
-            }
-            p.dec_indent();
-            p.indent();
-            p.push_raw("}");
-            return;
+        if s.has_vis {
+            let item = &s.item;
+            let first_u_token = if !item.paths.is_empty() {
+                &item.paths[0]
+            } else {
+                &item.sub.as_ref().unwrap().t_brace_open
+            };
+            first_u_token.to_rs_before(p);
         }
 
-        for item in &s.items {
-            p.push_rust(&item.vis);
-            p.push_raw("use ");
-            p.push_rust(item);
-            p.push_raw(";\n");
-        }
+        p.push_raw("use");
+        s.item.to_rust(p);
+        p.push_raw(";");
     }
 }
 #[derive(Debug, Default)]
-pub struct ImportItem {
-    pub vis: Visibility,
-    pub alias: Option<Identifier>,
-    pub paths: Vec<Identifier>, // path.len() > 0
-    pub sub: Vec<ImportItem>,
-
-    pub leading_sep: Option<Span>,
+pub struct UseItem {
+    // paths may end with .. when ..{}
+    pub paths: Vec<Token>,
+    pub alias: Option<(Token, Token)>,
+    pub sub: Option<UseItemSub>,
 }
-impl ToLang for ImportItem {
+#[derive(Debug, Default)]
+pub struct UseItemSub {
+    pub items: Vec<(UseItem, Option<Token>)>,
+    pub leading_sep: bool,
+
+    pub t_brace_open: Token,
+    pub t_brace_close: Token,
+}
+impl ToLang for UseItem {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if s.leading_sep.is_some() {
-            p.push_raw("::");
-        }
-
-        if s.paths[0].id != "-" {
-            p.push_rust(&s.paths[0]);
-        }
-        for path in &s.paths[1..] {
-            p.push_raw("::");
-            p.push_rust(path);
-        }
-        if let Some(alias) = &s.alias {
-            p.push_raw(" as ");
-            p.push_rust(alias);
-        }
-        if !s.sub.is_empty() {
-            p.push_raw("::{");
-            for (i, sub) in s.sub.iter().enumerate() {
-                if i != 0 {
-                    p.push_raw(", ");
-                }
-                p.push_rust(sub);
+        if !s.paths.is_empty() {
+            let list = if let TokenCode::Identifier(id) = &s.paths[0].code && id.id == "-"{
+                s.paths[0].to_rs_before(p);
+                &s.paths[1..]
+            } else {
+                &s.paths
+            };
+            for it in list {
+                it.to_rust(p);
             }
-            p.push_raw("}");
+            if let Some(alias) = &s.alias {
+                alias.0.to_rust(p);
+                alias.1.to_rust(p);
+            }
+        }
+        if let Some(sub) = &s.sub {
+            sub.t_brace_open.to_rust(p);
+            if sub.leading_sep {
+                p.push_raw("::");
+            }
+            for it in &sub.items {
+                let (item, comma) = it;
+                item.to_rust(p);
+                if let Some(comma) = comma {
+                    comma.to_rust(p);
+                }
+            }
+            sub.t_brace_close.to_rust(p);
         }
     }
 }

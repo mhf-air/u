@@ -51,10 +51,7 @@ extern crate std as ruststd
 extern crate foo as -
 
 use {
-    + crate..a
-    ^ crate..a..*
-    +(super) crate..a
-    +(in crate..abc) crate..a
+    crate..a
     crate..a..*
     super..a
     self..a
@@ -64,8 +61,8 @@ use {
     std..env
     std..env..consts as env-consts
     super..Api-result as Result
-    std..option { Option, Option..Some, Option..None as nil }
-    astd..option {
+    std..option..{ Option, Option..Some, Option..None as nil }
+    astd..option..{
         Option {
             self
             Some
@@ -87,7 +84,7 @@ use std
 use std..env
 use std..env..consts as env-consts
 use super..Api-result as Result
-use std..option { Option, Option..Some, Option..None as nil }
+use std..option..{ Option, Option..Some, Option..None as nil }
 
 f func() {
     use -..crate-abc..Abc
