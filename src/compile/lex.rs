@@ -303,8 +303,16 @@ impl Lex {
         }
 
         // main loop
+        let mut is_backslash = false;
         'outer: while i < total_len {
             let ch = s.chars[i];
+
+            if ch == '\\' {
+                is_backslash = true;
+                s.column += 1;
+                i += 1;
+                continue;
+            }
 
             // whitespace
             if ch.is_whitespace() {
@@ -316,13 +324,17 @@ impl Lex {
                     }
                     // newline
                     if ch == '\n' {
-                        s.may_add_semicolon();
+                        if !is_backslash {
+                            s.may_add_semicolon();
+                        }
                     }
                     i += 1;
                 }
                 let u = s.sub_str(start, i);
                 s.add_token_to_before_nl(TokenCode::Blank, u);
                 continue;
+            } else {
+                is_backslash = false;
             }
 
             // ->
@@ -1542,6 +1554,7 @@ impl Token {
                     Op::RArrow => "->",
                     Op::FatArrow => "=>",
                     Op::Dollar => "$",
+                    Op::Backslash => "\\",
                 }
             }
             TokenCode::Pair(pair) => {
@@ -2118,6 +2131,7 @@ pub enum Op {
     RArrow,
     FatArrow,
     Dollar,
+    Backslash,
 }
 
 impl fmt::Debug for Op {
@@ -2163,6 +2177,7 @@ impl fmt::Debug for Op {
             Self::RArrow => write!(f, "->"),
             Self::FatArrow => write!(f, "=>"),
             Self::Dollar => write!(f, "$"),
+            Self::Backslash => write!(f, "\\"),
         }
     }
 }
@@ -2308,6 +2323,7 @@ macro_rules! T {
 	[ -> ] => { TokenCode::Op(Op::RArrow) };
 	[ => ] => { TokenCode::Op(Op::FatArrow) };
 	[ $ ] => { TokenCode::Op(Op::Dollar) };
+	[ "\\" ] => { TokenCode::Op(Op::Backslash) };
 
 	// assign
 	[ = ] => { TokenCode::Assign(Assign::Assign) };
