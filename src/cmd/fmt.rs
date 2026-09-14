@@ -5,6 +5,7 @@ use std::fs;
 use std::io;
 use std::mem;
 
+/*
 /** usage: u u-fmt <file-path>
 
 rules:
@@ -51,15 +52,15 @@ impl CmdFmt {
         if s.src.is_empty() {
             return Err(io::Error::new(io::ErrorKind::Other, "empty file path"));
         };
-        let text = fs::read_to_string(&s.src)?;
+        let _text = fs::read_to_string(&s.src)?;
 
-        match run_inner(text, &s) {
+        /* match run_inner(text, &s) {
             Ok(text) => {
                 // println!("{}", text);
                 fs::write(&s.src, text)?;
             }
             Err(_) => {}
-        };
+        }; */
 
         Ok(())
     }
@@ -932,3 +933,4 @@ fn multiline_expr(expr: &cc::Expr, line: usize) -> bool {
         }
     }
 }
+*/

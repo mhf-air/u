@@ -240,8 +240,8 @@ impl Package {
     }
 }
 
-/// NOTE the form is fixed: pub(crate)
-/// no whitespaces or comments within Visibility
+/// NOTE the form is fixed: "pub(crate) NAME"
+/// no whitespaces or comments within Visibility, and one space after
 #[derive(Debug, Default)]
 pub struct Visibility {
     pub payload: VisibilityPayload,
@@ -352,17 +352,17 @@ impl ItemPayload {
         let t_a = Token::default();
 
         let first_u_token = match s {
-            A::Mod(_a) => &t_a,
+            A::Mod(a) => &a.name,
             A::Crate(a) => &a.t_extern,
             A::Extern(_a) => &t_a,
             A::Use(a) => &a.t_use,
             A::Func(_a) => &t_a,
-            A::TypeAlias(_a) => &t_a,
+            A::TypeAlias(a) => &a.name,
             A::Struct(_a) => &t_a,
             A::Enum(_a) => &t_a,
             A::Union(_a) => &t_a,
-            A::Const(_a) => &t_a,
-            A::Static(_a) => &t_a,
+            A::Const(a) => &a.name,
+            A::Static(a) => &a.name,
             A::Trait(_a) => &t_a,
             A::Impl(_a) => &t_a,
             A::Macro(_a) => &t_a,
@@ -405,39 +405,32 @@ impl ToLang for ItemPayload {
 
 #[derive(Debug, Default)]
 pub struct Mod {
-    pub name: Identifier,
+    pub name: Token,
     pub inner_attrs: Attrs,
-    pub items: Option<Vec<Item>>,
+    pub items: Vec<Item>,
 
-    pub span_mod: Span,
-    pub span_brace_open: Option<Span>,
-    pub span_brace_close: Option<Span>,
+    pub t_mod: Token,
+    pub t_braces: Option<(Token, Token)>,
 }
 
 impl ToLang for Mod {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("mod", s.span_mod);
-        p.push_raw(" ");
-        p.push_rust(&s.name);
-        let Some(items) = &s.items else {
+        s.t_mod.to_rs_one(p);
+        s.t_mod.to_rs_before(p);
+        s.name.to_rs_one(p);
+        let Some((t_open, t_close)) = &s.t_braces else {
             p.push_raw(";");
             return;
         };
 
-        p.push_raw(" ");
-        p.push_s("{", s.span_brace_open.unwrap());
-        p.push_raw("\n");
-
-        p.inc_indent();
-        p.push_rust(&s.inner_attrs);
-        for item in items {
-            p.push_rust(item);
+        t_open.to_rust(p);
+        s.inner_attrs.to_rust(p);
+        for item in &s.items {
+            item.to_rust(p);
         }
-        p.dec_indent();
-        p.indent();
-        p.push_s("}", s.span_brace_close.unwrap());
+        t_close.to_rust(p);
     }
 }
 
@@ -530,7 +523,7 @@ impl ToLang for UseItem {
 
 #[derive(Debug, Default)]
 pub struct Func {
-    pub name: Identifier,
+    pub name: Token,
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
     pub qualifier: FuncQualifier,
@@ -542,52 +535,68 @@ pub struct Func {
     pub return_type: Option<Type>,
     pub body: Option<BlockExpr>,
 
-    pub span_func: Span,
-    pub span_paren_open: Span,
-    pub span_paren_close: Span,
+    pub t_func: Token,
+    pub t_paren_open: Token,
+    pub t_paren_close: Token,
 }
 impl ToLang for Func {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if s.qualifier.const_ {
-            p.push_s("const", s.qualifier.span_const.unwrap());
-            p.push_raw(" ");
+        let mut is_first = true;
+        if let Some(t) = &s.qualifier.t_const {
+            if is_first {
+                t.to_rs_one(p);
+                is_first = false;
+            } else {
+                t.to_rust(p);
+            }
         }
-        if s.qualifier.async_ {
-            p.push_s("async", s.qualifier.span_async.unwrap());
-            p.push_raw(" ");
+        if let Some(t) = &s.qualifier.t_async {
+            if is_first {
+                t.to_rs_one(p);
+                is_first = false;
+            } else {
+                t.to_rust(p);
+            }
         }
-        if s.qualifier.unsafe_ {
-            p.push_s("unsafe", s.qualifier.span_unsafe.unwrap());
-            p.push_raw(" ");
+        if let Some(t) = &s.qualifier.t_unsafe {
+            if is_first {
+                t.to_rs_one(p);
+                is_first = false;
+            } else {
+                t.to_rust(p);
+            }
         }
-        if s.qualifier.safe {
-            p.push_s("safe", s.qualifier.span_safe.unwrap());
-            p.push_raw(" ");
-        }
-        if let Some(extern_) = &s.qualifier.extern_ {
-            p.push_s("extern", s.qualifier.span_extern.unwrap());
-            p.push_raw(" ");
-            if let Some(abi) = extern_ {
-                abi.push_span(p, s.qualifier.span_abi.unwrap());
-                p.push_raw(" ");
+        if let Some((t, abi)) = &s.qualifier.t_extern {
+            if is_first {
+                t.to_rs_one(p);
+                is_first = false;
+            } else {
+                t.to_rust(p);
+            }
+            if let Some(abi) = abi {
+                abi.to_rust(p);
             }
         }
 
-        p.push_s("fn", s.span_func);
-        p.push_raw(" ");
-        p.push_rust(&s.name);
+        if is_first {
+            s.t_func.to_rs_one(p);
+        } else {
+            s.t_func.to_rust(p);
+        }
+        s.t_func.to_rs_before(p);
+        s.name.to_rust(p);
 
-        if let Some(generics) = &s.generics {
-            p.push_rust(generics);
+        if let Some(g) = &s.generics {
+            g.to_rust(p);
         }
 
-        p.push_s("(", s.span_paren_open);
+        s.t_paren_open.to_rust(p);
         if let Some(self_param) = &s.self_param {
-            p.push_rust(self_param);
+            self_param.to_rust(p);
             if !s.params.is_empty() {
-                p.push_raw(", ");
+                p.push_raw(",");
             }
         }
         for (i, param) in s.params.iter().enumerate() {
@@ -608,35 +617,29 @@ impl ToLang for Func {
             p.push_rust(&v.outer_attrs);
             p.push_s("...", v.span);
         }
-        p.push_s(")", s.span_paren_close);
+        s.t_paren_close.to_rust(p);
 
         if let Some(return_type) = &s.return_type {
-            p.push_raw(" -> ");
-            p.push_rust(return_type);
+            p.push_raw(" ->");
+            return_type.to_rust(p);
         }
 
         if let Some(where_) = &s.where_ {
-            p.push_rust(where_);
+            where_.to_rust(p);
         }
 
         // body
         if let Some(body) = &s.body {
-            p.push_raw(" ");
             p.push_s("{", body.span_brace_open);
-            p.push_raw("\n");
-            p.inc_indent();
             p.push_rust(&body.inner_attrs);
 
             if !s.no_s && s.self_param.is_some() && !body.stmts.is_empty() {
-                p.indent();
                 p.push_raw("let s = self;\n");
             }
 
             for item in &body.stmts {
                 p.push_rust(item);
             }
-            p.dec_indent();
-            p.indent();
             p.push_s("}", body.span_brace_close);
         } else {
             p.push_raw(";");
@@ -645,18 +648,10 @@ impl ToLang for Func {
 }
 #[derive(Debug, Default)]
 pub struct FuncQualifier {
-    pub const_: bool,
-    pub async_: bool,
-    pub unsafe_: bool,
-    pub safe: bool,
-    pub extern_: Option<Option<LiteralString>>,
-
-    pub span_const: Option<Span>,
-    pub span_async: Option<Span>,
-    pub span_unsafe: Option<Span>,
-    pub span_safe: Option<Span>,
-    pub span_extern: Option<Span>,
-    pub span_abi: Option<Span>,
+    pub t_const: Option<Token>,
+    pub t_async: Option<Token>,
+    pub t_unsafe: Option<Token>,
+    pub t_extern: Option<(Token, Option<Token>)>,
 }
 #[derive(Debug, Default)]
 pub struct SelfParam {
@@ -667,7 +662,7 @@ impl ToLang for SelfParam {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.outer_attrs);
+        s.outer_attrs.to_rust(p);
         match &s.payload {
             SelfParamPayload::Type(a) => {
                 if let Some(span) = a.span_mut {
@@ -742,40 +737,36 @@ pub struct FuncVariadics {
 
 #[derive(Debug, Default)]
 pub struct TypeAlias {
-    pub name: Identifier,
+    pub name: Token,
     pub generics: Option<Generics>,
     pub bounds: TypeParamBounds,
     pub where_: Option<Where>,
-    pub type_: Option<Type>,
-    pub type_where: Option<Where>,
+    pub rhs: Option<(Token, Type, Option<Where>)>,
 
-    pub span_type: Span,
-    pub span_eq: Option<Span>,
+    pub t_type: Token,
 }
 impl ToLang for TypeAlias {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("type", s.span_type);
-        p.push_raw(" ");
-        p.push_rust(&s.name);
+        s.t_type.to_rs_one(p);
+        s.t_type.to_rs_before(p);
+        s.name.to_rs_one(p);
         if let Some(generics) = &s.generics {
-            p.push_rust(generics);
+            generics.to_rust(p);
         }
         if !s.bounds.items.is_empty() {
             p.push_raw(": ");
-            p.push_rust(&s.bounds);
+            s.bounds.to_rust(p);
         }
         if let Some(where_) = &s.where_ {
-            p.push_rust(where_);
+            where_.to_rust(p);
         }
-        if let Some(type_) = &s.type_ {
-            p.push_raw(" ");
-            p.push_s("=", s.span_eq.unwrap());
-            p.push_raw(" ");
-            p.push_rust(type_);
-            if let Some(where_) = &s.type_where {
-                p.push_rust(where_);
+        if let Some((t_eq, type_, where_)) = &s.rhs {
+            t_eq.to_rust(p);
+            type_.to_rust(p);
+            if let Some(where_) = &where_ {
+                where_.to_rust(p);
             }
         }
         p.push_raw(";");
@@ -784,7 +775,7 @@ impl ToLang for TypeAlias {
 
 #[derive(Debug, Default)]
 pub struct Struct {
-    pub name: Identifier,
+    pub name: Token,
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
     pub payload: Option<StructPayload>,
@@ -874,7 +865,7 @@ pub struct TupleField {
 
 #[derive(Debug, Default)]
 pub struct Enum {
-    pub name: Identifier,
+    pub name: Token,
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
     pub items: Vec<EnumItem>,
@@ -983,7 +974,7 @@ pub enum EnumItemPayload {
 
 #[derive(Debug, Default)]
 pub struct Union {
-    pub name: Identifier,
+    pub name: Token,
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
     pub fields: Vec<StructField>,
@@ -1028,27 +1019,24 @@ impl ToLang for Union {
 
 #[derive(Debug, Default)]
 pub struct Const {
-    pub name: Identifier,
+    pub name: Token,
     pub type_: Type,
-    pub expr: Option<Expr>,
+    pub expr: Option<(Token, Expr)>,
 
-    pub span_const: Span,
-    pub span_eq: Option<Span>,
+    pub t_const: Token,
 }
 impl ToLang for Const {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("const", s.span_const);
-        p.push_raw(" ");
-        p.push_rust(&s.name);
-        p.push_raw(": ");
-        p.push_rust(&s.type_);
-        if let Some(expr) = &s.expr {
-            p.push_raw(" ");
-            p.push_s("=", s.span_eq.unwrap());
-            p.push_raw(" ");
-            p.push_rust(expr);
+        p.push_raw("const");
+        s.t_const.to_rs_before(p);
+        s.name.to_rs_one(p);
+        p.push_raw(":");
+        s.type_.to_rust(p);
+        if let Some((t_eq, expr)) = &s.expr {
+            t_eq.to_rust(p);
+            expr.to_rust(p);
         }
         p.push_raw(";");
     }
@@ -1056,39 +1044,34 @@ impl ToLang for Const {
 
 #[derive(Debug, Default)]
 pub struct Static {
-    pub name: Identifier,
-    pub safe: bool,
-    pub mut_: bool,
+    pub name: Token,
     pub type_: Type,
-    pub expr: Option<Expr>,
+    pub expr: Option<(Token, Expr)>,
 
-    pub span_static: Span,
-    pub span_safe: Option<Span>,
-    pub span_mut: Option<Span>,
-    pub span_eq: Option<Span>,
+    pub t_static: Token,
+    pub t_safe: Option<Token>,
+    pub t_mut: Option<Token>,
 }
 impl ToLang for Static {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if s.safe {
-            p.push_s("safe", s.span_safe.unwrap());
-            p.push_raw(" ");
+        if let Some(safe) = &s.t_safe {
+            safe.to_rs_one(p);
+            s.t_static.to_rust(p);
+        } else {
+            s.t_static.to_rs_one(p);
         }
-        p.push_s("static", s.span_static);
-        p.push_raw(" ");
-        if s.mut_ {
-            p.push_s("mut", s.span_mut.unwrap());
-            p.push_raw(" ");
+        if let Some(mut_) = &s.t_mut {
+            mut_.to_rust(p);
         }
-        p.push_rust(&s.name);
-        p.push_raw(": ");
-        p.push_rust(&s.type_);
-        if let Some(expr) = &s.expr {
-            p.push_raw(" ");
-            p.push_s("=", s.span_eq.unwrap());
-            p.push_raw(" ");
-            p.push_rust(expr);
+        s.t_static.to_rs_before(p);
+        s.name.to_rs_one(p);
+        p.push_raw(":");
+        s.type_.to_rust(p);
+        if let Some((t_eq, expr)) = &s.expr {
+            t_eq.to_rust(p);
+            expr.to_rust(p);
         }
         p.push_raw(";");
     }
@@ -1097,7 +1080,7 @@ impl ToLang for Static {
 // --------------------------------------------------------------------------------
 #[derive(Debug, Default)]
 pub struct Trait {
-    pub name: Identifier,
+    pub name: Token,
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
 
@@ -1274,7 +1257,7 @@ pub struct ImplTrait {
 // so don't generate them
 #[derive(Debug, Default)]
 pub struct Macro {
-    pub name: Identifier,
+    pub name: Token,
     pub tokens: Vec<Token>,
 
     pub span_macro: Span,

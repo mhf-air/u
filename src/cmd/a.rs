@@ -53,13 +53,12 @@ impl Config {
                     cmd: Cmd::Sync(CmdSync::new(args)),
                 }
             }
-            "u-fmt" => {
+            /* "u-fmt" => {
                 args.remove(0);
                 Config {
                     cmd: Cmd::Fmt(CmdFmt::new(args)),
                 }
-            }
-
+            } */
             _ => {
                 let r = CargoCmd::new(args);
                 Config { cmd: Cmd::Cargo(r) }
@@ -72,8 +71,7 @@ impl Config {
             Cmd::None(a) => a.run(),
             Cmd::Compile(a) => a.run(),
             Cmd::Sync(a) => a.run(),
-            Cmd::Fmt(a) => a.run(),
-
+            // Cmd::Fmt(a) => a.run(),
             Cmd::Cargo(a) => a.run(),
         }
     }
@@ -83,8 +81,7 @@ enum Cmd {
     None(CmdNone),
     Compile(CmdCompile),
     Sync(CmdSync),
-    Fmt(CmdFmt),
-
+    // Fmt(CmdFmt),
     Cargo(CargoCmd),
 }
 
@@ -257,7 +254,8 @@ impl CmdCompile {
         // check ./mod.u file
         let mod_u = p.join("mod.u");
         let mut buf = if mod_u.is_file() {
-            compile_mod_u(mod_u.as_os_str().to_str().unwrap(), &mut file_items)?
+            // compile_mod_u(mod_u.as_os_str().to_str().unwrap(), &mut file_items)?
+            String::from("#![allow(unused_imports)]\n")
         } else {
             String::from("#![allow(unused_imports)]\n")
         };
@@ -289,6 +287,7 @@ impl CmdCompile {
 
         return Ok(());
 
+        /*
         fn compile_mod_u(filepath: &str, file_items: &mut Vec<FileItem>) -> io::Result<String> {
             // parse mod.u file to ast
             let p = cc::compile_file(filepath)?;
@@ -334,6 +333,7 @@ impl CmdCompile {
                 Ok(f) => return Ok(f.buf),
             }
         }
+        */
     }
 
     /*

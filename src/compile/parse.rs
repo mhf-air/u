@@ -491,7 +491,7 @@ impl Parse {
                     s.expect(T![const])?;
                     let mut a = s.parse_const()?;
                     a.name = n.name;
-                    a.span_const = special_token.span;
+                    a.t_const = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         vis: n.vis,
@@ -573,11 +573,10 @@ impl Parse {
                 }
                 Keyword::Mod => {
                     let n = s.parse_identifier_pub()?;
-                    let span_mod = special_token.span;
                     s.expect(T![mod])?;
                     let mut a = s.parse_mod()?;
                     a.name = n.name;
-                    a.span_mod = span_mod;
+                    a.t_mod = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         vis: n.vis,
@@ -589,7 +588,7 @@ impl Parse {
                     s.expect(T![static])?;
                     let mut a = s.parse_static()?;
                     a.name = n.name;
-                    a.span_static = special_token.span;
+                    a.t_static = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         vis: n.vis,
@@ -628,7 +627,7 @@ impl Parse {
                     let mut a = s.parse_type_alias()?;
                     a.name = n.name;
                     a.generics = n.generics;
-                    a.span_type = special_token.span;
+                    a.t_type = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         vis: n.vis,
@@ -847,15 +846,15 @@ impl Parse {
 
         let mut r = IdentifierPlus::default();
 
-        // expect identifier
         let token = s.current();
-        if let TokenCode::Identifier(identifier) = &token.code {
-            s.check_identifier(identifier, &token)?;
-            r.name = identifier.clone();
-            s.plusplus();
-        } else {
+        r.name = token.clone();
+        s.plusplus();
+
+        // expect identifier
+        let TokenCode::Identifier(identifier) = &token.code else {
             return Err(s.panic(token, &format!("expected identifier, but got {:?}", token)));
-        }
+        };
+        s.check_identifier(identifier, &token)?;
 
         r.vis = s.parse_vis()?;
 
@@ -867,17 +866,9 @@ impl Parse {
 
         let mut r = IdentifierPlusGenerics::default();
 
-        // expect identifier
-        let token = s.current();
-        if let TokenCode::Identifier(identifier) = &token.code {
-            s.check_identifier(identifier, &token)?;
-            r.name = identifier.clone();
-            s.plusplus();
-        } else {
-            return Err(s.panic(token, &format!("expected identifier, but got {:?}", token)));
-        }
-
-        r.vis = s.parse_vis()?;
+        let a = s.parse_identifier_pub()?;
+        r.name = a.name;
+        r.vis = a.vis;
 
         // possible [
         let mut generic_span = None;
@@ -1284,31 +1275,28 @@ impl Parse {
             return Ok(r);
         }
 
-        r.span_brace_open = Some(s.current().span);
+        let t_brace_open = s.current().clone();
         s.expect(T!["{"])?;
         r.inner_attrs = s.parse_inner_attrs()?;
 
-        let mut items = Vec::new();
         while s.has_more() {
             let token = s.current();
             if matches!(&token.code, T!["}"]) {
-                r.span_brace_close = Some(token.span);
+                r.t_braces = Some((t_brace_open, token.clone()));
                 s.plusplus();
                 break;
             }
             let stmt = s.parse_stmt()?;
-            if let Stmt::Item(item) = stmt {
-                items.push(item);
-            } else {
+            let Stmt::Item(item) = stmt else {
                 return Err(s.panic(token, "expected Item"));
-            }
+            };
+            r.items.push(item);
 
             s.skip_semicolons();
             if !s.has_more() {
                 return Err(s.panic(&s.tokens[s.tokens.len() - 1], "expected } for ending mod"));
             }
         }
-        r.items = Some(items);
 
         Ok(r)
     }
@@ -1882,19 +1870,20 @@ impl Parse {
         // possible type
         let token = s.current();
         if matches!(&token.code, T![=]) {
-            r.span_eq = Some(token.span);
+            let t_eq = token.clone();
             s.plusplus();
             let type_ = s.parse_type()?;
-            r.type_ = Some(type_);
 
             // possible where clause
+            let mut type_where = None;
             let token = s.current();
             if matches!(&token.code, T![where]) {
                 s.plusplus();
                 let mut where_ = s.parse_where()?;
                 where_.span_where = token.span;
-                r.type_where = Some(where_);
+                type_where = Some(where_);
             }
+            r.rhs = Some((t_eq, type_, type_where));
         }
         s.expect(T![;])?;
 
@@ -2192,18 +2181,16 @@ impl Parse {
         r.type_ = s.parse_type()?;
 
         let token = s.current();
-        match &token.code {
-            T![=] => {
-                r.span_eq = Some(token.span);
-                s.plusplus();
-                r.expr = Some(s.parse_expr()?);
-                s.expect(T![;])?;
-            }
-            T![;] => {}
-            _ => {
-                return Err(s.panic(token, &format!("expected = or ; but got {:?}", token)));
-            }
+        if matches!(&token.code, T![;]) {
+            return Ok(r);
         }
+
+        s.expect(T![=])?;
+
+        let t_eq = token.clone();
+        let expr = s.parse_expr()?;
+        r.expr = Some((t_eq, expr));
+        s.expect(T![;])?;
 
         Ok(r)
     }
@@ -2217,35 +2204,31 @@ impl Parse {
         if matches!(&token.code, T!["["]) {
             s.plusplus();
             let token = s.current();
-            let TokenCode::Identifier(ident) = &token.code else {
+            if let TokenCode::Identifier(ident) = &token.code && ident.id == "safe" {
+                r.t_safe = Some(token.clone());
+                s.plusplus();
+            } else {
                 return Err(s.panic(token, &format!("illegal token {:?} for static item", token)));
-            };
-            if ident.id != "safe" {
-                return Err(s.panic(token, &format!("illegal id {:?} for static item", ident.id)));
             }
-            r.span_safe = Some(token.span);
-            r.safe = true;
-            s.plusplus();
             s.expect(T!["]"])?;
         }
+
         let token = s.current();
         if matches!(&token.code, T![mut]) {
-            r.span_mut = Some(token.span);
-            r.mut_ = true;
+            r.t_mut = Some(token.clone());
             s.plusplus();
         }
 
         r.type_ = s.parse_type()?;
 
         let token = s.current();
-        if matches!(&token.code, T![;]) {
-            s.plusplus();
-        } else {
-            r.span_eq = Some(s.current().span);
+        if matches!(&token.code, T![=]) {
+            let t_eq = token.clone();
             s.expect(T![=])?;
-            r.expr = Some(s.parse_expr()?);
-            s.expect(T![;])?;
+            let expr = s.parse_expr()?;
+            r.expr = Some((t_eq, expr));
         }
+        s.expect(T![;])?;
 
         Ok(r)
     }
@@ -6156,13 +6139,13 @@ pub type ParseResult<T> = Result<T, ParseError>;
 // --------------------------------------------------------------------------------
 #[derive(Debug, Default)]
 struct IdentifierPlus {
-    name: Identifier,
+    name: Token,
     vis: Visibility,
 }
 
 #[derive(Debug, Default)]
 struct IdentifierPlusGenerics {
-    name: Identifier,
+    name: Token,
     vis: Visibility,
     generics: Option<Generics>,
 }
