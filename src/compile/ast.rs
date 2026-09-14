@@ -267,22 +267,22 @@ impl ToLang for Visibility {
         match &s.payload {
             A::Private(is_self) => {
                 if *is_self {
-                    p.push_raw("pub(self)");
+                    p.push_raw("pub(self) ");
                 }
             }
             A::Pub => {
-                p.push_raw("pub");
+                p.push_raw("pub ");
             }
             A::Crate => {
-                p.push_raw("pub(crate)");
+                p.push_raw("pub(crate) ");
             }
             A::Super => {
-                p.push_raw("pub(super)");
+                p.push_raw("pub(super) ");
             }
             A::SimplePath(path) => {
                 p.push_raw("pub(in");
                 path.to_rust(p);
-                p.push_raw(")");
+                p.push_raw(") ");
             }
         }
     }
@@ -466,22 +466,11 @@ impl ToLang for Crate {
 #[derive(Debug, Default)]
 pub struct Use {
     pub item: UseItem,
-    pub has_vis: bool,
     pub t_use: Token,
 }
 impl ToLang for Use {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
-
-        if s.has_vis {
-            let item = &s.item;
-            let first_u_token = if !item.paths.is_empty() {
-                &item.paths[0]
-            } else {
-                &item.sub.as_ref().unwrap().t_brace_open
-            };
-            first_u_token.to_rs_before(p);
-        }
 
         p.push_raw("use");
         s.item.to_rust(p);

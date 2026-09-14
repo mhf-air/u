@@ -461,11 +461,6 @@ impl Parse {
                     let vis = s.parse_vis()?;
                     let mut a = s.parse_use()?;
                     a.t_use = token.clone();
-                    a.has_vis = if let VisibilityPayload::Private(b) = vis.payload && !b {
-                        false
-                    } else {
-                        true
-                    };
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         vis,

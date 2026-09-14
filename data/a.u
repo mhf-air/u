@@ -104,6 +104,9 @@ vis-crate+(crate) mod {}
 vis-crate^ mod {}
 vis-in-path+(in crate..a..b) mod {}
 
+name--c+ const &str = "hello"
+name--c static mut &str = "hello"
+
 #[allow(non-camel-case-types)]
 sub+ mod {
     name--c+ const &str = "hello"
