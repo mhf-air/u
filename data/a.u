@@ -427,18 +427,25 @@ Foo trait {
 }
 
 Person impl {
-    abc (&) func(a &str) {}
-    abc+ (&) func(a &str) {}
-    init+ (&mut) func(a &str) {}
+    r (&) func(a &str) {}
+    rl (&'a) func(a &str) {}
+    rm+ (&mut) func(a &str) {}
+    rlm+ (&'a mut) func(a &str) {}
 
-    init+ () func(a &str) {}
-    init+ (mut) func(a &str) {}
-    init+(self) () func(a &str) {}
-    init+(crate) () func(a &str) {}
-    init+(in crate..abc) () func(a &str) {}
+    sf+ () func(a &str) {}
+    m-sf+ (mut) func(a &str) {}
 
-    init+ (crate..Abc) func(a &str) {}
-    init+ (mut crate..Abc) func(a &str) {}
+    typ+ (crate..Abc) func(a &str) {}
+    m-typ+ (mut crate..Abc) func(a &str) {}
+
+    p-self+(self) () func(a &str) {}
+    p-crate+(crate) () func(a &str) {}
+    p-path+(in crate..abc) () func(a &str) {}
+
+    f (&) func(
+        a &str
+        b &str
+    ) {}
 }
 
 Point[f32] impl {

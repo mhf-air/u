@@ -164,6 +164,10 @@ impl<'a> LangFormatter<'a> {
     pub fn push_raw(&mut self, a: &str) {
         let s = self;
         s.buf.push_str(a);
+    }
+    pub fn push_raw_nl(&mut self, a: &str) {
+        let s = self;
+        s.buf.push_str(a);
         for c in a.chars() {
             if c == '\n' {
                 s.line += 1;
@@ -298,8 +302,16 @@ impl ToLang for Item {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
+        s.outer_attrs.to_rust(p);
+
+        // TODO
         // add #[derive(Debug)] for all struct and enum
-        if matches!(&s.payload, ItemPayload::Struct(_) | ItemPayload::Enum(_)) {
+        let first = match &s.payload {
+            ItemPayload::Struct(a) => Some(&a.name),
+            ItemPayload::Enum(a) => Some(&a.name),
+            _ => None,
+        };
+        if let Some(a) = first {
             let mut derive = true;
             for sp in &s.outer_attrs.sp_list {
                 if sp == r#""no-derive-debug""# {
@@ -308,11 +320,12 @@ impl ToLang for Item {
                 }
             }
             if derive {
-                p.indent();
-                p.push_raw("#[derive(Debug)]\n");
+                if !a.tokens_before.is_empty() {
+                    a.tokens_before[0].to_rs_one(p);
+                }
+                p.push_raw("#[derive(Debug)]");
             }
         }
-        s.outer_attrs.to_rust(p);
 
         s.payload.to_rust_before(p);
         s.vis.to_rust(p);
@@ -356,16 +369,16 @@ impl ItemPayload {
             A::Crate(a) => &a.t_extern,
             A::Extern(_a) => &t_a,
             A::Use(a) => &a.t_use,
-            A::Func(_a) => &t_a,
+            A::Func(a) => &a.name,
             A::TypeAlias(a) => &a.name,
-            A::Struct(_a) => &t_a,
-            A::Enum(_a) => &t_a,
-            A::Union(_a) => &t_a,
+            A::Struct(a) => &a.name,
+            A::Enum(a) => &a.name,
+            A::Union(a) => &a.name,
             A::Const(a) => &a.name,
             A::Static(a) => &a.name,
-            A::Trait(_a) => &t_a,
+            A::Trait(a) => &a.name,
             A::Impl(_a) => &t_a,
-            A::Macro(_a) => &t_a,
+            A::Macro(a) => &a.name,
             A::MacroCall(_a) => &t_a,
         };
         first_u_token.to_rs_before(p);
@@ -538,12 +551,16 @@ pub struct Func {
     pub t_func: Token,
     pub t_paren_open: Token,
     pub t_paren_close: Token,
+    pub t_arrow: Option<Token>,
+    pub t_first_after_paren: Token,
 }
 impl ToLang for Func {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
         let mut is_first = true;
+
+        // qualifier
         if let Some(t) = &s.qualifier.t_const {
             if is_first {
                 t.to_rs_one(p);
@@ -580,67 +597,98 @@ impl ToLang for Func {
             }
         }
 
+        // name
         if is_first {
             s.t_func.to_rs_one(p);
         } else {
             s.t_func.to_rust(p);
         }
         s.t_func.to_rs_before(p);
-        s.name.to_rust(p);
+        s.name.to_rs_one(p);
 
+        // generics
         if let Some(g) = &s.generics {
             g.to_rust(p);
         }
 
+        // params
         s.t_paren_open.to_rust(p);
-        if let Some(self_param) = &s.self_param {
-            self_param.to_rust(p);
+        if let Some(sp) = &s.self_param {
+            // NOTE for multi-line params, only consider the common cases
+            // not (
+            //     &self
+            // )
+            let line_paren = s.t_paren_open.span.line;
+            let line_first = s.t_first_after_paren.span.line;
+            if line_paren != line_first {
+                let a = &s.t_first_after_paren.tokens_before[0];
+                a.to_rs_one(p);
+            }
+            sp.to_rust(p);
             if !s.params.is_empty() {
                 p.push_raw(",");
+                if line_paren == line_first {
+                    p.push_raw(" ");
+                }
             }
         }
-        for (i, param) in s.params.iter().enumerate() {
-            p.push_rust(&param.outer_attrs);
+        for param in &s.params {
+            param.outer_attrs.to_rust(p);
             if let Some(pat) = &param.pat {
-                p.push_rust(pat);
+                pat.to_rust(p);
             } else {
-                p.push_rust(&param.name);
+                param.name.to_rust(p);
             }
-            p.push_raw(": ");
-            p.push_rust(&param.type_);
-            if i != s.params.len() - 1 {
-                p.push_raw(", ");
+            p.push_raw(":");
+            param.type_.to_rust(p);
+            if let Some(t) = &param.t_comma {
+                t.to_rust(p);
             }
         }
         if let Some(v) = &s.variadics {
-            p.push_raw(", ");
-            p.push_rust(&v.outer_attrs);
-            p.push_s("...", v.span);
+            v.outer_attrs.to_rust(p);
+            v.t_var.to_rust(p);
+            if let Some(t) = &v.t_comma {
+                t.to_rust(p);
+            }
         }
         s.t_paren_close.to_rust(p);
 
-        if let Some(return_type) = &s.return_type {
+        // return type
+        if let Some(t) = &s.t_arrow {
+            t.to_rs_before(p);
+            p.push_raw("->");
+        } else {
             p.push_raw(" ->");
+        }
+        if let Some(return_type) = &s.return_type {
             return_type.to_rust(p);
         }
 
+        // where
         if let Some(where_) = &s.where_ {
             where_.to_rust(p);
         }
 
         // body
         if let Some(body) = &s.body {
-            p.push_s("{", body.span_brace_open);
-            p.push_rust(&body.inner_attrs);
-
+            body.t_brace_open.to_rust(p);
+            body.inner_attrs.to_rust(p);
             if !s.no_s && s.self_param.is_some() && !body.stmts.is_empty() {
-                p.push_raw("let s = self;\n");
+                let line_paren = body.t_brace_open.span.line;
+                let line_first = body.t_first_after_brace.span.line;
+                if line_paren != line_first {
+                    let a = &body.t_first_after_brace.tokens_before[0];
+                    a.to_rs_one(p);
+                    p.push_raw("let s = self;");
+                } else {
+                    p.push_raw(" let s = self;");
+                }
             }
-
-            for item in &body.stmts {
-                p.push_rust(item);
+            for it in &body.stmts {
+                it.to_rust(p);
             }
-            p.push_s("}", body.span_brace_close);
+            body.t_brace_close.to_rust(p);
         } else {
             p.push_raw(";");
         }
@@ -665,33 +713,39 @@ impl ToLang for SelfParam {
         s.outer_attrs.to_rust(p);
         match &s.payload {
             SelfParamPayload::Type(a) => {
-                if let Some(span) = a.span_mut {
-                    p.push_s("mut ", span);
-                    if a.typ.is_none() {
-                        p.push_raw("self");
-                        return;
-                    }
+                if let Some(t) = &a.t_mut {
+                    t.to_rust(p);
+                    p.push_raw(" self:");
+                } else {
+                    p.push_raw("self:");
                 }
-                p.push_raw("self: ");
-                if let Some(typ) = &a.typ {
-                    p.push_rust(typ);
-                }
+                a.typ.to_rust(p);
             }
             SelfParamPayload::Short(a) => {
-                if let Some(span) = a.span_self {
-                    p.push_s("self", span);
+                if let Some(t_ref) = &a.t_ref {
+                    t_ref.to_rust(p);
+                } else {
+                    if let Some(t_mut) = &a.t_mut {
+                        // (mut)
+                        t_mut.to_rust(p);
+                        p.push_raw(" self");
+                    } else {
+                        // ()
+                        p.push_raw("self");
+                    }
                     return;
                 }
-                p.push_s("&", a.span_ref);
                 if let Some(label) = &a.label {
-                    p.push_rust(label);
-                    p.push_raw(" ");
+                    label.to_rust(p);
                 }
-                if a.mut_ {
-                    p.push_s("mut", a.span_mut.unwrap());
-                    p.push_raw(" ");
+                if let Some(t_mut) = &a.t_mut {
+                    t_mut.to_rust(p);
                 }
-                p.push_raw("self");
+                if a.label.is_none() && a.t_mut.is_none() {
+                    p.push_raw("self");
+                } else {
+                    p.push_raw(" self");
+                }
             }
         }
     }
@@ -708,31 +762,30 @@ impl Default for SelfParamPayload {
 }
 #[derive(Debug, Default)]
 pub struct SelfParamShort {
+    pub t_ref: Option<Token>,
     pub label: Option<Token>,
-    pub mut_: bool,
-
-    pub span_self: Option<Span>,
-    pub span_ref: Span,
-    pub span_mut: Option<Span>,
+    pub t_mut: Option<Token>,
 }
 #[derive(Debug, Default)]
 pub struct SelfParamType {
-    pub typ: Option<Type>,
+    pub typ: Type,
 
-    pub span_mut: Option<Span>,
+    pub t_mut: Option<Token>,
 }
 #[derive(Debug, Default)]
 pub struct FuncParam {
     pub outer_attrs: Attrs,
-    pub name: Identifier,
+    pub name: Token,
     pub pat: Option<Pattern>,
     pub type_: Type,
+    pub t_comma: Option<Token>,
 }
 #[derive(Debug)]
 pub struct FuncVariadics {
     pub outer_attrs: Attrs,
 
-    pub span: Span,
+    pub t_var: Token,
+    pub t_comma: Option<Token>,
 }
 
 #[derive(Debug, Default)]
@@ -780,19 +833,19 @@ pub struct Struct {
     pub where_: Option<Where>,
     pub payload: Option<StructPayload>,
 
-    pub span_struct: Span,
-    pub span_brace_open: Option<Span>,
-    pub span_brace_close: Option<Span>,
-    pub span_paren_open: Option<Span>,
-    pub span_paren_close: Option<Span>,
+    pub t_struct: Token,
+    pub t_brace_open: Option<Token>,
+    pub t_brace_close: Option<Token>,
+    pub t_paren_open: Option<Token>,
+    pub t_paren_close: Option<Token>,
 }
 impl ToLang for Struct {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("struct", s.span_struct);
-        p.push_raw(" ");
-        p.push_rust(&s.name);
+        s.t_struct.to_rs_one(p);
+        s.t_struct.to_rs_before(p);
+        s.name.to_rs_one(p);
         if let Some(generics) = &s.generics {
             p.push_rust(generics);
         }
@@ -803,11 +856,9 @@ impl ToLang for Struct {
                     if let Some(where_) = &s.where_ {
                         p.push_rust(where_);
                     }
-                    p.push_raw(" ");
-                    p.push_s("{", s.span_brace_open.unwrap());
-                    p.push_raw("\n");
-
-                    p.inc_indent();
+                    if let Some(t) = &s.t_brace_open {
+                        t.to_rust(p);
+                    }
                     for item in a {
                         p.push_rust(&item.outer_attrs);
                         p.indent();
@@ -817,12 +868,14 @@ impl ToLang for Struct {
                         p.push_rust(&item.type_);
                         p.push_raw(",\n");
                     }
-                    p.dec_indent();
-                    p.indent();
-                    p.push_s("}", s.span_brace_close.unwrap());
+                    if let Some(t) = &s.t_brace_close {
+                        t.to_rust(p);
+                    }
                 }
                 StructPayload::Tuple(a) => {
-                    p.push_s("(", s.span_paren_open.unwrap());
+                    if let Some(t) = &s.t_paren_open {
+                        t.to_rust(p);
+                    }
                     for (i, item) in a.iter().enumerate() {
                         if i != 0 {
                             p.push_raw(", ");
@@ -831,7 +884,9 @@ impl ToLang for Struct {
                         p.push_rust(&item.vis);
                         p.push_rust(&item.type_);
                     }
-                    p.push_s(")", s.span_paren_close.unwrap());
+                    if let Some(t) = &s.t_paren_close {
+                        t.to_rust(p);
+                    }
                     if let Some(where_) = &s.where_ {
                         p.push_rust(where_);
                     }
@@ -2990,32 +3045,28 @@ impl Default for ExprPayload {
 #[derive(Debug, Default)]
 pub struct BlockExpr {
     pub inner_attrs: Attrs,
-    pub label: Option<Token>,
+    pub label: Option<(Token, Token)>,
     pub stmts: Vec<Stmt>,
 
-    pub span_label: Option<Span>,
-    pub span_brace_open: Span,
-    pub span_brace_close: Span,
+    pub t_brace_open: Token,
+    pub t_brace_close: Token,
+    pub t_first_after_brace: Token,
 }
 impl ToLang for BlockExpr {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if let Some(label) = &s.label {
-            p.push_rust(label);
-            p.push_raw(": ");
+        if let Some((t_label, t_colon)) = &s.label {
+            t_label.to_rust(p);
+            t_colon.to_rust(p);
         }
 
-        p.push_s("{", s.span_brace_open);
-        p.push_raw("\n");
-        p.inc_indent();
-        p.push_rust(&s.inner_attrs);
-        for item in &s.stmts {
-            p.push_rust(item);
+        s.t_brace_open.to_rust(p);
+        s.inner_attrs.to_rust(p);
+        for it in &s.stmts {
+            it.to_rust(p);
         }
-        p.dec_indent();
-        p.indent();
-        p.push_s("}", s.span_brace_close);
+        s.t_brace_close.to_rust(p);
     }
 }
 
@@ -3102,7 +3153,7 @@ pub struct ExprLoop {
     pub payload: ExprLoopPayload,
 
     pub span_for: Span,
-    pub span_label: Option<Span>,
+    pub t_label: Option<(Token, Token)>,
 }
 impl ToLang for ExprLoop {
     fn to_rust(&self, p: &mut LangFormatter) {

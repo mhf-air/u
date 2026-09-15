@@ -354,12 +354,16 @@ impl Parse {
 
         let mut r = BlockExpr::default();
 
+        r.t_brace_open = s.current().clone();
+        s.expect(T!["{"])?;
+        r.t_first_after_brace = s.current().clone();
+
         r.inner_attrs = s.parse_inner_attrs()?;
 
         while s.has_more() {
             let token = s.current();
             if matches!(&token.code, T!["}"]) {
-                r.span_brace_close = token.span;
+                r.t_brace_close = token.clone();
                 s.plusplus();
                 break;
             }
@@ -447,7 +451,6 @@ impl Parse {
                     let span_else = s.current().span;
                     a.span_else = Some(span_else);
                     s.plusplus();
-                    s.expect(T!["{"])?;
                     a.else_ = Some(s.parse_block_expr()?);
                 } else {
                     s.expect(T![;])?;
@@ -525,7 +528,7 @@ impl Parse {
                     a.name = n.name;
                     a.generics = n.generics;
                     a.self_param = self_param;
-                    a.span_func = special_token.span;
+                    a.t_func = special_token.clone();
                     a.no_s = outer_attrs.sp_list.iter().any(|it| it == r#""no-s""#);
                     stmt = Stmt::Item(Item {
                         outer_attrs,
@@ -601,7 +604,7 @@ impl Parse {
                     let mut a = s.parse_struct()?;
                     a.name = n.name;
                     a.generics = n.generics;
-                    a.span_struct = special_token.span;
+                    a.t_struct = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         vis: n.vis,
@@ -1558,62 +1561,52 @@ impl Parse {
                 s.plusplus();
                 match &token.code {
                     T![async] => {
-                        if r.qualifier.async_ {
+                        if r.qualifier.t_async.is_some() {
                             return Err(s.panic(token, "already set async"));
                         }
-                        r.qualifier.async_ = true;
-                        r.qualifier.span_async = Some(token.span);
+                        r.qualifier.t_async = Some(token.clone());
                     }
                     T![const] => {
-                        if r.qualifier.const_ {
+                        if r.qualifier.t_const.is_some() {
                             return Err(s.panic(token, "already set const"));
                         }
-                        r.qualifier.const_ = true;
-                        r.qualifier.span_const = Some(token.span);
+                        r.qualifier.t_const = Some(token.clone());
                     }
                     T![unsafe] => {
-                        if r.qualifier.unsafe_ {
+                        if r.qualifier.t_unsafe.is_some() {
                             return Err(s.panic(token, "already set unsafe"));
                         }
-                        r.qualifier.unsafe_ = true;
-                        r.qualifier.span_unsafe = Some(token.span);
+                        r.qualifier.t_unsafe = Some(token.clone());
                     }
                     T![extern] => {
-                        if r.qualifier.extern_.is_some() {
+                        if r.qualifier.t_extern.is_some() {
                             return Err(s.panic(token, "already set extern"));
                         }
                         let next_token = s.current();
                         if let TokenCode::Literal(Literal {
-                            payload: LiteralPayload::String(a),
+                            payload: LiteralPayload::String(_),
                             ..
                         }) = &next_token.code
                         {
-                            r.qualifier.span_abi = Some(next_token.span);
-                            r.qualifier.extern_ = Some(Some(a.clone()));
+                            r.qualifier.t_extern = Some((
+                                token.clone(),
+                                Some(next_token.clone()),
+                            ));
                             s.plusplus();
                         } else {
-                            r.qualifier.extern_ = Some(None);
+                            r.qualifier.t_extern = Some((token.clone(), None));
                         }
-                        r.qualifier.span_extern = Some(token.span);
                     }
                     _ => {
-                        if let TokenCode::Identifier(ident) = &token.code {
-                            if ident.id == "safe" {
-                                if r.qualifier.safe {
-                                    return Err(s.panic(token, "already set safe"));
-                                }
-                                r.qualifier.safe = true;
-                                r.qualifier.span_safe = Some(token.span);
-                            } else {
-                                return Err(s.panic(
-                                    token,
-                                    &format!("illegal token {:?} in parse_func", token),
-                                ));
+                        if let TokenCode::Identifier(ident) = &token.code && ident.id == "safe" {
+                            if r.qualifier.t_unsafe.is_some() {
+                                return Err(s.panic(token, "already set safe"));
                             }
+                            r.qualifier.t_unsafe = Some(token.clone());
                         } else {
                             return Err(s.panic(
                                 token,
-                                &format!("illegal token {:?} in parse_func", token),
+                                &format!("illegal token {:?} in func qualifier", token),
                             ));
                         }
                     }
@@ -1634,12 +1627,13 @@ impl Parse {
         }
 
         // params
-        r.span_paren_open = s.current().span;
+        r.t_paren_open = s.current().clone();
         s.expect(T!["("])?;
+        r.t_first_after_paren = s.current().clone();
         while s.has_more() {
             let token = s.current();
             if matches!(&token.code, T![")"]) {
-                r.span_paren_close = token.span;
+                r.t_paren_close = token.clone();
                 s.plusplus();
                 break;
             }
@@ -1648,21 +1642,31 @@ impl Parse {
             param.outer_attrs = s.parse_outer_attrs()?;
 
             // variadics
+            let token = s.current();
             if matches!(&token.code, T![...]) {
+                let t_var = token.clone();
+                s.plusplus();
+                let token = s.current();
+                let t_comma = if matches!(&token.code, T![,]) {
+                    s.plusplus();
+                    Some(token.clone())
+                } else {
+                    None
+                };
                 r.variadics = Some(FuncVariadics {
                     outer_attrs: param.outer_attrs,
-                    span: token.span,
+                    t_var,
+                    t_comma,
                 });
-                s.plusplus();
-                r.span_paren_close = s.current().span;
+                r.t_paren_close = s.current().clone();
                 s.expect(T![")"])?;
                 break;
             }
 
             let token = s.current();
             match &token.code {
-                TokenCode::Identifier(identifier) => {
-                    param.name = identifier.clone();
+                TokenCode::Identifier(_) => {
+                    param.name = token.clone();
                     s.plusplus();
                     let token = s.current();
                     if matches!(&token.code, T![:]) {
@@ -1689,11 +1693,18 @@ impl Parse {
             s.plusplus();
             match &token.code {
                 T![")"] => {
-                    r.span_paren_close = token.span;
+                    r.t_paren_close = token.clone();
                     r.params.push(param);
                     break;
                 }
-                T![,] | T![;] => {
+                T![,] => {
+                    param.t_comma = Some(token.clone());
+                    r.params.push(param);
+                }
+                T![;] => {
+                    let mut t = token.clone();
+                    t.code = T![,];
+                    param.t_comma = Some(t);
                     r.params.push(param);
                 }
                 _ => {
@@ -1715,6 +1726,11 @@ impl Parse {
             }
             T!["{"] => (),
             _ => {
+                if let TokenCode::Literal(lit) = &token.code &&
+                        let LiteralPayload::String(_)= lit.payload {
+                    r.t_arrow = Some(token.clone());
+                    s.plusplus();
+                }
                 // return type
                 r.return_type = Some(s.parse_type()?);
                 let token = s.current();
@@ -1740,8 +1756,9 @@ impl Parse {
             }
             T!["{"] => {
                 // body
+                s.minusminus();
                 let mut a = s.parse_block_expr()?;
-                a.span_brace_open = token.span;
+                a.t_brace_open = token.clone();
                 r.body = Some(a);
             }
             _ => {
@@ -1765,75 +1782,80 @@ impl Parse {
 
         let token = s.current();
         if matches!(token.code, T![&]) {
-            short.span_ref = token.span;
+            short.t_ref = Some(token.clone());
             match &s.nth(1).code {
+                // (&)
                 T![")"] => {
                     r.payload = SelfParamPayload::Short(short);
                     s.inc(2);
                 }
                 TokenCode::Lifetime(_) => match &s.nth(2).code {
+                    // (&'a)
                     T![")"] => {
                         short.label = Some(s.nth(1).clone());
                         r.payload = SelfParamPayload::Short(short);
                         s.inc(3);
                     }
+                    // (&'a mut)
                     T![mut] => {
                         if matches!(&s.nth(3).code, T![")"]) {
                             short.label = Some(s.nth(1).clone());
-                            short.mut_ = true;
-                            short.span_mut = Some(s.nth(2).span);
+                            short.t_mut = Some(s.nth(2).clone());
                             r.payload = SelfParamPayload::Short(short);
                             s.inc(4);
                         }
                     }
+                    // (Type)
                     _ => {
                         let typ = SelfParamType {
-                            typ: Some(s.parse_type()?),
-                            span_mut: None,
+                            typ: s.parse_type()?,
+                            t_mut: None,
                         };
                         r.payload = SelfParamPayload::Type(typ);
                         s.expect(T![")"])?;
                     }
                 },
+                // (&mut)
                 T![mut] => {
-                    if matches!(&s.nth(2).code, T![")"]) {
-                        short.mut_ = true;
-                        short.span_mut = Some(s.nth(1).span);
+                    let a_token = s.nth(2);
+                    if matches!(&a_token.code, T![")"]) {
+                        short.t_mut = Some(s.nth(1).clone());
                         r.payload = SelfParamPayload::Short(short);
                         s.inc(3);
+                    } else {
+                        return Err(s.panic(a_token,
+                            &format!("expected ')' after '(&mut' but got {:?}", a_token)));
                     }
                 }
+                // (Type)
                 _ => {
                     let typ = SelfParamType {
-                        typ: Some(s.parse_type()?),
-                        span_mut: None,
+                        typ: s.parse_type()?,
+                        t_mut: None,
                     };
                     r.payload = SelfParamPayload::Type(typ);
                     s.expect(T![")"])?;
                 }
             }
         } else if matches!(token.code, T![")"]) {
-            short.span_self = Some(token.span);
+            // ()
             r.payload = SelfParamPayload::Short(short);
             s.plusplus();
         } else {
             // (mut) or (mut Type)
-            let mut span_mut = None;
+            let mut t_mut = None;
             if matches!(token.code, T![mut]) {
-                span_mut = Some(s.nth(1).span);
+                t_mut = Some(token.clone());
                 s.plusplus();
             }
             if matches!(s.current().code, T![")"]) {
                 s.plusplus();
-                let typ = SelfParamType {
-                    typ: None,
-                    span_mut,
-                };
-                r.payload = SelfParamPayload::Type(typ);
+                short.t_mut = t_mut;
+                r.payload = SelfParamPayload::Short(short);
             } else {
                 let typ = SelfParamType {
-                    typ: Some(s.parse_type()?),
-                    span_mut,
+                    typ: s.parse_type()?,
+                    t_mut,
                 };
                 r.payload = SelfParamPayload::Type(typ);
                 s.expect(T![")"])?;
@@ -1903,17 +1925,17 @@ impl Parse {
                     break;
                 }
                 T!["{"] => {
-                    r.span_brace_open = Some(token.span);
+                    r.t_brace_open = Some(token.clone());
                     s.plusplus();
                     let fields = s.parse_struct_fields()?;
-                    r.span_brace_close = Some(s.current().span);
+                    r.t_brace_close = Some(s.current().clone());
                     s.expect(T!["}"])?;
                     r.payload = Some(StructPayload::Struct(fields));
                     s.expect(T![;])?;
                     break;
                 }
                 T!["("] => {
-                    r.span_paren_open = Some(token.span);
+                    r.t_paren_open = Some(token.clone());
                     if has_where {
                         return Err(
                             s.panic(token, "where clause should be after parens in struct tuple")
@@ -1921,7 +1943,7 @@ impl Parse {
                     }
                     s.plusplus();
                     let fields = s.parse_tuple_fields()?;
-                    r.span_paren_close = Some(s.current().span);
+                    r.t_paren_close = Some(s.current().clone());
                     s.expect(T![")"])?;
                     r.payload = Some(StructPayload::Tuple(fields));
                     let token = s.current();
@@ -2501,9 +2523,10 @@ impl Parse {
                 r.span_delim_open = token.span;
 
                 if is_stmt {
-                    let mut block = s.parse_block_expr()?;
-                    block.span_brace_open = token.span;
-                    r.span_delim_close = block.span_brace_close;
+                    s.minusminus();
+                    let block = s.parse_block_expr()?;
+                    // TODO
+                    // r.span_delim_close = block.span_brace_close;
                     r.body = MacroCallBody::Stmt(block.stmts);
                 } else {
                     r.delim = delim;
@@ -2689,10 +2712,7 @@ impl Parse {
             r.move_ = true;
         }
 
-        let span_brace_open = s.current().span;
-        s.expect(T!["{"])?;
         r.block = s.parse_block_expr()?;
-        r.block.span_brace_open = span_brace_open;
 
         Ok(r)
     }
@@ -2706,10 +2726,8 @@ impl Parse {
         // for {
         let token = s.current();
         if matches!(&token.code, T!["{"]) {
-            s.plusplus();
             r.payload = ExprLoopPayload::Loop;
             r.body = s.parse_block_expr()?;
-            r.body.span_brace_open = token.span;
             return Ok(r);
         }
 
@@ -2822,10 +2840,7 @@ impl Parse {
             return Ok(r);
         }
 
-        let span_brace_open = s.current().span;
-        s.expect(T!["{"])?;
         r.body = s.parse_block_expr()?;
-        r.body.span_brace_open = span_brace_open;
 
         Ok(r)
     }
@@ -2893,10 +2908,7 @@ impl Parse {
         if s.magic && matches!(&s.current().code, T![;]) {
             return Ok(r);
         }
-        let span_brace_open = s.current().span;
-        s.expect(T!["{"])?;
         r.body = s.parse_block_expr()?;
-        r.body.span_brace_open = span_brace_open;
 
         let token = s.current();
         if let T![else] = &token.code {
@@ -2911,8 +2923,8 @@ impl Parse {
                     r.else_ = Some(ExprIfElse::If(Box::new(a)));
                 }
                 T!["{"] => {
-                    let mut a = s.parse_block_expr()?;
-                    a.span_brace_open = token.span;
+                    s.minusminus();
+                    let a = s.parse_block_expr()?;
                     r.else_ = Some(ExprIfElse::BlockExpr(a));
                 }
                 _ => {
@@ -2982,14 +2994,13 @@ impl Parse {
                 s.plusplus();
                 return Ok(r);
             }
-            let token = s.current();
             s.expect(T![:])?;
 
+            // TODO
             // expr
             if matches!(&s.current().code, T!["}"] | T![:]) {
                 // add block expr
-                let mut block = BlockExpr::default();
-                block.span_brace_open = token.span;
+                let block = BlockExpr::default();
                 r.expr = Expr {
                     outer_attrs: Attrs::default(),
                     payload: ExprPayload::WithBlock(Box::new(ExprWithBlock::BlockExpr(block))),
@@ -3674,7 +3685,8 @@ impl Parse {
 
             // lifetime
             TokenCode::Lifetime(_) => {
-                let span_label = token.span;
+                let t_label = token.clone();
+                let t_colon = s.current().clone();
                 s.expect(T![:])?;
 
                 if matches!(s.current().code, T![for]) {
@@ -3682,17 +3694,13 @@ impl Parse {
                     s.plusplus();
                     let mut for_ = s.parse_for()?;
                     for_.span_for = span_for;
-                    for_.span_label = Some(span_label);
+                    for_.t_label = Some((t_label, t_colon));
                     for_.label = Some(token.clone());
                     r.payload =
                         ExprPayload::WithBlock(Box::new(ExprWithBlock::Loop(Box::new(for_))));
                 } else {
-                    let span_brace_open = s.current().span;
-                    s.expect(T!["{"])?;
                     let mut a = s.parse_block_expr()?;
-                    a.span_brace_open = span_brace_open;
-                    a.label = Some(token.clone());
-                    a.span_label = Some(span_label);
+                    a.label = Some((t_label, t_colon));
                     r.payload = ExprPayload::WithBlock(Box::new(ExprWithBlock::BlockExpr(a)));
                 }
             }
@@ -3964,8 +3972,8 @@ impl Parse {
             }
 
             T!["{"] => {
-                let mut a = s.parse_block_expr()?;
-                a.span_brace_open = token.span;
+                s.minusminus();
+                let a = s.parse_block_expr()?;
                 r.payload = ExprPayload::WithBlock(Box::new(ExprWithBlock::BlockExpr(a)));
             }
             TokenCode::Keyword(keyword) => {
@@ -3978,10 +3986,7 @@ impl Parse {
                     }
                     Keyword::Unsafe => {
                         let span_unsafe = token.span;
-                        let span_brace_open = s.current().span;
-                        s.expect(T!["{"])?;
-                        let mut a = s.parse_block_expr()?;
-                        a.span_brace_open = span_brace_open;
+                        let a = s.parse_block_expr()?;
                         r.payload = ExprPayload::WithBlock(Box::new(ExprWithBlock::UnsafeBlock(
                             ExprUnsafeBlock {
                                 block: a,
@@ -3991,10 +3996,7 @@ impl Parse {
                     }
                     Keyword::Const => {
                         let span_const = token.span;
-                        let span_brace_open = s.current().span;
-                        s.expect(T!["{"])?;
-                        let mut a = s.parse_block_expr()?;
-                        a.span_brace_open = span_brace_open;
+                        let a = s.parse_block_expr()?;
                         r.payload = ExprPayload::WithBlock(Box::new(ExprWithBlock::ConstBlock(
                             ExprConstBlock {
                                 block: a,
@@ -5050,9 +5052,7 @@ impl Parse {
                     })
                 }
                 T!["{"] => {
-                    s.plusplus();
-                    let mut b = s.parse_block_expr()?;
-                    b.span_brace_open = token.span;
+                    let b = s.parse_block_expr()?;
                     GenericArg::Const(GenericArgsConst::BlockExpr(b))
                 }
                 TokenCode::Literal(literal) => {

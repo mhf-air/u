@@ -49,7 +49,7 @@ impl Lex {
         let s = self;
         s.add_token_inner(code, u, true, false);
     }
-    // for single-line comment
+    // for single-line comment, backslash
     fn add_token_to_before(&mut self, code: TokenCode, u: String) {
         let s = self;
         s.add_token_inner(code, u, false, true);
@@ -309,7 +309,7 @@ impl Lex {
 
             if ch == '\\' {
                 is_backslash = true;
-                s.column += 1;
+                s.add_token_to_before(TokenCode::Op(Op::Backslash), "\\".to_owned());
                 i += 1;
                 continue;
             }
@@ -1554,7 +1554,7 @@ impl Token {
                     Op::RArrow => "->",
                     Op::FatArrow => "=>",
                     Op::Dollar => "$",
-                    Op::Backslash => "\\",
+                    Op::Backslash => "",
                 }
             }
             TokenCode::Pair(pair) => {
