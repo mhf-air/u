@@ -529,7 +529,6 @@ impl Parse {
                     a.generics = n.generics;
                     a.self_param = self_param;
                     a.t_func = special_token.clone();
-                    a.no_s = outer_attrs.sp_list.iter().any(|it| it == r#""no-s""#);
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         vis: n.vis,
@@ -1598,11 +1597,15 @@ impl Parse {
                         }
                     }
                     _ => {
-                        if let TokenCode::Identifier(ident) = &token.code && ident.id == "safe" {
-                            if r.qualifier.t_unsafe.is_some() {
-                                return Err(s.panic(token, "already set safe"));
+                        if let TokenCode::Identifier(ident) = &token.code {
+                            if ident.id == "safe" {
+                                if r.qualifier.t_unsafe.is_some() {
+                                    return Err(s.panic(token, "already set safe"));
+                                }
+                                r.qualifier.t_unsafe = Some(token.clone());
+                            } else if ident.id == "no-s" {
+                                r.qualifier.t_no_s = Some(token.clone());
                             }
-                            r.qualifier.t_unsafe = Some(token.clone());
                         } else {
                             return Err(s.panic(
                                 token,
@@ -6030,12 +6033,6 @@ impl Parse {
 
             let token = s.current();
             if inner {
-                if matches!(&token.code, T![$]) && matches!(&s.nth(1).code, T![!]) {
-                    s.inc(2);
-                    let sp = parse_sp(s)?;
-                    r.sp_list.push(sp);
-                    continue;
-                }
                 if !matches!(&token.code, T!["#!["]) {
                     break;
                 }
@@ -6046,12 +6043,6 @@ impl Parse {
                     return Err(
                         s.panic(&token, "expected outer attributes but got inner attributes")
                     );
-                }
-                if matches!(&token.code, T![$]) {
-                    s.plusplus();
-                    let sp = parse_sp(s)?;
-                    r.sp_list.push(sp);
-                    continue;
                 }
                 if !matches!(&token.code, T!["#["]) {
                     break;
@@ -6071,21 +6062,6 @@ impl Parse {
         }
 
         return Ok(r);
-
-        // $""
-        fn parse_sp(s: &Parse) -> ParseResult<String> {
-            let token = s.current();
-            if let TokenCode::Literal(lit) =
-                &token.code && let LiteralPayload::String(_) = &lit.payload {
-                    s.plusplus();
-                    s.expect(T![;])?;
-                    return Ok(token.u.clone());
-                } else {
-                    return Err(
-                        s.panic(&token, "expected string literal after $")
-                    );
-                };
-        }
 
         // after #[ or #![
         fn parse_attr(s: &Parse) -> ParseResult<Vec<Token>> {

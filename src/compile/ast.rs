@@ -516,7 +516,6 @@ pub struct Func {
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
     pub qualifier: FuncQualifier,
-    pub no_s: bool,
 
     pub self_param: Option<SelfParam>,
     pub params: Vec<FuncParam>,
@@ -652,7 +651,7 @@ impl ToLang for Func {
         if let Some(body) = &s.body {
             body.t_brace_open.to_rust(p);
             body.inner_attrs.to_rust(p);
-            if !s.no_s && s.self_param.is_some() && !body.stmts.is_empty() {
+            if s.qualifier.t_no_s.is_none() && s.self_param.is_some() && !body.stmts.is_empty() {
                 let line_paren = body.t_brace_open.span.line;
                 let line_first = body.t_first_after_brace.span.line;
                 if line_paren != line_first {
@@ -680,6 +679,7 @@ pub struct FuncQualifier {
     pub t_async: Option<Token>,
     pub t_unsafe: Option<Token>,
     pub t_extern: Option<(Token, Option<Token>)>,
+    pub t_no_s: Option<Token>,
 }
 #[derive(Debug, Default)]
 pub struct SelfParam {
@@ -1539,7 +1539,6 @@ pub enum ExternalBlockItemPayload {
 #[derive(Debug, Default)]
 pub struct Attrs {
     pub items: Vec<Attr>,
-    pub sp_list: Vec<String>,
 }
 impl ToLang for Attrs {
     fn to_rust(&self, p: &mut LangFormatter) {

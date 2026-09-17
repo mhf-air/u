@@ -6,26 +6,23 @@
 //!     https://doc.rust-lang.org/reference/introduction.html
 
 /*!
-another form of inner doc comment
+    another form of inner doc comment
 */
 
 #![allow(unused-uses)]
-$!"inner, not useful now"
 
 // todo
-// - $"no-s"
-//     in u->rs, if there's no $"no-s",
+// - func[no-s]
+//     in u->rs, if there's no func[no-s],
 //         add "let s = self;"
 //     in rs->u, if there's no "let s = self;" as the first item in method body,
-//         add $"no-s"
+//         add func[no-s]
 //     else
 //         delete the first item
 //
 // - open *.rs: read *.rs -> rust's ast -> write .*.u
 // - close .*.u: rustfmt --edition 2024 *.rs
 //
-// - place comments in the right order in u-to-rust
-// - preserve all line breaks, and deal with the ASI problems with that
 // - when writing to .*.u, align multi-line where clause members with gap of 3 spaces
 // - in rust-to-u, for all expressions(including ret) that doesn't end with ';',
 //      translate to "< ret EXPR" in u
@@ -326,8 +323,7 @@ Person['a] struct {
     desc String
 }
 Person impl {
-    $"no-s"
-    no-s (&) func() String {
+    no-s (&) func[no-s]() String {
         < self.desc
     }
     has-s (&) func() String {
