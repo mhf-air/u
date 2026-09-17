@@ -410,7 +410,8 @@ impl Parse {
             s.expect(T![;])?;
 
             if let ExprPayload::WithoutBlock(b) = expr.payload {
-                if let ExprWithoutBlock::MacroCall(call) = *b {
+                if let ExprWithoutBlock::MacroCall(mut call) = *b {
+                    call.is_stmt = true;
                     return Ok(Stmt::Item(Item {
                         outer_attrs,
                         vis: Visibility::default(),
@@ -481,7 +482,7 @@ impl Parse {
                     } else {
                         s.expect(T![extern])?;
                         let mut a = s.parse_extern()?;
-                        a.span_extern = special_token.span;
+                        a.t_extern = special_token.clone();
                         stmt = Stmt::Item(Item {
                             outer_attrs,
                             vis: Visibility::default(),
@@ -566,7 +567,7 @@ impl Parse {
                     s.expect(T![macro])?;
                     let mut a = s.parse_macro()?;
                     a.name = n.name;
-                    a.span_macro = special_token.span;
+                    a.t_macro = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         vis: n.vis,
@@ -1471,10 +1472,9 @@ impl Parse {
         // possible [unsafe]
         let token = s.current();
         if matches!(&token.code, T!["["]) {
-            r.unsafe_ = true;
             s.plusplus();
             let token = s.current();
-            r.span_unsafe = Some(token.span);
+            r.t_unsafe = Some(token.clone());
             if !matches!(&token.code, T![unsafe]) {
                 return Err(s.panic(token, &format!("expected unsafe but got {:?}", token)));
             }
@@ -1485,25 +1485,21 @@ impl Parse {
         // possible string literal, i.e. "C"
         let token = s.current();
         if let TokenCode::Literal(Literal {
-            payload: LiteralPayload::String(a),
+            payload: LiteralPayload::String(_),
             ..
-        }) = &token.code
-        {
-            r.span_abi = Some(token.span);
-            r.extern_ = Some(a.clone());
+        }) = &token.code {
+            r.t_abi = Some(token.clone());
             s.plusplus();
-        } else {
-            r.extern_ = None;
         }
 
         // items
-        r.span_brace_open = s.current().span;
+        r.t_brace_open = s.current().clone();
         s.expect(T!["{"])?;
         r.inner_attrs = s.parse_inner_attrs()?;
         while s.has_more() {
             let token = s.current();
             if matches!(&token.code, T!["}"]) {
-                r.span_brace_close = token.span;
+                r.t_brace_close = token.clone();
                 s.plusplus();
                 break;
             }
@@ -2459,28 +2455,85 @@ impl Parse {
 
         let mut r = Macro::default();
 
-        r.span_brace_open = s.current().span;
-        s.expect(T!["{"])?;
+        let token = s.current();
+        r.t_delim_open = token.clone();
+        let delim = match &token.code {
+            T!["{"] => 0,
+            T!["("] => 1,
+            T!["["] => 2,
+            _ => {
+                return Err(s.panic(
+                    token,
+                    &format!("expected '(', '[', or '{{' , but got {:?}", token),
+                ));
+            }
+        };
+        s.plusplus();
 
-        let mut brace_count = 1;
+        let mut delim_count = 1;
         while s.has_more() {
             let token = s.current();
             s.plusplus();
-            match &token.code {
-                T!["}"] => {
-                    brace_count -= 1;
-                    if brace_count == 0 {
-                        r.span_brace_close = token.span;
-                        break;
+
+            if delim == 0 {
+                match &token.code {
+                    T!["}"] => {
+                        delim_count -= 1;
+                        if delim_count == 0 {
+                            r.t_delim_close = token.clone();
+                            break;
+                        }
+                        r.tokens.push(token.clone());
+                        continue;
                     }
-                    r.tokens.push(token.clone());
+                    T!["{"] => {
+                        delim_count += 1;
+                        r.tokens.push(token.clone());
+                        continue;
+                    }
+                    _ => {}
                 }
-                T!["{"] => {
-                    brace_count += 1;
-                    r.tokens.push(token.clone());
+            } else if delim == 1 {
+                match &token.code {
+                    T![")"] => {
+                        delim_count -= 1;
+                        if delim_count == 0 {
+                            r.t_delim_close = token.clone();
+                            break;
+                        }
+                        r.tokens.push(token.clone());
+                        continue;
+                    }
+                    T!["("] => {
+                        delim_count += 1;
+                        r.tokens.push(token.clone());
+                        continue;
+                    }
+                    _ => {}
                 }
+            } else if delim == 2 {
+                match &token.code {
+                    T!["]"] => {
+                        delim_count -= 1;
+                        if delim_count == 0 {
+                            r.t_delim_close = token.clone();
+                            break;
+                        }
+                        r.tokens.push(token.clone());
+                        continue;
+                    }
+                    T!["["] => {
+                        delim_count += 1;
+                        r.tokens.push(token.clone());
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+
+            match &token.code {
                 T![;] => {
-                    // don't add semicolons in macro definitions
+                    // don't add auto-added semicolons in macro definitions
                     if !token.is_added_semicolon() {
                         r.tokens.push(token.clone());
                     }
@@ -2495,23 +2548,23 @@ impl Parse {
     }
 
     // after ,,
-    fn parse_macro_call(&self, path: SimplePath, span: Span) -> ParseResult<MacroCall> {
+    fn parse_macro_call(&self, path: SimplePath, token: &Token) -> ParseResult<MacroCall> {
         let s = self;
 
         let mut r = MacroCall::default();
         r.path = path;
-        r.span_macro_call = span;
+        r.t_macro_call = token.clone();
 
         let token = s.current();
         s.plusplus();
 
         match &token.code {
             T!["("] => {
-                r.span_delim_open = token.span;
+                r.t_delim_open = token.clone();
                 // (expr, expr, ...)
-                let (exprs, span_paren_close) = parse_exprs(s)?;
+                let (exprs, t_paren_close) = parse_exprs(s)?;
                 r.body = MacroCallBody::Expr(exprs);
-                r.span_delim_close = span_paren_close;
+                r.t_delim_close = t_paren_close;
             }
             T!["["] => {
                 // [stmt] [p] [s]
@@ -2545,30 +2598,29 @@ impl Parse {
                 s.expect(T!["]"])?;
                 let token = s.current();
                 s.expect(T!["{"])?;
-                r.span_delim_open = token.span;
+                r.t_delim_open = token.clone();
 
                 if is_stmt {
                     s.minusminus();
                     let block = s.parse_block_expr()?;
-                    // TODO
-                    // r.span_delim_close = block.span_brace_close;
+                    r.t_delim_close = block.t_brace_close;
                     r.body = MacroCallBody::Stmt(block.stmts);
                 } else {
                     r.delim = delim;
                     // { tokens }
                     let tokens = parse_tokens(s)?;
                     s.minusminus();
-                    r.span_delim_close = s.current().span;
+                    r.t_delim_close = s.current().clone();
                     s.plusplus();
                     r.body = MacroCallBody::Token(tokens);
                 }
             }
             T!["{"] => {
-                r.span_delim_open = token.span;
+                r.t_delim_open = token.clone();
                 // { tokens }
                 let tokens = parse_tokens(s)?;
                 s.minusminus();
-                r.span_delim_close = s.current().span;
+                r.t_delim_close = s.current().clone();
                 s.plusplus();
                 r.body = MacroCallBody::Token(tokens);
             }
@@ -2582,16 +2634,16 @@ impl Parse {
 
         return Ok(r);
 
-        fn parse_exprs(s: &Parse) -> ParseResult<(Vec<Expr>, Span)> {
+        fn parse_exprs(s: &Parse) -> ParseResult<(Vec<Expr>, Token)> {
             let mut r = Vec::new();
-            let mut span_paren_close = Span::default();
+            let mut t_paren_close = Token::default();
 
             let mut expect_expr = true;
             while s.has_more() {
                 let token = s.current();
                 match &token.code {
                     T![")"] => {
-                        span_paren_close = token.span;
+                        t_paren_close = token.clone();
                         s.plusplus();
                         break;
                     }
@@ -2616,7 +2668,7 @@ impl Parse {
                 }
             }
 
-            Ok((r, span_paren_close))
+            Ok((r, t_paren_close))
         }
 
         fn parse_tokens(s: &Parse) -> ParseResult<Vec<Token>> {
@@ -3992,7 +4044,7 @@ impl Parse {
                     }
                 }
                 s.plusplus();
-                let call = s.parse_macro_call(path, token.span)?;
+                let call = s.parse_macro_call(path, token)?;
                 r.payload = ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::MacroCall(call)));
             }
 
@@ -4715,7 +4767,7 @@ impl Parse {
                     }
                 }
                 s.plusplus();
-                let call = s.parse_macro_call(path, token.span)?;
+                let call = s.parse_macro_call(path, token)?;
                 let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::MacroCall(call)));
                 return Ok(payload);
             }
@@ -5743,7 +5795,7 @@ impl Parse {
                             }
                         }
                         s.plusplus();
-                        let call = s.parse_macro_call(path, token.span)?;
+                        let call = s.parse_macro_call(path, token)?;
                         return Ok(PatternNoTopAlt::WithoutRange(
                             PatternWithoutRange::MacroCall(call),
                         ));

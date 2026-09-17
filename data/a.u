@@ -123,7 +123,7 @@ call,,{select a from b}
 call,,{
     let a = 1.1;
     if a > 0 {
-        ret;
+        return;
     }
     #[derive(Debug)]
     pub struct Order-item {
@@ -131,11 +131,21 @@ call,,{
         age: i32,
     }
 
-    pub func api-config() -> api..Api-config {
-        ret api..Api-config {
-            ``Default..default()
+    pub fn api-config() -> api::Api-config {
+        let mut list = vec![1, 2, 3];
+        list[0] = 10;
+
+        let func = 1;
+        let macro = 1;
+        let ret = 1;
+
+        let a = api::Api-config {
+            ..Default::default()
         };
+        a
     }
+
+    fn abc(count: i32, ...);
 }
 call,,[stmt]{
     name--c+ const &str = "hello"
@@ -461,6 +471,11 @@ extern[unsafe] "C" {
     abs func[safe](input i32, ...) i32
     name--c static mut i32
     name--c static[safe] mut i32
+    call,,(1)
+    call,,{1}
+    call,,[p]{1}
+    call,,[s]{1}
+    call,,[stmt]{}
 }
 
 #[no-mangle]
@@ -742,7 +757,7 @@ f func() {
 vec macro {
     ( $( $x:expr ),* ) => {
         {
-            temp-vec mut := Vec..new();
+            let mut temp-vec = Vec::new();
             $(
                 temp-vec.push($x);
             )*

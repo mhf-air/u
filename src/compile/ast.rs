@@ -355,7 +355,7 @@ impl ItemPayload {
         let first_u_token = match s {
             A::Mod(a) => &a.name,
             A::Crate(a) => &a.t_extern,
-            A::Extern(_a) => &t_a,
+            A::Extern(a) => &a.t_extern,
             A::Use(a) => &a.t_use,
             A::Func(a) => &a.name,
             A::TypeAlias(a) => &a.name,
@@ -1298,109 +1298,70 @@ pub struct ImplTrait {
 }
 
 // --------------------------------------------------------------------------------
-// as of now(rustc 1.50.0), no VisItem can appear before macro items,
-// so don't generate them
+// as of now(rustc 1.50.0), no VisItem can appear before macro items, so don't generate them
+// tokens are pure Rust tokens, except identifers and "~" and "~="
 #[derive(Debug, Default)]
 pub struct Macro {
     pub name: Token,
     pub tokens: Vec<Token>,
 
-    pub span_macro: Span,
-    pub span_brace_open: Span,
-    pub span_brace_close: Span,
+    pub t_macro: Token,
+    pub t_delim_open: Token,
+    pub t_delim_close: Token,
 }
 impl ToLang for Macro {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("macro_rules!", s.span_macro);
-        p.push_raw(" ");
-        p.push_rust(&s.name);
+        s.t_macro.to_rs_one(p);
+        p.push_raw("!");
+        s.t_macro.to_rs_before(p);
+        s.name.to_rs_one(p);
 
-        p.push_raw(" ");
-        p.push_s("{", s.span_brace_open);
-
-        tokens_to_rust(s.span_brace_open, &s.tokens, s.span_brace_close, p);
-
-        p.push_s("}", s.span_brace_close);
-    }
-}
-
-pub fn tokens_to_rust(span_open: Span, list: &[Token], span_close: Span, p: &mut LangFormatter) {
-    if list.is_empty() {
-        return;
-    }
-
-    let mut last_line = span_open.end_line;
-    let mut last_end = span_open.end_column;
-    let mut is_attr = false;
-
-    for item in list {
-        let cur_line = item.span.line;
-        if cur_line > last_line {
-            push_many_raw(cur_line - last_line, "\n", p);
-            last_end = 0;
+        if matches!(s.t_delim_open.code, T!["["]) {
+            s.t_delim_open.to_rs_before(p);
+            p.push_raw("[");
+        } else {
+            s.t_delim_open.to_rust(p);
         }
-        push_many_raw(item.span.column - last_end - 1, " ", p);
-        last_line = item.span.end_line;
-        last_end = item.span.end_column;
 
-        // for attrs in macro and macro call, #[ ]
-        match &item.code {
-            T!["#["] | T!["#!["] => {
-                is_attr = true;
-                p.push_rust(item);
-            }
-            T!["]"] => {
-                if !is_attr {
-                    p.push_rust(item);
-                } else if is_attr {
-                    is_attr = false;
-                    p.push_rust(&Token {
-                        span: item.span,
-                        code: T!["}}"],
-                        tokens_before: Vec::new(),
-                        u: "]".to_owned(),
-                    });
-                }
-            }
-            _ => {
-                p.push_rust(item);
-            }
+        let new_list = transform_macro_tokens(&s.tokens);
+        for it in new_list {
+            it.to_rust(p);
         }
-    }
 
-    let cur_line = span_close.line;
-    if cur_line > last_line {
-        push_many_raw(cur_line - last_line, "\n", p);
-        last_end = 0;
-    }
-    push_many_raw(span_close.column - last_end - 1, " ", p);
+        if matches!(s.t_delim_close.code, T!["]"]) {
+            s.t_delim_close.to_rs_before(p);
+            p.push_raw("]");
+        } else {
+            s.t_delim_close.to_rust(p);
+        }
 
-    fn push_many_raw(n: usize, text: &str, p: &mut LangFormatter) {
-        for _ in 0..n {
-            p.push_raw(text);
+        if !matches!(s.t_delim_open.code, T!["{"]) {
+            p.push_raw(";");
         }
     }
 }
 
+// tokens are pure Rust tokens, except identifers and "~" and "~="
 #[derive(Debug, Default)]
 pub struct MacroCall {
     pub path: SimplePath,
     pub body: MacroCallBody,
     // 1: (), 2: [], 0: {}
     pub delim: i32,
+    pub is_stmt: bool,
 
-    pub span_macro_call: Span,
-    pub span_delim_open: Span,
-    pub span_delim_close: Span,
+    pub t_macro_call: Token,
+    pub t_delim_open: Token,
+    pub t_delim_close: Token,
 }
 impl ToLang for MacroCall {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.path);
-        p.push_s("!", s.span_macro_call);
+        s.path.to_rust(p);
+        s.t_macro_call.to_rust(p);
 
         match &s.body {
             MacroCallBody::Token(list) => {
@@ -1409,29 +1370,36 @@ impl ToLang for MacroCall {
                     2 => ("[", "]"),
                     _ => ("{", "}"),
                 };
-                p.push_s(pairs.0, s.span_delim_open);
-                tokens_to_rust(s.span_delim_open, list, s.span_delim_close, p);
-                p.push_s(pairs.1, s.span_delim_close);
+                s.t_delim_open.to_rs_before(p);
+                p.push_raw(pairs.0);
+
+                let new_list = transform_macro_tokens(&list);
+                for it in new_list {
+                    it.to_rust(p);
+                }
+
+                s.t_delim_close.to_rs_before(p);
+                p.push_raw(pairs.1);
+                if s.is_stmt && s.delim > 0 {
+                    p.push_raw(";");
+                }
             }
             MacroCallBody::Expr(list) => {
-                p.push_raw("(");
-                for (i, item) in list.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(", ");
-                    }
-                    p.push_rust(item);
+                s.t_delim_open.to_rust(p);
+                for it in list {
+                    it.to_rust(p);
                 }
-                p.push_raw(")");
+                s.t_delim_close.to_rust(p);
+                if s.is_stmt {
+                    p.push_raw(";");
+                }
             }
             MacroCallBody::Stmt(list) => {
-                p.push_raw("{\n");
-                p.inc_indent();
-                for item in list {
-                    p.push_rust(item);
+                s.t_delim_open.to_rust(p);
+                for it in list {
+                    it.to_rust(p);
                 }
-                p.dec_indent();
-                p.indent();
-                p.push_raw("}");
+                s.t_delim_close.to_rust(p);
             }
         }
     }
@@ -1447,28 +1415,26 @@ impl Default for MacroCallBody {
         MacroCallBody::Token(Vec::new())
     }
 }
-#[derive(Debug)]
-pub struct MapEntry {
-    pub key: Expr,
-    pub value: Expr,
-}
 
-/* #[derive(Debug)]
-pub struct DelimTokenTree {
-    pub delim_type: DelimType,
-    pub token_tree: Vec<TokenTree>,
+// transform all '[' and ']' into 'rs[' and 'rs]'
+fn transform_macro_tokens(tokens: &[Token]) -> Vec<Token> {
+    let mut r = Vec::new();
+    for it in tokens {
+        let mut t = it.clone();
+        t.code = match &it.code {
+            T![func] => T!["rs:func"],
+            T![macro] => T!["rs:macro"],
+            T![ret] => T!["rs:ret"],
+            T![..] => T!["rs:.."],
+            T![...] => T!["rs:..."],
+            T!["["] => T!["rs:["],
+            T!["]"] => T!["rs:]"],
+            _ => t.code,
+        };
+        r.push(t);
+    }
+    r
 }
-#[derive(Debug)]
-pub enum DelimType {
-    Paren,
-    Square,
-    Brace,
-}
-#[derive(Debug)]
-pub enum TokenTree {
-    TokenExceptDelim(Token),
-    DelimTokenTree(DelimTokenTree),
-} */
 
 // --------------------------------------------------------------------------------
 /*
@@ -1479,43 +1445,33 @@ extern[unsafe?] Abi? {
 */
 #[derive(Debug, Default)]
 pub struct ExternalBlock {
-    pub unsafe_: bool,
-    pub extern_: Option<LiteralString>,
     pub inner_attrs: Attrs,
     pub items: Vec<ExternalBlockItem>,
 
-    pub span_extern: Span,
-    pub span_unsafe: Option<Span>,
-    pub span_abi: Option<Span>,
-    pub span_brace_open: Span,
-    pub span_brace_close: Span,
+    pub t_extern: Token,
+    pub t_unsafe: Option<Token>,
+    pub t_abi: Option<Token>,
+    pub t_brace_open: Token,
+    pub t_brace_close: Token,
 }
 impl ToLang for ExternalBlock {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.indent();
-        if s.unsafe_ {
-            p.push_s("unsafe", s.span_unsafe.unwrap());
+        if let Some(t) = &s.t_unsafe {
+            t.to_rs_one(p);
             p.push_raw(" ");
         }
-        p.push_s("extern", s.span_extern);
-        p.push_raw(" ");
-        if let Some(abi) = &s.extern_ {
-            abi.push_span(p, s.span_abi.unwrap());
-            p.push_raw(" ");
+        s.t_extern.to_rs_one(p);
+        if let Some(t) = &s.t_abi {
+            t.to_rust(p);
         }
-        p.push_s("{", s.span_brace_open);
-        p.push_raw("\n");
 
-        p.inc_indent();
-        for item in &s.items {
-            p.push_rust(item);
-            p.push_raw("\n");
+        s.t_brace_open.to_rust(p);
+        for it in &s.items {
+            it.to_rust(p);
         }
-        p.dec_indent();
-        p.indent();
-        p.push_s("}", s.span_brace_close);
+        s.t_brace_close.to_rust(p);
     }
 }
 #[derive(Debug)]
@@ -1528,13 +1484,21 @@ impl ToLang for ExternalBlockItem {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.outer_attrs);
-        p.indent();
-        p.push_rust(&s.vis);
+        s.outer_attrs.to_rust(p);
+        s.vis.to_rust(p);
         match &s.payload {
-            ExternalBlockItemPayload::Func(a) => p.push_rust(a),
-            ExternalBlockItemPayload::Static(a) => p.push_rust(a),
-            ExternalBlockItemPayload::MacroCall(a) => p.push_rust(a),
+            ExternalBlockItemPayload::Func(a) => {
+                a.name.to_rs_before(p);
+                a.to_rust(p);
+            }
+            ExternalBlockItemPayload::Static(a) => {
+                a.name.to_rs_before(p);
+                a.to_rust(p);
+            }
+            ExternalBlockItemPayload::MacroCall(a) => {
+                // TODO
+                a.to_rust(p);
+            }
         }
     }
 }

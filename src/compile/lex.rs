@@ -1494,6 +1494,10 @@ impl Token {
                     Keyword::Yield => "yield",
                     Keyword::Try => "try",
                     Keyword::Gen => "gen",
+
+                    Keyword::RsFunc => "func",
+                    Keyword::RsMacro => "macro",
+                    Keyword::RsRet => "ret",
                 }
             }
             TokenCode::Assign(assign) => {
@@ -1555,6 +1559,9 @@ impl Token {
                     Op::FatArrow => "=>",
                     Op::Dollar => "$",
                     Op::Backslash => "",
+
+                    Op::RsDotDot => "..",
+                    Op::RsDotDotDot => "...",
                 }
             }
             TokenCode::Pair(pair) => {
@@ -1570,6 +1577,8 @@ impl Token {
                     Pair::OuterAttr => "#[",
                     Pair::InnerAttr => "#![",
                     Pair::EndAttr => "]",
+                    Pair::RsSquareOpen => "[",
+                    Pair::RsSquareClose => "]",
                 }
             }
         };
@@ -1926,6 +1935,10 @@ pub enum Keyword {
     Yield,
     Try,
     Gen,
+
+    RsFunc,
+    RsMacro,
+    RsRet,
 }
 
 impl fmt::Debug for Keyword {
@@ -1986,6 +1999,10 @@ impl fmt::Debug for Keyword {
             Self::Yield => write!(f, "yield"),
             Self::Try => write!(f, "try"),
             Self::Gen => write!(f, "gen"),
+
+            Self::RsFunc => write!(f, "func"),
+            Self::RsMacro => write!(f, "macro"),
+            Self::RsRet => write!(f, "ret"),
         }
     }
 }
@@ -2132,6 +2149,9 @@ pub enum Op {
     FatArrow,
     Dollar,
     Backslash,
+
+    RsDotDot,
+    RsDotDotDot,
 }
 
 impl fmt::Debug for Op {
@@ -2178,6 +2198,9 @@ impl fmt::Debug for Op {
             Self::FatArrow => write!(f, "=>"),
             Self::Dollar => write!(f, "$"),
             Self::Backslash => write!(f, "\\"),
+
+            Self::RsDotDot => write!(f, ".."),
+            Self::RsDotDotDot => write!(f, "..."),
         }
     }
 }
@@ -2195,6 +2218,8 @@ pub enum Pair {
     OuterAttr,
     InnerAttr,
     EndAttr,
+    RsSquareOpen,
+    RsSquareClose,
 }
 
 impl fmt::Debug for Pair {
@@ -2211,6 +2236,8 @@ impl fmt::Debug for Pair {
             Self::OuterAttr => write!(f, "#["),
             Self::InnerAttr => write!(f, "#!["),
             Self::EndAttr => write!(f, "]"),
+            Self::RsSquareOpen => write!(f, "["),
+            Self::RsSquareClose => write!(f, "]"),
         }
     }
 }
@@ -2350,4 +2377,13 @@ macro_rules! T {
 	[ "}}" ] => { TokenCode::Pair(Pair::DoubleBraceClose) };
 	[ "#[" ] => { TokenCode::Pair(Pair::OuterAttr) };
 	[ "#![" ] => { TokenCode::Pair(Pair::InnerAttr) };
+
+    // pure Rust, used in macro
+	[ "rs:func" ] => { TokenCode::Keyword(Keyword::RsFunc) };
+	[ "rs:macro" ] => { TokenCode::Keyword(Keyword::RsMacro) };
+	[ "rs:ret" ] => { TokenCode::Keyword(Keyword::RsRet) };
+	[ "rs:.." ] => { TokenCode::Op(Op::RsDotDot) };
+	[ "rs:..." ] => { TokenCode::Op(Op::RsDotDotDot) };
+	[ "rs:[" ] => { TokenCode::Pair(Pair::RsSquareOpen) };
+	[ "rs:]" ] => { TokenCode::Pair(Pair::RsSquareClose) };
 }

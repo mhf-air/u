@@ -394,6 +394,9 @@ example
 
     possible future conflict: when ,, is used in Rust
 
+    write pure Rust in macro definitions and macro invocations that are random tokens.
+    except identifiers and "~" and "~=".
+
 ```
 example
 
