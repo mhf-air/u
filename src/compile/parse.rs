@@ -507,7 +507,7 @@ impl Parse {
                     let mut a = s.parse_enum()?;
                     a.name = n.name;
                     a.generics = n.generics;
-                    a.span_enum = special_token.span;
+                    a.t_enum = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         vis: n.vis,
@@ -616,7 +616,7 @@ impl Parse {
                     let mut a = s.parse_union()?;
                     a.name = n.name;
                     a.generics = n.generics;
-                    a.span_union = special_token.span;
+                    a.t_union = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         vis: n.vis,
@@ -2004,17 +2004,28 @@ impl Parse {
             field.outer_attrs = s.parse_outer_attrs()?;
 
             let token = s.current();
-            if let TokenCode::Identifier(identifier) = &token.code {
-                field.name = identifier.clone();
-                s.plusplus();
-            } else {
+            let TokenCode::Identifier(_) = &token.code else {
                 return Err(s.panic(token, &format!("expected identifier but got {:?}", token)));
-            }
+            };
+            field.name = token.clone();
+            s.plusplus();
 
             field.vis = s.parse_vis()?;
 
             field.type_ = s.parse_type()?;
-            s.expect(T![;])?;
+
+            let token = s.current();
+            if matches!(&token.code, T![,]) {
+                field.t_comma = Some(token.clone());
+                s.plusplus();
+            } else if matches!(&token.code, T![;]) {
+                let mut t = token.clone();
+                t.code = T![,];
+                field.t_comma = Some(t);
+                s.plusplus();
+            } else if !matches!(&token.code, T!["}"]) {
+                return Err(s.panic(token, &format!("illegal token after field {:?}", token)));
+            }
             r.push(field);
         }
 
@@ -2037,18 +2048,20 @@ impl Parse {
             field.vis = s.parse_vis()?;
 
             field.type_ = s.parse_type()?;
-            r.push(field);
 
             let token = s.current();
-            s.plusplus();
-            match &token.code {
-                T![,] | T![;] => (),
-                T![")"] => {
-                    s.minusminus();
-                    break;
-                }
-                _ => (),
+            if matches!(&token.code, T![,]) {
+                field.t_comma = Some(token.clone());
+                s.plusplus();
+            } else if matches!(&token.code, T![;]) {
+                let mut t = token.clone();
+                t.code = T![,];
+                field.t_comma = Some(t);
+                s.plusplus();
+            } else if !matches!(&token.code, T![")"]) {
+                return Err(s.panic(token, &format!("illegal token after field {:?}", token)));
             }
+            r.push(field);
         }
 
         Ok(r)
@@ -2067,12 +2080,11 @@ impl Parse {
                     break;
                 }
                 T!["{"] => {
-                    r.span_brace_open = Some(token.span);
+                    r.t_brace_open = token.clone();
                     s.plusplus();
                     r.items = parse_enum_items(s)?;
-                    r.span_brace_close = Some(s.current().span);
+                    r.t_brace_close = s.current().clone();
                     s.expect(T!["}"])?;
-                    s.expect(T![;])?;
                     break;
                 }
                 T![where] => {
@@ -2109,30 +2121,29 @@ impl Parse {
                 field.outer_attrs = s.parse_outer_attrs()?;
 
                 let token = s.current();
-                if let TokenCode::Identifier(identifier) = &token.code {
-                    field.name = identifier.clone();
-                    s.plusplus();
-                } else {
+                let TokenCode::Identifier(_) = &token.code else {
                     return Err(s.panic(token, &format!("expected identifier but got {:?}", token)));
-                }
+                };
+                field.name = token.clone();
+                s.plusplus();
 
                 // field.vis = s.parse_vis()?;
 
                 let token = s.current();
                 match &token.code {
                     T!["{"] => {
-                        field.span_brace_open = Some(token.span);
+                        field.t_brace_open = Some(token.clone());
                         s.plusplus();
                         let fields = s.parse_struct_fields()?;
-                        field.span_brace_close = Some(s.current().span);
+                        field.t_brace_close = Some(s.current().clone());
                         s.expect(T!["}"])?;
                         field.payload = EnumItemPayload::Struct(fields);
                     }
                     T!["("] => {
-                        field.span_paren_open = Some(token.span);
+                        field.t_paren_open = Some(token.clone());
                         s.plusplus();
                         let fields = s.parse_tuple_fields()?;
-                        field.span_paren_close = Some(s.current().span);
+                        field.t_paren_close = Some(s.current().clone());
                         s.expect(T![")"])?;
                         field.payload = EnumItemPayload::Tuple(fields);
                     }
@@ -2141,13 +2152,24 @@ impl Parse {
 
                 let token = s.current();
                 if matches!(token.code, T![=]) {
-                    field.span_eq = Some(token.span);
+                    let t_eq = token.clone();
                     s.plusplus();
                     let expr = s.parse_expr()?;
-                    field.discriminant = Some(expr);
+                    field.discriminant = Some((t_eq, expr));
                 }
 
-                s.expect(T![;])?;
+                let token = s.current();
+                if matches!(&token.code, T![,]) {
+                    field.t_comma = Some(token.clone());
+                    s.plusplus();
+                } else if matches!(&token.code, T![;]) {
+                    let mut t = token.clone();
+                    t.code = T![,];
+                    field.t_comma = Some(t);
+                    s.plusplus();
+                } else if !matches!(&token.code, T![")"]) {
+                    return Err(s.panic(token, &format!("illegal token after field {:?}", token)));
+                }
                 r.push(field);
             }
 
@@ -2168,10 +2190,10 @@ impl Parse {
                     break;
                 }
                 T!["{"] => {
-                    r.span_brace_open = Some(token.span);
+                    r.t_brace_open = token.clone();
                     s.plusplus();
                     r.fields = s.parse_struct_fields()?;
-                    r.span_brace_close = Some(s.current().span);
+                    r.t_brace_close = s.current().clone();
                     s.expect(T!["}"])?;
                     s.expect(T![;])?;
                     break;

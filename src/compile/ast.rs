@@ -266,28 +266,40 @@ impl Default for VisibilityPayload {
 impl ToLang for Visibility {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
+        s.to_rs(p, true);
+    }
+}
+impl Visibility {
+    fn to_rs(&self, p: &mut LangFormatter, with_space: bool) {
+        let s = self;
         use VisibilityPayload as A;
 
+        let mut none = false;
         match &s.payload {
             A::Private(is_self) => {
                 if *is_self {
-                    p.push_raw("pub(self) ");
+                    p.push_raw("pub(self)");
+                } else {
+                    none = true;
                 }
             }
             A::Pub => {
-                p.push_raw("pub ");
+                p.push_raw("pub");
             }
             A::Crate => {
-                p.push_raw("pub(crate) ");
+                p.push_raw("pub(crate)");
             }
             A::Super => {
-                p.push_raw("pub(super) ");
+                p.push_raw("pub(super)");
             }
             A::SimplePath(path) => {
                 p.push_raw("pub(in");
                 path.to_rust(p);
-                p.push_raw(") ");
+                p.push_raw(")");
             }
+        }
+        if with_space && !none {
+            p.push_raw(" ");
         }
     }
 }
@@ -827,26 +839,20 @@ impl ToLang for Struct {
         s.t_struct.to_rs_before(p);
         s.name.to_rs_one(p);
         if let Some(generics) = &s.generics {
-            p.push_rust(generics);
+            generics.to_rust(p);
         }
 
         if let Some(payload) = &s.payload {
             match payload {
                 StructPayload::Struct(a) => {
                     if let Some(where_) = &s.where_ {
-                        p.push_rust(where_);
+                        where_.to_rust(p);
                     }
                     if let Some(t) = &s.t_brace_open {
                         t.to_rust(p);
                     }
-                    for item in a {
-                        p.push_rust(&item.outer_attrs);
-                        p.indent();
-                        p.push_rust(&item.vis);
-                        p.push_rust(&item.name);
-                        p.push_raw(": ");
-                        p.push_rust(&item.type_);
-                        p.push_raw(",\n");
+                    for it in a {
+                        it.to_rust(p);
                     }
                     if let Some(t) = &s.t_brace_close {
                         t.to_rust(p);
@@ -856,19 +862,14 @@ impl ToLang for Struct {
                     if let Some(t) = &s.t_paren_open {
                         t.to_rust(p);
                     }
-                    for (i, item) in a.iter().enumerate() {
-                        if i != 0 {
-                            p.push_raw(", ");
-                        }
-                        p.push_rust(&item.outer_attrs);
-                        p.push_rust(&item.vis);
-                        p.push_rust(&item.type_);
+                    for it in a {
+                        it.to_rust(p);
                     }
                     if let Some(t) = &s.t_paren_close {
                         t.to_rust(p);
                     }
                     if let Some(where_) = &s.where_ {
-                        p.push_rust(where_);
+                        where_.to_rust(p);
                     }
                     p.push_raw(";");
                 }
@@ -881,21 +882,52 @@ impl ToLang for Struct {
 
 #[derive(Debug)]
 pub enum StructPayload {
-    Struct(Vec<StructField>),
+    Struct(Vec<StructField>) ,
     Tuple(Vec<TupleField>),
 }
 #[derive(Debug, Default)]
 pub struct StructField {
     pub outer_attrs: Attrs,
-    pub name: Identifier,
+    pub name: Token,
     pub vis: Visibility,
     pub type_: Type,
+    pub t_comma: Option<Token>,
+}
+impl ToLang for StructField {
+    fn to_rust(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        s.outer_attrs.to_rust(p);
+
+        s.name.to_rs_before(p);
+        s.vis.to_rust(p);
+        s.name.to_rs_one(p);
+        p.push_raw(":");
+
+        s.type_.to_rust(p);
+        if let Some(t) = &s.t_comma {
+            t.to_rust(p);
+        }
+    }
 }
 #[derive(Debug, Default)]
 pub struct TupleField {
     pub outer_attrs: Attrs,
     pub vis: Visibility,
     pub type_: Type,
+    pub t_comma: Option<Token>,
+}
+impl ToLang for TupleField {
+    fn to_rust(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        s.outer_attrs.to_rust(p);
+        s.vis.to_rs(p, false);
+        s.type_.to_rust(p);
+        if let Some(t) = &s.t_comma {
+            t.to_rust(p);
+        }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -905,97 +937,85 @@ pub struct Enum {
     pub where_: Option<Where>,
     pub items: Vec<EnumItem>,
 
-    pub span_enum: Span,
-    pub span_brace_open: Option<Span>,
-    pub span_brace_close: Option<Span>,
+    pub t_enum: Token,
+    pub t_brace_open: Token,
+    pub t_brace_close: Token,
 }
 impl ToLang for Enum {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("enum", s.span_enum);
-        p.push_raw(" ");
-        p.push_rust(&s.name);
+        s.t_enum.to_rs_one(p);
+        s.t_enum.to_rs_before(p);
+        s.name.to_rs_one(p);
+
         if let Some(generics) = &s.generics {
-            p.push_rust(generics);
+            generics.to_rust(p);
         }
         if let Some(where_) = &s.where_ {
-            p.push_rust(where_);
+            where_.to_rust(p);
         }
-        p.push_raw(" ");
-        p.push_s("{", s.span_brace_open.unwrap());
-        p.push_raw("\n");
 
-        p.inc_indent();
-        for item in &s.items {
-            p.push_rust(item);
-            p.push_raw(",\n");
+        s.t_brace_open.to_rust(p);
+        for it in &s.items {
+            it.to_rust(p);
         }
-        p.dec_indent();
-        p.indent();
-        p.push_s("}", s.span_brace_close.unwrap());
+        s.t_brace_close.to_rust(p);
     }
 }
 #[derive(Debug, Default)]
 pub struct EnumItem {
     pub outer_attrs: Attrs,
-    pub name: Identifier,
+    pub name: Token,
     // pub vis: Visibility, // it's not needed
     pub payload: EnumItemPayload,
-    pub discriminant: Option<Expr>,
+    pub discriminant: Option<(Token, Expr)>,
 
-    pub span_brace_open: Option<Span>,
-    pub span_brace_close: Option<Span>,
-    pub span_paren_open: Option<Span>,
-    pub span_paren_close: Option<Span>,
-    pub span_eq: Option<Span>,
+    pub t_brace_open: Option<Token>,
+    pub t_brace_close: Option<Token>,
+    pub t_paren_open: Option<Token>,
+    pub t_paren_close: Option<Token>,
+    pub t_eq: Option<Token>,
+    pub t_comma: Option<Token>,
 }
 impl ToLang for EnumItem {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.outer_attrs);
-        p.indent();
-        // p.push_rust(&s.vis);
-        p.push_rust(&s.name);
+        s.outer_attrs.to_rust(p);
+        s.name.to_rust(p);
 
         match &s.payload {
             EnumItemPayload::Struct(a) => {
-                p.push_raw(" ");
-                p.push_s("{", s.span_brace_open.unwrap());
-                p.push_raw("\n");
-                p.inc_indent();
-                for item in a {
-                    p.indent();
-                    // p.push_rust(&item.vis);
-                    p.push_rust(&item.name);
-                    p.push_raw(": ");
-                    p.push_rust(&item.type_);
-                    p.push_raw(",\n");
+                if let Some(t) = &s.t_brace_open {
+                    t.to_rust(p);
                 }
-                p.dec_indent();
-                p.indent();
-                p.push_s("}", s.span_brace_close.unwrap());
+                for it in a {
+                    it.to_rust(p);
+                }
+                if let Some(t) = &s.t_brace_close {
+                    t.to_rust(p);
+                }
             }
             EnumItemPayload::Tuple(a) => {
-                p.push_s("(", s.span_paren_open.unwrap());
-                for (i, item) in a.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(", ");
-                    }
-                    p.push_rust(&item.outer_attrs);
-                    // p.push_rust(&item.vis);
-                    p.push_rust(&item.type_);
+                if let Some(t) = &s.t_paren_open {
+                    t.to_rust(p);
                 }
-                p.push_s(")", s.span_paren_close.unwrap());
+                for it in a {
+                    it.to_rust(p);
+                }
+                if let Some(t) = &s.t_paren_close {
+                    t.to_rust(p);
+                }
             }
             EnumItemPayload::None => {}
         }
-        if let Some(a) = &s.discriminant {
-            p.push_raw(" ");
-            p.push_s("=", s.span_eq.unwrap());
-            p.push_raw(" ");
-            p.push_rust(a);
+        if let Some((t, expr)) = &s.discriminant {
+            t.to_rust(p);
+            expr.to_rust(p);
+        }
+        if let Some(comma) = &s.t_comma {
+            comma.to_rust(p);
         }
     }
 }
@@ -1014,41 +1034,31 @@ pub struct Union {
     pub where_: Option<Where>,
     pub fields: Vec<StructField>,
 
-    pub span_union: Span,
-    pub span_brace_open: Option<Span>,
-    pub span_brace_close: Option<Span>,
+    pub t_union: Token,
+    pub t_brace_open: Token,
+    pub t_brace_close: Token,
 }
 impl ToLang for Union {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("union", s.span_union);
-        p.push_raw(" ");
-        p.push_rust(&s.name);
+        s.t_union.to_rs_one(p);
+        s.t_union.to_rs_before(p);
+        s.name.to_rs_one(p);
+
         if let Some(generics) = &s.generics {
-            p.push_rust(generics);
+            generics.to_rust(p);
         }
 
         if let Some(where_) = &s.where_ {
-            p.push_rust(where_);
+            where_.to_rust(p);
         }
-        p.push_raw(" ");
-        p.push_s("{", s.span_brace_open.unwrap());
-        p.push_raw("\n");
 
-        p.inc_indent();
-        for item in &s.fields {
-            p.push_rust(&item.outer_attrs);
-            p.indent();
-            p.push_rust(&item.vis);
-            p.push_rust(&item.name);
-            p.push_raw(": ");
-            p.push_rust(&item.type_);
-            p.push_raw(",\n");
+        s.t_brace_open.to_rust(p);
+        for it in &s.fields {
+            it.to_rust(p);
         }
-        p.dec_indent();
-        p.indent();
-        p.push_s("}", s.span_brace_close.unwrap());
+        s.t_brace_close.to_rust(p);
     }
 }
 
