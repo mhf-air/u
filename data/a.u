@@ -13,16 +13,6 @@ another form of inner doc comment
 $!"inner, not useful now"
 
 // todo
-// - $"no-derive-debug"
-//     - in u->rs, if there's no $"no-derive-debug",
-//         add #[derive(Debug)] in rs
-//
-//         that is to say, the next time you open the .u file, the struct that
-//         had no #[derive(Debug)] before will have #[derive(Debug)] now.
-//         so the benefit is less thinking about Debug and typing,
-//         since most places need Debug anyway
-//     - in rs->u, if there's no Debug in #[derive()] in rs,
-//         add $"no-derive-debug" in u
 // - $"no-s"
 //     in u->rs, if there's no $"no-s",
 //         add "let s = self;"
@@ -329,7 +319,6 @@ const-c-void[T] func(r &T) *const c-void {
     ret r as *const T as *const c-void
 }
 
-$"no-derive-debug"
 Person['a] struct {
     #[serde(rename = "lnum")]
     name+ &'a str

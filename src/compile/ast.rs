@@ -303,30 +303,6 @@ impl ToLang for Item {
         let s = self;
 
         s.outer_attrs.to_rust(p);
-
-        // TODO
-        // add #[derive(Debug)] for all struct and enum
-        let first = match &s.payload {
-            ItemPayload::Struct(a) => Some(&a.name),
-            ItemPayload::Enum(a) => Some(&a.name),
-            _ => None,
-        };
-        if let Some(a) = first {
-            let mut derive = true;
-            for sp in &s.outer_attrs.sp_list {
-                if sp == r#""no-derive-debug""# {
-                    derive = false;
-                    break;
-                }
-            }
-            if derive {
-                if !a.tokens_before.is_empty() {
-                    a.tokens_before[0].to_rs_one(p);
-                }
-                p.push_raw("#[derive(Debug)]");
-            }
-        }
-
         s.payload.to_rust_before(p);
         s.vis.to_rust(p);
         s.payload.to_rust(p);
@@ -621,8 +597,10 @@ impl ToLang for Func {
             let line_paren = s.t_paren_open.span.line;
             let line_first = s.t_first_after_paren.span.line;
             if line_paren != line_first {
-                let a = &s.t_first_after_paren.tokens_before[0];
-                a.to_rs_one(p);
+                let t = &s.t_first_after_paren.tokens_before;
+                if !t.is_empty() {
+                    t[0].to_rs_one(p);
+                }
             }
             sp.to_rust(p);
             if !s.params.is_empty() {
@@ -678,8 +656,10 @@ impl ToLang for Func {
                 let line_paren = body.t_brace_open.span.line;
                 let line_first = body.t_first_after_brace.span.line;
                 if line_paren != line_first {
-                    let a = &body.t_first_after_brace.tokens_before[0];
-                    a.to_rs_one(p);
+                    let t = &body.t_first_after_brace.tokens_before;
+                    if !t.is_empty() {
+                        t[0].to_rs_one(p);
+                    }
                     p.push_raw("let s = self;");
                 } else {
                     p.push_raw(" let s = self;");

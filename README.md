@@ -288,26 +288,6 @@ example
 
 ```
 
-- **#[derive(Debug)] for all structs and enums by default**
-
-    add #[derive(Debug)] for all structs and enums,
-    except when they have outer mark that is ***$"no-derive-debug"***
-
-    pros: no need to add that to them, and almost all structs need Debug
-
-    cons: increased compilation time and binary size (but I think this is a good trade-off)
-
-```
-example
-
-    Has-debug struct {
-    }
-
-    $"no-derive-debug"
-    No-debug struct {
-    }
-```
-
 - **use + instead of pub for exporting symbols**
 
     use + or ^ after symbol name
