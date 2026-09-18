@@ -350,7 +350,7 @@ impl ItemPayload {
         let s = self;
         use ItemPayload as A;
 
-        let t_a = Token::default();
+        let t_no_before = Token::default();
 
         let first_u_token = match s {
             A::Mod(a) => &a.name,
@@ -365,9 +365,9 @@ impl ItemPayload {
             A::Const(a) => &a.name,
             A::Static(a) => &a.name,
             A::Trait(a) => &a.name,
-            A::Impl(_a) => &t_a,
+            A::Impl(_a) => &t_no_before,
             A::Macro(a) => &a.name,
-            A::MacroCall(_a) => &t_a,
+            A::MacroCall(_a) => &t_no_before,
         };
         first_u_token.to_rs_before(p);
     }
@@ -393,13 +393,7 @@ impl ToLang for ItemPayload {
             A::Trait(a) => a.to_rust(p),
             A::Impl(a) => a.to_rust(p),
             A::Macro(a) => a.to_rust(p),
-            A::MacroCall(a) => {
-                a.to_rust(p);
-                // for macro calls in item
-                if matches!(a.body, MacroCallBody::Expr(_)) {
-                    p.push_raw(";");
-                }
-            }
+            A::MacroCall(a) => a.to_rust(p),
         }
     }
 }
@@ -644,13 +638,13 @@ impl ToLang for Func {
         s.t_paren_close.to_rust(p);
 
         // return type
-        if let Some(t) = &s.t_arrow {
-            t.to_rs_before(p);
-            p.push_raw("->");
-        } else {
-            p.push_raw(" ->");
-        }
         if let Some(return_type) = &s.return_type {
+            if let Some(t) = &s.t_arrow {
+                t.to_rs_before(p);
+                p.push_raw("->");
+            } else {
+                p.push_raw(" ->");
+            }
             return_type.to_rust(p);
         }
 
@@ -1129,49 +1123,44 @@ pub struct Trait {
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
 
-    pub unsafe_: bool,
     pub bounds: TypeParamBounds,
     pub inner_attrs: Attrs,
     pub items: Vec<AssociatedItem>,
 
-    pub span_trait: Span,
-    pub span_unsafe: Option<Span>,
-    pub span_brace_open: Span,
-    pub span_brace_close: Span,
+    pub t_trait: Token,
+    pub t_unsafe: Option<Token>,
+    pub t_brace_open: Token,
+    pub t_brace_close: Token,
 }
 impl ToLang for Trait {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if s.unsafe_ {
-            p.push_s("unsafe", s.span_unsafe.unwrap());
-            p.push_raw(" ");
+        if let Some(t) = &s.t_unsafe {
+            t.to_rs_one(p);
+            s.t_trait.to_rust(p);
+        } else {
+            s.t_trait.to_rs_one(p);
+            s.t_trait.to_rs_before(p);
         }
-        p.push_s("trait", s.span_trait);
-        p.push_raw(" ");
-        p.push_rust(&s.name);
+        s.name.to_rs_one(p);
         if let Some(generics) = &s.generics {
-            p.push_rust(generics);
+            generics.to_rust(p);
         }
         if !s.bounds.items.is_empty() {
             p.push_raw(": ");
-            p.push_rust(&s.bounds);
+            s.bounds.to_rust(p);
         }
         if let Some(where_) = &s.where_ {
-            p.push_rust(where_);
+            where_.to_rust(p);
         }
 
-        p.push_raw(" ");
-        p.push_s("{", s.span_brace_open);
-        p.push_raw("\n");
-        p.inc_indent();
+        s.t_brace_open.to_rust(p);
         p.push_rust(&s.inner_attrs);
-        for item in &s.items {
-            p.push_rust(item);
+        for it in &s.items {
+            it.to_rust(p);
         }
-        p.dec_indent();
-        p.indent();
-        p.push_s("}", s.span_brace_close);
+        s.t_brace_close.to_rust(p);
     }
 }
 
@@ -1184,27 +1173,31 @@ pub struct AssociatedItem {
 impl ToLang for AssociatedItem {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
+        use AssociatedItemPayload as A;
 
-        p.indent();
-        p.push_rust(&s.outer_attrs);
+        s.outer_attrs.to_rust(p);
+
+        let t_no_before = Token::default();
+        let first_u_token = match &s.payload {
+            A::Func(a) => &a.name,
+            A::TypeAlias(a) => &a.name,
+            A::Const(a) => &a.name,
+            A::MacroCall(_a) => &t_no_before,
+        };
+        first_u_token.to_rs_before(p);
+
         // vis only needed here
         if p.in_impl_static {
-            if !matches!(&s.payload, AssociatedItemPayload::MacroCall(_)) {
-                p.push_rust(&s.vis);
+            if !matches!(&s.payload, A::MacroCall(_)) {
+                s.vis.to_rust(p);
             }
         }
         match &s.payload {
-            AssociatedItemPayload::Func(a) => p.push_rust(a),
-            AssociatedItemPayload::Const(a) => p.push_rust(a),
-            AssociatedItemPayload::TypeAlias(a) => p.push_rust(a),
-            AssociatedItemPayload::MacroCall(a) => {
-                p.push_rust(a);
-                if !matches!(a.body, MacroCallBody::Stmt(_)) {
-                    p.push_raw(";");
-                }
-            }
+            A::Func(a) => a.to_rust(p),
+            A::Const(a) => a.to_rust(p),
+            A::TypeAlias(a) => a.to_rust(p),
+            A::MacroCall(a) => a.to_rust(p),
         }
-        p.push_raw("\n");
     }
 }
 
@@ -1226,59 +1219,54 @@ pub struct Impl {
     pub items: Vec<AssociatedItem>,
     pub payload: ImplPayload,
 
-    pub span_impl: Span,
-    pub span_brace_open: Span,
-    pub span_brace_close: Span,
+    pub t_impl: Token,
+    pub t_brace_open: Token,
+    pub t_brace_close: Token,
 }
 impl ToLang for Impl {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if let ImplPayload::Trait(a) = &s.payload {
-            if a.unsafe_ {
-                p.push_s("unsafe", a.span_unsafe);
-                p.push_raw(" ");
-            }
+        if let ImplPayload::Trait(a) = &s.payload && let Some(t) = &a.t_unsafe {
+            s.t_impl.to_rs_before(p);
+            t.to_rs_one(p);
+            p.push_raw(" ");
+            s.t_impl.to_rs_one(p);
+        } else {
+            s.t_impl.to_rust(p);
         }
-        p.push_s("impl", s.span_impl);
 
         if let Some(generics) = &s.generics {
-            p.push_rust(generics);
+            generics.to_rust(p);
         }
 
-        p.push_raw(" ");
         match &s.payload {
             ImplPayload::Static => {
-                p.push_rust(&s.type_);
+                s.type_.to_rust(p);
             }
             ImplPayload::Trait(a) => {
-                p.push_rust(&a.type_path);
-                p.push_raw(" for ");
-                p.push_rust(&s.type_);
+                a.type_path.to_rust(p);
+                a.t_for.to_rust(p);
+                s.type_.to_rust(p);
             }
         }
 
         if let Some(where_) = &s.where_ {
-            p.push_rust(where_);
+            where_.to_rust(p);
         }
 
-        p.push_raw(" ");
-        p.push_s("{", s.span_brace_open);
-        p.push_raw("\n");
-        p.inc_indent();
-        p.push_rust(&s.inner_attrs);
+        s.t_brace_open.to_rust(p);
+        s.inner_attrs.to_rust(p);
         if matches!(&s.payload, ImplPayload::Static) {
             p.in_impl_static = true;
         }
-        for item in &s.items {
-            p.push_rust(item);
+        for it in &s.items {
+            it.to_rust(p);
         }
         if p.in_impl_static {
             p.in_impl_static = false;
         }
-        p.dec_indent();
-        p.indent();
-        p.push_s("}", s.span_brace_close);
+        s.t_brace_close.to_rust(p);
     }
 }
 
@@ -1291,10 +1279,9 @@ pub enum ImplPayload {
 
 #[derive(Debug, Default)]
 pub struct ImplTrait {
-    pub unsafe_: bool,
     pub type_path: TypePath,
-
-    pub span_unsafe: Span,
+    pub t_for: Token,
+    pub t_unsafe: Option<Token>,
 }
 
 // --------------------------------------------------------------------------------
@@ -2893,21 +2880,15 @@ impl ToLang for Stmt {
         let s = self;
 
         match &s {
-            Stmt::Item(a) => p.push_rust(a),
-            Stmt::Let(a) => p.push_rust(a),
+            Stmt::Item(a) => a.to_rust(p),
+            Stmt::Let(a) => a.to_rust(p),
             Stmt::Expr(a) => {
-                p.indent();
-                p.push_rust(a);
+                a.to_rust(p);
                 if matches!(a.payload, ExprPayload::WithoutBlock(_)) {
                     p.push_raw(";");
                 }
-                p.push_raw("\n");
             }
-            Stmt::Value(a) => {
-                p.indent();
-                p.push_rust(a);
-                p.push_raw("\n");
-            }
+            Stmt::Value(a) => a.to_rust(p),
         }
     }
 }

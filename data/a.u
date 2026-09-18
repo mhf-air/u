@@ -332,7 +332,7 @@ Person['a] struct {
     age i32
     desc String
 }
-Person impl {
+impl Person {
     no-s (&) func[no-s]() String {
         < self.desc
     }
@@ -341,7 +341,7 @@ Person impl {
     }
 }
 
-Person['a] impl fmt..Debug {
+impl fmt..Debug for Person['a] {
     fmt (&) func(f &mut fmt..Formatter['-]) fmt..Result {
         f.debug-struct("")
             .field(&s.name, "")
@@ -362,7 +362,7 @@ Color enum {
     Green
     Blue
 }
-Color impl {
+impl Color {
     red-2--c const Color = Color..Red
 }
 
@@ -421,7 +421,7 @@ Foo trait {
     borrow-array['a, N const usize] (&'a) func() Self..Array['a, N]
 }
 
-Person impl {
+impl Person {
     r (&) func(a &str) {}
     rl (&'a) func(a &str) {}
     rm+ (&mut) func(a &str) {}
@@ -443,26 +443,27 @@ Person impl {
     ) {}
 }
 
-Point[f32] impl {
+impl Point[f32] {
     distance (&) func() f32 {}
 }
 
-{{T: N}} :[T, N const usize] impl[unsafe] My-trait {}
-str :[I] impl ops..Index[I] {}
-fn(i32): i32 impl {}
-fn(T): T :[T] impl {}
+impl[unsafe][T, N const usize] My-trait for {{T: N}} {}
+impl[I] ops..Index[I] for str {}
+impl fn(i32): i32 {}
+impl[T] fn(T): T {}
 
-crate..Person impl {
+impl crate..Person {
     abc (&) func() {
         crate..a
     }
 }
-self..Person impl {}
-super..Person impl {}
+impl self..Person {}
+impl super..Person {}
 
 apply[F] func(f F) where { F Fn-once() } { }
 apply[F Fn-once()] func(f F) { }
 
+// these are functions
 capture['a, T] func(x &'a (), y T) impl Sized + use['a, T, Self] {}
 capture['a, T] func(x &'a (), y T) impl Sized + use[] {}
 

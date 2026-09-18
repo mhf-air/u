@@ -537,12 +537,9 @@ impl Parse {
                     });
                 }
                 Keyword::Impl => {
-                    let left = s.parse_impl_left()?;
                     s.expect(T![impl])?;
                     let mut a = s.parse_impl()?;
-                    a.type_ = left.type_;
-                    a.generics = left.impl_generics;
-                    a.span_impl = special_token.span;
+                    a.t_impl = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         vis: Visibility::default(),
@@ -555,7 +552,7 @@ impl Parse {
                     let mut a = s.parse_trait()?;
                     a.name = n.name;
                     a.generics = n.generics;
-                    a.span_trait = special_token.span;
+                    a.t_trait = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         vis: n.vis,
@@ -915,41 +912,6 @@ impl Parse {
             }
         }
         Ok(())
-    }
-
-    // Type [Generics]? impl[unsafe] Trait where { Where } {}
-    fn parse_impl_left(&self) -> ParseResult<ImplLeft> {
-        let s = self;
-
-        let mut r = ImplLeft::default();
-
-        // if the type contains special keywords(like impl),
-        // wrap the type in parens, otherwise it's a syntax error
-        // NOTE BUT, it appears that won't happen
-
-        // if Type is parenthesized, unwrap it
-        // let type_ = s.parse_type()?;
-        // if let Type::TypeNoBounds(a) = type_ {
-        //     if let TypeNoBounds::Parenthesized(p) = *a {
-        //         r.type_ = p.type_;
-        //     } else {
-        //         r.type_ = Type::TypeNoBounds(a);
-        //     }
-        // } else {
-        //     r.type_ = type_;
-        // }
-        r.type_ = s.parse_type()?;
-
-        let token = s.current();
-        if matches!(&token.code, T![:]) {
-            s.plusplus();
-            s.expect(T!["["])?;
-            let mut a = s.parse_generics()?;
-            a.span_square_open = token.span;
-            r.impl_generics = Some(a);
-        }
-
-        Ok(r)
     }
 
     // after [
@@ -2286,11 +2248,10 @@ impl Parse {
         if matches!(&token.code, T!["["]) {
             s.plusplus();
             let token = s.current();
-            r.span_unsafe = Some(token.span);
+            r.t_unsafe = Some(token.clone());
             if !matches!(&token.code, T![unsafe]) {
                 return Err(s.panic(token, &format!("expected unsafe, but got {:?}", token)));
             }
-            r.unsafe_ = true;
             s.plusplus();
             s.expect(T!["]"])?;
         }
@@ -2310,13 +2271,13 @@ impl Parse {
             r.where_ = Some(w);
         }
 
-        r.span_brace_open = s.current().span;
+        r.t_brace_open = s.current().clone();
         s.expect(T!["{"])?;
         r.inner_attrs = s.parse_inner_attrs()?;
         while s.has_more() {
             let token = s.current();
             if matches!(&token.code, T!["}"]) {
-                r.span_brace_close = token.span;
+                r.t_brace_close = token.clone();
                 s.plusplus();
                 break;
             }
@@ -2348,7 +2309,8 @@ impl Parse {
                         };
                         r.items.push(a);
                     }
-                    ItemPayload::MacroCall(f) => {
+                    ItemPayload::MacroCall(mut f) => {
+                        f.is_stmt = true;
                         let a = AssociatedItem {
                             outer_attrs: item.outer_attrs,
                             vis: item.vis,
@@ -2383,23 +2345,38 @@ impl Parse {
         // possible [unsafe]
         let token = s.current();
         if matches!(&token.code, T!["["]) {
-            s.plusplus();
-            let token = s.current();
-            impl_trait.span_unsafe = token.span;
-            if !matches!(&token.code, T![unsafe]) {
-                return Err(s.panic(token, &format!("expected unsafe, but got {:?}", token)));
+            let next_token = s.nth(1);
+            if matches!(&next_token.code, T![unsafe]) {
+                impl_trait.t_unsafe = Some(next_token.clone());
+                s.plusplus();
+                s.plusplus();
+                s.expect(T!["]"])?;
             }
-            impl_trait.unsafe_ = true;
+        }
+        let token = s.current();
+        if matches!(&token.code, T!["["]) {
             s.plusplus();
-            s.expect(T!["]"])?;
+            let mut a = s.parse_generics()?;
+            a.span_square_open = token.span;
+            r.generics = Some(a);
         }
 
-        // possible TypePath
-        if !matches!(&s.current().code, T![where] | T!["{"]) {
-            impl_trait.type_path = s.parse_type_path()?;
-            r.payload = ImplPayload::Trait(impl_trait);
-        } else {
+        let type_ = s.parse_type()?;
+
+        if matches!(&s.current().code, T![where] | T!["{"]) {
+            r.type_ = type_;
             r.payload = ImplPayload::Static;
+        } else {
+            if let TypePayload::TypeNoBounds(a) = type_.payload &&
+                    let TypeNoBounds::TypePath(b) = *a {
+                impl_trait.type_path = b;
+            } else {
+                return Err(s.panic(&s.current(), "Type is not TypePath in impl"));
+            }
+            impl_trait.t_for = s.current().clone();
+            s.plusplus();
+            r.type_ = s.parse_type()?;
+            r.payload = ImplPayload::Trait(impl_trait);
         }
 
         // possible where clause
@@ -2411,13 +2388,13 @@ impl Parse {
             r.where_ = Some(w);
         }
 
-        r.span_brace_open = s.current().span;
+        r.t_brace_open = s.current().clone();
         s.expect(T!["{"])?;
         r.inner_attrs = s.parse_inner_attrs()?;
         while s.has_more() {
             let token = s.current();
             if matches!(&token.code, T!["}"]) {
-                r.span_brace_close = s.current().span;
+                r.t_brace_close = s.current().clone();
                 s.plusplus();
                 break;
             }
@@ -6198,10 +6175,4 @@ struct IdentifierPlusGenerics {
     name: Token,
     vis: Visibility,
     generics: Option<Generics>,
-}
-
-#[derive(Debug, Default)]
-struct ImplLeft {
-    type_: Type,
-    impl_generics: Option<Generics>,
 }
