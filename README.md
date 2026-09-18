@@ -10,14 +10,16 @@ I like Rust's semantics, but dislike some of its syntax
 
 - **allow dash(-) in identifiers**
 
-    change snake_case, UpperCamelCase, SCREAMING_SNAKE_CASE to **dash-case** because it's the best way to separate words
+    change snake_case, UpperCamelCase, SCREAMING_SNAKE_CASE to **dash-case**,
+    because it's the best way to separate words
 
     - Upper-camel-case for UpperCamelCase
     - set-name for set_name
     - name--c for NAME(which is a const or static)
     - anYThInGcUsTom--r for anYThInGcUsTom
 
-    as for identifiers containing digit, forbid '-' followed by a digit, and consider digits as lower-case letters.
+    as for identifiers containing digit, forbid '-' followed by a digit,
+    and consider digits as lower-case letters.
 
     for example, Point2d, Mat4x4 are fine, but Point-2d is not.
 
@@ -51,8 +53,8 @@ and minus becomes
 example
 
     User struct {
-        desc       Option[string]
-        tags       Vec[string]
+        desc       Option[String]
+        tags       Vec[String]
         an-array   {{i32: 10}}
     }
 
@@ -80,10 +82,6 @@ turbofish becomes
     it fits my thought process. Whenever I think of something, the name is the first thing that pops up, and it's the most important,
     all other stuff are complimentary information
 
-    **use new syntex for Trait implementation**
-
-    Type :[Generics]? impl Trait? where? {}
-
 ```
 example
 
@@ -99,7 +97,7 @@ example
         ret 0
     }
 
-    Point[T, U] :[T, U] impl[unsafe] ops..My-trait where {T Copy + Default} {
+    impl[unsafe][T, U] ops..My-trait for Point[T, U] where {T Copy + Default} {
         Output type = usize
 
         new func()
@@ -120,20 +118,19 @@ example
     or
         let s = self;
     at the start of method body, except when there's
-        $"no-s"
-    before method's signature
+        func[no-s]()
+    in method's signature
 
     pros: it's clearer and shorter
 
 example
 
     User impl {
-        $"no-s"
-        get-age+ (&) func i32 {
+        get-age+ (&) func[no-s]() i32 {
             < self.age
         }
 
-        get-age+ (&) func i32 {
+        get-age+ (&'a) func() i32 {
             < s.age
         }
 
@@ -147,7 +144,7 @@ example
     }
 ```
 
-- **drop trailling semicolon**
+- **drop trailling semicolon, colon and ->**
 
     use Go's method, automatically insert semicolons where possible(if the last token in a line is identifiers, most operators, ...)
 
@@ -169,8 +166,6 @@ example
         .c
 ```
 
-- **drop colon and -> in declarations**
-
 - **use .. instead of :: for path separator**
 
     because it's easier to type and distinguishes path segments better
@@ -179,13 +174,15 @@ example
 
     possible future conflict: when `` is used in Rust
 
+    note: use new syntax for leading :: of a path
+
+    use -..crate-name..abc, which translates to ::crate_name::abc
+
 ```
 example
 
-    import {
-        std..io
-        std..fs
-    }
+    use std..io
+    use std..fs
 
     compile-file func(filepath &str) io..Result[Parse] {
         data := fs..read-to-string(&filepath)?
@@ -195,10 +192,6 @@ example
     for i in 0``10 {
     }
 ```
-
-- **new syntax for leading :: of a path**
-
-    use -..crate-name..abc, which translates to ::crate_name::abc
 
 - **add another syntax for let
 
@@ -390,7 +383,10 @@ example
 
 - **use ,, for macro invocations**
 
-    because it's easier to type(at least in my keyboard layout, where ! is located in "-" in QUERTY keyboard)
+    because it's easier to type
+    (at least in my keyboard layout, where ! is located in "-" in QUERTY keyboard)
+
+    and easier to read(I find ! very disturbing if not used for exclamation)
 
     possible future conflict: when ,, is used in Rust
 
@@ -489,12 +485,6 @@ example
 
     f func(:mut a: i32, b i32) {}
 ```
-
-- **doc comment**
-
-    write doc comment in u's format, and generate the same format doc in rust
-
-    TODO: maybe generating rust doc in the future
 
 ### caveats
 - vim-u offers the following to add something after the first symbol in the current line,

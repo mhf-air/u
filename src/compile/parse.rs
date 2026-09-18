@@ -251,22 +251,43 @@ impl Parse {
 
         let mut start = start_index;
         let mut delimiter_count = 1;
-        while start < s.tokens.len() {
-            let token = &s.tokens[start];
-            start += 1;
-            if let TokenCode::Pair(pair) = &token.code {
-                if *pair == delim_open {
-                    delimiter_count += 1;
-                    continue;
+
+        if delim_close == Pair::SquareClose {
+            while start < s.tokens.len() {
+                let token = &s.tokens[start];
+                start += 1;
+                if let TokenCode::Pair(pair) = &token.code {
+                    if matches!(*pair, Pair::SquareOpen | Pair::OuterAttr | Pair::InnerAttr) {
+                        delimiter_count += 1;
+                        continue;
+                    }
+                    if *pair == delim_close {
+                        delimiter_count -= 1;
+                        if delimiter_count == 0 {
+                            break;
+                        }
+                    }
                 }
-                if *pair == delim_close {
-                    delimiter_count -= 1;
-                    if delimiter_count == 0 {
-                        break;
+            }
+        } else {
+            while start < s.tokens.len() {
+                let token = &s.tokens[start];
+                start += 1;
+                if let TokenCode::Pair(pair) = &token.code {
+                    if *pair == delim_open {
+                        delimiter_count += 1;
+                        continue;
+                    }
+                    if *pair == delim_close {
+                        delimiter_count -= 1;
+                        if delimiter_count == 0 {
+                            break;
+                        }
                     }
                 }
             }
         }
+
         if delimiter_count > 0 {
             return Err(s.panic(token, "unclosed delimiter"));
         }
@@ -871,17 +892,9 @@ impl Parse {
         r.vis = a.vis;
 
         // possible [
-        let mut generic_span = None;
         let token = s.current();
         if matches!(token.code, T!["["]) {
-            generic_span = Some(token.span);
-            s.plusplus();
-        }
-
-        if let Some(span) = generic_span {
-            let mut generics = s.parse_generics()?;
-            generics.span_square_open = span;
-            r.generics = Some(generics);
+            r.generics = Some(s.parse_generics()?);
         }
 
         Ok(r)
@@ -914,11 +927,13 @@ impl Parse {
         Ok(())
     }
 
-    // after [
     fn parse_generics(&self) -> ParseResult<Generics> {
         let s = self;
 
         let mut r = Generics::default();
+
+        r.t_square_open = s.current().clone();
+        s.plusplus();
 
         let token = s.current();
         if matches!(&token.code, T!["]"]) {
@@ -933,10 +948,13 @@ impl Parse {
             s.plusplus();
             match &token.code {
                 T!["]"] => {
-                    r.span_square_close = token.span;
+                    r.t_square_close = token.clone();
                     break;
                 }
-                T![,] => (),
+                T![,] => {
+                    let last = r.params.len() - 1;
+                    r.params[last].t_comma = Some(token.clone());
+                }
                 _ => {
                     return Err(s.panic(
                         token,
@@ -958,7 +976,6 @@ impl Parse {
                         break;
                     }
                     T!["#["] => {
-                        s.plusplus();
                         r.outer_attrs = s.parse_outer_attrs()?;
                     }
                     TokenCode::Lifetime(_) => {
@@ -967,15 +984,13 @@ impl Parse {
                         c.lifetime = token.clone();
                         r.payload = GenericParamPayload::Lifetime(c);
                     }
-                    TokenCode::Identifier(identifier) => {
+                    TokenCode::Identifier(_) => {
                         s.plusplus();
-                        let name = identifier.clone();
+                        let name = token.clone();
 
                         let token = s.current();
                         if matches!(token.code, T![const]) {
-                            s.plusplus();
                             let mut c = parse_const_param(s)?;
-                            c.span_const = token.span;
                             c.name = name;
                             r.payload = GenericParamPayload::Const(c);
                         } else {
@@ -1004,7 +1019,7 @@ impl Parse {
                 T!["]"] | T![,] => (),
                 T![=] => {
                     s.plusplus();
-                    r.type_ = Some(s.parse_type()?);
+                    r.type_ = Some((token.clone(), s.parse_type()?));
                 }
                 _ => {
                     r.bounds = s.parse_type_param_bounds()?;
@@ -1014,7 +1029,7 @@ impl Parse {
                         T!["]"] | T![,] => (),
                         T![=] => {
                             s.plusplus();
-                            r.type_ = Some(s.parse_type()?);
+                            r.type_ = Some((token.clone(), s.parse_type()?));
                         }
                         _ => {
                             return Err(s.panic(
@@ -1032,12 +1047,17 @@ impl Parse {
         fn parse_const_param(s: &Parse) -> ParseResult<ConstParam> {
             let mut r = ConstParam::default();
 
+            r.t_const = s.current().clone();
+            s.plusplus();
+
             r.type_ = s.parse_type()?;
+
             let token = s.current();
             if token.code == T![=] {
+                let t_eq = token.clone();
                 s.plusplus();
                 let expr = s.parse_expr()?;
-                r.expr = Some(expr);
+                r.expr = Some((t_eq, expr));
             }
             let token = s.current();
             if !matches!(&token.code, T!["]"] | T![,]) {
@@ -1056,40 +1076,36 @@ impl Parse {
 
         let mut r = LifetimeParam::default();
 
-        let mut expect_plus = false;
         while s.has_more() {
             let token = s.current();
-            match &token.code {
-                T!["]"] | T![,] | T![;] => {
-                    break;
-                }
-                TokenCode::Lifetime(_) => {
-                    if expect_plus {
-                        return Err(s.panic(
-                            token,
-                            &format!("not expected lifetime but got lifetime '{:?}", token),
-                        ));
-                    }
-                    r.lifetime_bounds.push(Lifetime {
-                        name: token.clone(),
-                    });
-                    expect_plus = true;
-                    s.plusplus();
-                }
-                T![+] => {
-                    if !expect_plus {
-                        return Err(s.panic(token, "expected lifetime but got +"));
-                    }
-                    expect_plus = false;
-                    s.plusplus();
-                }
-                _ => {
-                    return Err(s.panic(
-                        token,
-                        &format!("illegal token {:?} for lifetime bounds", token),
-                    ));
-                }
+            if matches!(&token.code, T!["]"] | T![,] | T![;]) {
+                break;
             }
+            if !matches!(&token.code, TokenCode::Lifetime(_)) {
+                return Err(s.panic(
+                    token,
+                    &format!("expected lifetime but got '{:?}'", token),
+                ));
+            }
+            let lifetime = Lifetime {
+                name: token.clone(),
+            };
+            s.plusplus();
+
+            let token = s.current();
+            if matches!(&token.code, T!["]"] | T![,] | T![;]) {
+                r.lifetime_bounds.push((lifetime, None));
+                break;
+            }
+            if !matches!(&token.code, T![+]) {
+                return Err(s.panic(
+                    token,
+                    &format!("expected '+' but got '{:?}'", token),
+                ));
+            }
+            s.plusplus();
+
+            r.lifetime_bounds.push((lifetime, Some(token.clone())));
         }
 
         Ok(r)
@@ -1103,80 +1119,66 @@ impl Parse {
         while s.has_more() {
             let token = s.current();
 
+            let mut type_bound = TypeParamBound::Lifetime(Lifetime::default());
+
             if let TokenCode::Lifetime(_) = &token.code {
-                r.items.push(TypeParamBound::Lifetime(Lifetime {
+                type_bound = TypeParamBound::Lifetime(Lifetime {
                     name: token.clone(),
-                }));
+                });
                 s.plusplus();
             } else if matches!(&token.code, T![use]) {
-                let span_use = token.span;
+                let t_use = token.clone();
                 s.plusplus();
                 let token = s.current();
-                let span_square_open = token.span;
+                let t_square_open = token.clone();
                 s.expect(T!["["])?;
                 let mut items = Vec::new();
                 while s.has_more() {
                     let token = s.current();
-                    s.plusplus();
-                    match &token.code {
-                        TokenCode::Lifetime(_) => {
-                            items.push(UseBoundGenericArg::Lifetime(Lifetime {
-                                name: token.clone(),
-                            }));
+
+                    if matches!(&token.code, T!["]"]) {
+                        s.plusplus();
+                        let t_square_close = token.clone();
+                        let use_bound = UseBound {
+                            items,
+                            t_use,
+                            t_square_open,
+                            t_square_close,
+                        };
+                        type_bound = TypeParamBound::UseBound(use_bound);
+                        break;
+                    }
+
+                    if matches!(&token.code,
+                            TokenCode::Lifetime(_) | TokenCode::Identifier(_) | T![Self]) {
+                        let one_token = token.clone();
+                        s.plusplus();
+                        let token = s.current();
+                        if matches!(&token.code, T![,]) {
+                            items.push((one_token, Some(token.clone())));
+                            s.plusplus();
+                        } else if matches!(&token.code, T!["]"]) {
+                            items.push((one_token, None));
                         }
-                        TokenCode::Identifier(identifier) => {
-                            items.push(UseBoundGenericArg::Id(identifier.clone()));
-                        }
-                        T![Self] => {
-                            items.push(UseBoundGenericArg::Self_(token.span));
-                        }
-                        T![,] => {
-                            // skip check for now
-                        }
-                        T!["]"] => {
-                            let span_square_close = token.span;
-                            let use_bound = UseBound {
-                                items,
-                                span_use,
-                                span_square_open,
-                                span_square_close,
-                            };
-                            r.items.push(TypeParamBound::UseBound(use_bound));
-                            break;
-                        }
-                        _ => {
-                            return Err(s.panic(
-                                token,
-                                &format!("illegal token {:?} for type param bounds", token),
-                            ));
-                        }
+                    } else {
+                        return Err(s.panic(
+                            token,
+                            &format!("illegal token {:?} for use bound", token),
+                        ));
                     }
                 }
             } else {
-                let mut bound = TraitBound::default();
-                // possible ?
-                if matches!(&token.code, T![?]) {
-                    bound.span_unsized = Some(token.span);
-                    bound.unsized_ = true;
-                    s.plusplus();
-                }
-                // possible ForLifetimes
-                let token = s.current();
-                if matches!(&token.code, T![for]) {
-                    s.plusplus();
-                    let mut f = s.parse_for_lifetimes()?;
-                    f.span_for = token.span;
-                    bound.for_lifetimes = Some(f);
-                }
-                bound.type_path = s.parse_type_path()?;
-                r.items.push(TypeParamBound::TraitBound(bound));
+                let bound = s.parse_trait_bound()?;
+                type_bound = TypeParamBound::TraitBound(bound);
             }
 
             let token = s.current();
             if !matches!(&token.code, T![+]) {
+                r.items.push((type_bound, None));
                 break;
             }
             s.plusplus();
+            r.items.push((type_bound, Some(token.clone())));
         }
 
         Ok(r)
@@ -1186,17 +1188,9 @@ impl Parse {
         let s = self;
         let mut r = TraitBound::default();
 
-        let mut need_paren = false;
-        let token = s.current();
-        if matches!(&token.code, T!["("]) {
-            need_paren = true;
-            s.plusplus();
-        }
-
         let token = s.current();
         if matches!(&token.code, T![?]) {
-            r.span_unsized = Some(token.span);
-            r.unsized_ = true;
+            r.t_unsized = Some(token.clone());
             s.plusplus();
         }
 
@@ -1204,15 +1198,11 @@ impl Parse {
         if matches!(&token.code, T![for]) {
             s.plusplus();
             let mut f = s.parse_for_lifetimes()?;
-            f.span_for = token.span;
+            f.t_for = token.clone();
             r.for_lifetimes = Some(f);
         }
 
         r.type_path = s.parse_type_path()?;
-
-        if need_paren {
-            s.expect(T![")"])?;
-        }
 
         Ok(r)
     }
@@ -1222,9 +1212,10 @@ impl Parse {
         let mut r = ForLifetimes::default();
 
         let token = s.current();
-        s.expect(T!["["])?;
+        if !matches!(&token.code, T!["["]) {
+            return Err(s.panic(&token, &format!("expected '[', but got {:?}", token)));
+        }
         r.for_ = s.parse_generics()?;
-        r.for_.span_square_open = token.span;
 
         Ok(r)
     }
@@ -2355,10 +2346,7 @@ impl Parse {
         }
         let token = s.current();
         if matches!(&token.code, T!["["]) {
-            s.plusplus();
-            let mut a = s.parse_generics()?;
-            a.span_square_open = token.span;
-            r.generics = Some(a);
+            r.generics = Some(s.parse_generics()?);
         }
 
         let type_ = s.parse_type()?;
@@ -4645,7 +4633,8 @@ impl Parse {
                     return Ok(payload);
                 }
                 let bound = s.parse_trait_bound()?;
-                if !matches!(s.current().code, T![+]) {
+                let token = s.current();
+                if !matches!(token.code, T![+]) {
                     let payload = TypePayload::TypeNoBounds(Box::new(
                         TypeNoBounds::ImplTraitOneBound(TypeImplTraitOneBound {
                             bound,
@@ -4656,9 +4645,10 @@ impl Parse {
                 }
                 s.plusplus();
                 let mut bounds = s.parse_type_param_bounds()?;
+                let type_bound = TypeParamBound::TraitBound(bound);
                 bounds
                     .items
-                    .insert(0, TypeParamBound::TraitBound(bound));
+                    .insert(0, (type_bound, Some(token.clone())));
                 let payload = TypePayload::ImplTrait(bounds, token.span);
                 return Ok(payload);
             }
@@ -4674,7 +4664,8 @@ impl Parse {
                     return Ok(payload);
                 }
                 let bound = s.parse_trait_bound()?;
-                if !matches!(s.current().code, T![+]) {
+                let token = s.current();
+                if !matches!(token.code, T![+]) {
                     let payload = TypePayload::TypeNoBounds(Box::new(
                         TypeNoBounds::TraitObjectOneBound(TypeTraitObjectOneBound {
                             bound,
@@ -4685,9 +4676,10 @@ impl Parse {
                 }
                 s.plusplus();
                 let mut bounds = s.parse_type_param_bounds()?;
+                let type_bound = TypeParamBound::TraitBound(bound);
                 bounds
                     .items
-                    .insert(0, TypeParamBound::TraitBound(bound));
+                    .insert(0, (type_bound, Some(token.clone())));
                 let payload = TypePayload::TraitObject(TypeTraitObject {
                     bounds,
                     span: token.span,
@@ -4698,7 +4690,7 @@ impl Parse {
             // bare function
             T![for] => {
                 let mut lifetimes = s.parse_for_lifetimes()?;
-                lifetimes.span_for = token.span;
+                lifetimes.t_for = token.clone();
                 let span_func = s.current().span;
                 s.expect(T![func])?;
                 let mut f = s.parse_func_type(FuncType::Func(span_func))?;
@@ -4945,7 +4937,7 @@ impl Parse {
                 if matches!(token.code, T![for]) {
                     s.plusplus();
                     let mut f = s.parse_for_lifetimes()?;
-                    f.span_for = token.span;
+                    f.t_for = token.clone();
                     item.for_lifetimes = Some(f);
                 }
                 item.type_ = s.parse_type()?;

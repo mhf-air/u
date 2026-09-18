@@ -1539,68 +1539,70 @@ impl ToLang for Attr {
 pub struct Generics {
     pub params: Vec<GenericParam>,
 
-    pub span_square_open: Span,
-    pub span_square_close: Span,
+    pub t_square_open: Token,
+    pub t_square_close: Token,
 }
 impl ToLang for Generics {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("<", s.span_square_open);
-        for (i, item) in s.params.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
-            }
-            p.push_rust(item);
+        s.t_square_open.to_rust(p);
+        for it in &s.params {
+            it.to_rust(p);
         }
-        p.push_s(">", s.span_square_close);
+        s.t_square_close.to_rust(p);
     }
 }
 #[derive(Debug, Default)]
 pub struct GenericParam {
     pub outer_attrs: Attrs,
     pub payload: GenericParamPayload,
+    pub t_comma: Option<Token>,
 }
 impl ToLang for GenericParam {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.outer_attrs);
+        s.outer_attrs.to_rust(p);
         match &s.payload {
             GenericParamPayload::Lifetime(a) => {
-                p.push_rust(&a.lifetime);
+                a.lifetime.to_rust(p);
                 if !a.lifetime_bounds.is_empty() {
-                    p.push_raw(": ");
-                    for (i, item) in a.lifetime_bounds.iter().enumerate() {
-                        if i != 0 {
-                            p.push_raw(" + ");
+                    p.push_raw(":");
+                    for (it, t) in &a.lifetime_bounds {
+                        it.to_rust(p);
+                        if let Some(t) = t {
+                            t.to_rust(p);
                         }
-                        p.push_rust(item);
                     }
                 }
             }
             GenericParamPayload::Type(a) => {
-                p.push_rust(&a.name);
+                a.name.to_rust(p);
                 if !a.bounds.items.is_empty() {
-                    p.push_raw(": ");
-                    p.push_rust(&a.bounds);
+                    p.push_raw(":");
+                    a.bounds.to_rust(p);
                 }
                 if let Some(type_) = &a.type_ {
-                    p.push_raw(" = ");
-                    p.push_rust(type_);
+                    type_.0.to_rust(p);
+                    type_.1.to_rust(p);
                 }
             }
             GenericParamPayload::Const(a) => {
-                p.push_s("const", a.span_const);
-                p.push_raw(" ");
-                p.push_rust(&a.name);
-                p.push_raw(": ");
-                p.push_rust(&a.type_);
-                if let Some(expr) = &a.expr {
-                    p.push_raw(" = ");
-                    p.push_rust(expr);
+                a.name.to_rs_before(p);
+                a.t_const.to_rs_one(p);
+                a.t_const.to_rs_before(p);
+                a.name.to_rs_one(p);
+                p.push_raw(":");
+                a.type_.to_rust(p);
+                if let Some((t, expr)) = &a.expr {
+                    t.to_rust(p);
+                    expr.to_rust(p);
                 }
             }
+        }
+        if let Some(t) = &s.t_comma {
+            t.to_rust(p);
         }
     }
 }
@@ -1619,7 +1621,7 @@ impl Default for GenericParamPayload {
 #[derive(Debug, Default)]
 pub struct LifetimeParam {
     pub lifetime: Token,
-    pub lifetime_bounds: Vec<Lifetime>,
+    pub lifetime_bounds: Vec<(Lifetime, Option<Token>)>,
 }
 #[derive(Debug, Default)]
 pub struct Lifetime {
@@ -1634,20 +1636,21 @@ impl ToLang for Lifetime {
 }
 #[derive(Debug, Default)]
 pub struct TypeParam {
-    pub name: Identifier,
+    pub name: Token,
     pub bounds: TypeParamBounds,
-    pub type_: Option<Type>,
+    pub type_: Option<(Token, Type)>,
 }
 // Identifier const Type
 #[derive(Debug, Default)]
 pub struct ConstParam {
-    pub name: Identifier,
+    pub name: Token,
     pub type_: Type,
-    pub expr: Option<Expr>,
+    pub expr: Option<(Token, Expr)>,
 
-    pub span_const: Span,
+    pub t_const: Token,
 }
 
+// -----------------------------------------------------------------------------
 #[derive(Debug, Default)]
 pub struct Where {
     pub items: Vec<WhereItem>,
@@ -1685,13 +1688,13 @@ impl ToLang for WhereItem {
 
         match &s {
             WhereItem::Lifetime(a) => {
-                p.push_rust(&a.lifetime);
-                p.push_raw(": ");
-                for (i, item) in a.lifetime_bounds.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(" + ");
+                a.lifetime.to_rust(p);
+                p.push_raw(":");
+                for (it, t) in &a.lifetime_bounds {
+                    it.to_rust(p);
+                    if let Some(t) = t {
+                        t.to_rust(p);
                     }
-                    p.push_rust(item);
                 }
             }
             WhereItem::TypeBound(a) => {
@@ -1708,7 +1711,7 @@ impl ToLang for WhereItem {
 #[derive(Debug, Default)]
 pub struct WhereItemLifetime {
     pub lifetime: Lifetime,
-    pub lifetime_bounds: Vec<Lifetime>,
+    pub lifetime_bounds: Vec<(Lifetime, Option<Token>)>,
 }
 #[derive(Debug, Default)]
 pub struct WhereItemTypeBound {
@@ -1720,17 +1723,17 @@ pub struct WhereItemTypeBound {
 // --------------------------------------------------------------------------------
 #[derive(Debug, Default)]
 pub struct TypeParamBounds {
-    pub items: Vec<TypeParamBound>,
+    pub items: Vec<(TypeParamBound, Option<Token>)>,
 }
 impl ToLang for TypeParamBounds {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(" + ");
+        for (it, t) in &s.items {
+            it.to_rust(p);
+            if let Some(t) = t {
+                t.to_rust(p);
             }
-            p.push_rust(item);
         }
     }
 }
@@ -1745,71 +1748,52 @@ impl ToLang for TypeParamBound {
         let s = self;
 
         match s {
-            TypeParamBound::Lifetime(a) => p.push_rust(a),
-            TypeParamBound::TraitBound(a) => p.push_rust(a),
-            TypeParamBound::UseBound(a) => p.push_rust(a),
+            TypeParamBound::Lifetime(a) => a.to_rust(p),
+            TypeParamBound::TraitBound(a) => a.to_rust(p),
+            TypeParamBound::UseBound(a) => a.to_rust(p),
         }
     }
 }
 
 #[derive(Debug, Default)]
 pub struct UseBound {
-    pub items: Vec<UseBoundGenericArg>,
+    pub items: Vec<(Token, Option<Token>)>,
 
-    pub span_use: Span,
-    pub span_square_open: Span,
-    pub span_square_close: Span,
-}
-#[derive(Debug)]
-pub enum UseBoundGenericArg {
-    Lifetime(Lifetime),
-    Id(Identifier),
-    Self_(Span),
+    pub t_use: Token,
+    pub t_square_open: Token,
+    pub t_square_close: Token,
 }
 impl ToLang for UseBound {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("use", s.span_use);
-        p.push_s("<", s.span_square_open);
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
+        s.t_use.to_rust(p);
+        s.t_square_open.to_rust(p);
+        for (it, t) in &s.items {
+            it.to_rust(p);
+            if let Some(t) = t {
+                t.to_rust(p);
             }
-            p.push_rust(item);
         }
-        p.push_s(">", s.span_square_close);
-    }
-}
-impl ToLang for UseBoundGenericArg {
-    fn to_rust(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        match s {
-            UseBoundGenericArg::Lifetime(a) => p.push_rust(a),
-            UseBoundGenericArg::Id(a) => p.push_rust(a),
-            UseBoundGenericArg::Self_(a) => p.push_s("Self", *a),
-        }
+        s.t_square_close.to_rust(p);
     }
 }
 
 #[derive(Debug, Default)]
 pub struct TraitBound {
-    pub unsized_: bool,
+    pub t_unsized: Option<Token>,
     pub for_lifetimes: Option<ForLifetimes>,
     pub type_path: TypePath,
-
-    pub span_unsized: Option<Span>,
 }
 impl ToLang for TraitBound {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if s.unsized_ {
-            p.push_s("?", s.span_unsized.unwrap());
+        if let Some(t) = &s.t_unsized {
+            t.to_rust(p);
         }
         if let Some(for_) = &s.for_lifetimes {
-            p.push_rust(for_);
+            for_.to_rust(p);
         }
         p.push_rust(&s.type_path);
     }
@@ -1819,15 +1803,14 @@ impl ToLang for TraitBound {
 pub struct ForLifetimes {
     pub for_: Generics,
 
-    pub span_for: Span,
+    pub t_for: Token,
 }
 impl ToLang for ForLifetimes {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("for", s.span_for);
-        p.push_raw(" ");
-        p.push_rust(&s.for_);
+        s.t_for.to_rust(p);
+        s.for_.to_rust(p);
     }
 }
 
