@@ -18,19 +18,18 @@
 //     in rs->u, if there's no "let s = self;" as the first item in method body,
 //         add func[no-s]
 //     else
-//         delete the first item
+//         delete the first item in u
 //
 // - open *.rs: read *.rs -> rust's ast -> write .*.u
-// - close .*.u: rustfmt --edition 2024 *.rs
+// - write .*.u: u u-compile .*.u
 //
-// - when writing to .*.u, align multi-line where clause members with gap of 3 spaces
 // - in rust-to-u, for all expressions(including ret) that doesn't end with ';',
 //      translate to "< ret EXPR" in u
-// - places that might affect comment order
+// - places that might affect token order
 //      - item declaration
-//      - let, ->
 //      - pub
 //      - method receiver
+//      - let, ->
 // - goto-definition jump to the correct position in u
 
 extern crate std
@@ -326,7 +325,9 @@ const-c-void[T] func(r &T) *const c-void {
     ret r as *const T as *const c-void
 }
 
-Person['a] struct {
+Person['a] struct where {
+    T Clone
+} {
     #[serde(rename = "lnum")]
     name+ &'a str
     age i32
@@ -373,7 +374,9 @@ Foo enum {
     C(bool) = 42
 }
 
-Animal[T, E] enum {
+Animal[T, E] enum where {
+    T Clone
+} {
     Dog(String, f64)
     Cat {
         name String
@@ -381,12 +384,16 @@ Animal[T, E] enum {
     }
 }
 
-My-union[T] union {
+My-union[T] union where {
+    T Clone
+} {
     name+ String
     age i32
 }
 
-With-self trait Super[Self] where { Self Sized } {}
+With-self trait Super[Self] where {
+    Self Sized
+} {}
 Copy-iterator trait Iterator[Item Copy] {}
 
 Seq[T] trait[unsafe] Display + Debug where { T Copy } {
@@ -417,7 +424,9 @@ Foo trait {
     Pointer[T] type Deref[Target = T]
     new[T] func(value T) Self..Pointer[T]
 
-    Array['x, N const usize] type where { Self 'x }
+    Array['x, N const usize] type where {
+        Self 'x
+    } = i32
     borrow-array['a, N const usize] (&'a) func() Self..Array['a, N]
 }
 
@@ -445,6 +454,11 @@ impl Person {
 
 impl Point[f32] {
     distance (&) func() f32 {}
+}
+
+impl[T] Point[T] where {
+    T Clone
+} {
 }
 
 impl[unsafe][T, N const usize] My-trait for {{T: N}} {}

@@ -840,7 +840,7 @@ impl Parse {
                 if !item.generic_args.items.is_empty() {
                     return Err(s.panic(token, "pub can't contain generic params"));
                 }
-                let result = SimplePathSegment::try_from(item.name);
+                let result = SimplePathSegment::try_from(item);
                 let Ok(a) = result else {
                     return Err(s.panic(token, "pub can't contain Self"));
                 };
@@ -979,9 +979,7 @@ impl Parse {
                         r.outer_attrs = s.parse_outer_attrs()?;
                     }
                     TokenCode::Lifetime(_) => {
-                        s.plusplus();
-                        let mut c = s.parse_lifetime_bounds()?;
-                        c.lifetime = token.clone();
+                        let c = s.parse_lifetime_bounds()?;
                         r.payload = GenericParamPayload::Lifetime(c);
                     }
                     TokenCode::Identifier(_) => {
@@ -1075,6 +1073,8 @@ impl Parse {
         let s = self;
 
         let mut r = LifetimeParam::default();
+        r.lifetime = s.current().clone();
+        s.plusplus();
 
         while s.has_more() {
             let token = s.current();
@@ -1196,9 +1196,7 @@ impl Parse {
 
         let token = s.current();
         if matches!(&token.code, T![for]) {
-            s.plusplus();
-            let mut f = s.parse_for_lifetimes()?;
-            f.t_for = token.clone();
+            let f = s.parse_for_lifetimes()?;
             r.for_lifetimes = Some(f);
         }
 
@@ -1210,6 +1208,8 @@ impl Parse {
     fn parse_for_lifetimes(&self) -> ParseResult<ForLifetimes> {
         let s = self;
         let mut r = ForLifetimes::default();
+        r.t_for = s.current().clone();
+        s.plusplus();
 
         let token = s.current();
         if !matches!(&token.code, T!["["]) {
@@ -1697,8 +1697,7 @@ impl Parse {
             }
             T!["{"] => {
                 // body
-                let mut a = s.parse_block_expr()?;
-                a.t_brace_open = token.clone();
+                let a = s.parse_block_expr()?;
                 r.body = Some(a);
             }
             _ => {
@@ -1970,26 +1969,31 @@ impl Parse {
                 break;
             }
 
-            let mut field = TupleField::default();
-            field.outer_attrs = s.parse_outer_attrs()?;
-
-            field.vis = s.parse_vis()?;
-
-            field.type_ = s.parse_type()?;
+            let outer_attrs = s.parse_outer_attrs()?;
+            let vis = s.parse_vis()?;
+            let type_ = s.parse_type()?;
 
             let token = s.current();
-            if matches!(&token.code, T![,]) {
-                field.t_comma = Some(token.clone());
+            let t_comma = if matches!(&token.code, T![,]) {
                 s.plusplus();
+                Some(token.clone())
             } else if matches!(&token.code, T![;]) {
                 let mut t = token.clone();
                 t.code = T![,];
-                field.t_comma = Some(t);
                 s.plusplus();
+                Some(t)
             } else if !matches!(&token.code, T![")"]) {
                 return Err(s.panic(token, &format!("illegal token after field {:?}", token)));
-            }
-            r.push(field);
+            } else {
+                None
+            };
+
+            r.push(TupleField {
+                outer_attrs,
+                vis,
+                type_,
+                t_comma,
+            });
         }
 
         Ok(r)
@@ -3595,8 +3599,8 @@ impl Parse {
                                     )),
                                 };
                             } else {
-                                let name = match segment.name {
-                                    PathIdentSegment::Identifier(a) => a,
+                                let name = match segment.name.token.code {
+                                    TokenCode::Identifier(a) => a,
                                     _ => {
                                         return Err(s.panic(
                                             token,
@@ -3843,9 +3847,8 @@ impl Parse {
 
             // qualified path in expression
             T!["["] => {
-                let mut type_ = s.parse_qualifyed_path_type()?;
-                type_.span_square_open = token.span;
-                s.expect(T![..])?;
+                s.minusminus();
+                let type_ = s.parse_qualifyed_path_type()?;
                 let items = s.parse_path_expr_segments()?;
                 r.payload = ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Path(
                     ExprPath::QualifiedPath(QualifiedPathInExpr { type_, items }),
@@ -3968,7 +3971,7 @@ impl Parse {
                     if !item.generic_args.items.is_empty() {
                         return Err(s.panic(token, "macro call can't contain generic params"));
                     }
-                    let result = SimplePathSegment::try_from(item.name);
+                    let result = SimplePathSegment::try_from(item);
                     if let Ok(a) = result {
                         path.items.push(a);
                     } else {
@@ -4403,53 +4406,51 @@ impl Parse {
         match &token.code {
             // parenthesized or tuple
             T!["("] => {
-                let span_paren_open = token.span;
-                let mut type_list: Vec<Type> = Vec::new();
+                let t_paren_open = token.clone();
+                let mut type_list: Vec<(Type, Option<Token>)> = Vec::new();
                 let mut is_tuple = false;
                 while s.has_more() {
                     let token = s.current();
-                    match &token.code {
-                        T![")"] => {
-                            s.plusplus();
-                            if type_list.len() == 1 && !is_tuple {
-                                let a = mem::take(&mut type_list[0]);
-                                let payload = TypePayload::TypeNoBounds(Box::new(
-                                    TypeNoBounds::Parenthesized(TypeParenthesized {
-                                        type_: a,
-                                        span_paren_open,
-                                        span_paren_close: token.span,
-                                    }),
-                                ));
-                                return Ok(payload);
-                            } else {
-                                let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Tuple(
-                                    TypeTuple {
-                                        items: type_list,
-                                        span_paren_open,
-                                        span_paren_close: token.span,
-                                    },
-                                )));
-                                return Ok(payload);
-                            }
+                    if matches!(&token.code, T![")"]) {
+                        s.plusplus();
+                        if type_list.len() == 1 && !is_tuple {
+                            let a = mem::take(&mut type_list[0]);
+                            let payload = TypePayload::TypeNoBounds(Box::new(
+                                TypeNoBounds::Parenthesized(TypeParenthesized {
+                                    type_: a.0,
+                                    t_paren_open,
+                                    t_paren_close: token.clone(),
+                                }),
+                            ));
+                            return Ok(payload);
+                        } else {
+                            let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Tuple(
+                                TypeTuple {
+                                    items: type_list,
+                                    t_paren_open,
+                                    t_paren_close: token.clone(),
+                                },
+                            )));
+                            return Ok(payload);
                         }
-                        T![,] => {
-                            is_tuple = true;
-                            s.plusplus();
-                        }
-                        _ => {
-                            type_list.push(s.parse_type()?);
-                        }
+                    }
+
+                    let type_ = s.parse_type()?;
+                    let token = s.current();
+                    if matches!(&token.code, T![,]) {
+                        is_tuple = true;
+                        s.plusplus();
+                        type_list.push((type_, Some(token.clone())));
+                    } else {
+                        type_list.push((type_, None));
                     }
                 }
             }
             // qualified path
             T!["["] => {
-                let mut qualified_path_type = s.parse_qualifyed_path_type()?;
-                qualified_path_type.span_square_open = token.span;
-                s.expect(T![..])?;
-
+                s.minusminus();
+                let qualified_path_type = s.parse_qualifyed_path_type()?;
                 let a_type_path = s.parse_type_path()?;
-
                 let payload = TypePayload::TypeNoBounds(Box::new(
                     TypeNoBounds::QualifiedPathInType(QualifiedPathInType {
                         type_: qualified_path_type,
@@ -4460,23 +4461,24 @@ impl Parse {
             }
             // array or slice
             T!["{{"] => {
-                let span_double_brace_open = token.span;
+                let t_double_brace_open = token.clone();
                 let type_ = s.parse_type()?;
                 let token = s.current();
                 match &token.code {
                     T![:] => {
-                        let span_semicolon = token.span;
+                        let mut t_semicolon = token.clone();
+                        t_semicolon.code = T![;];
                         s.plusplus();
                         let expr = s.parse_expr()?;
-                        let span_double_brace_close = s.current().span;
+                        let t_double_brace_close = s.current().clone();
                         s.expect(T!["}}"])?;
                         let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Array(
                             TypeArray {
                                 type_,
                                 expr,
-                                span_double_brace_open,
-                                span_double_brace_close,
-                                span_semicolon,
+                                t_double_brace_open,
+                                t_double_brace_close,
+                                t_semicolon,
                             },
                         )));
                         return Ok(payload);
@@ -4486,8 +4488,8 @@ impl Parse {
                         let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Slice(
                             TypeSlice {
                                 type_,
-                                span_double_brace_open,
-                                span_double_brace_close: token.span,
+                                t_double_brace_open,
+                                t_double_brace_close: token.clone(),
                             },
                         )));
                         return Ok(payload);
@@ -4501,8 +4503,7 @@ impl Parse {
             }
             // reference
             T![&] | T![&&] => {
-                let span_ref = token.span;
-                let double_ref = matches!(&token.code, T![&&]);
+                let t_ref = token.clone();
 
                 let mut lifetime = None;
                 let token = s.current();
@@ -4512,71 +4513,44 @@ impl Parse {
                     });
                     s.plusplus();
                 }
-                let mut mut_ = false;
-                let mut span_mut = None;
+                let mut t_mut = None;
                 let token = s.current();
                 if matches!(&token.code, T![mut]) {
-                    mut_ = true;
-                    span_mut = Some(token.span);
+                    t_mut = Some(token.clone());
                     s.plusplus();
                 }
                 let type_ = s.parse_type()?;
-                if let TypePayload::TypeNoBounds(t) = type_.payload {
-                    let no_bounds = Box::new(TypeNoBounds::Reference(TypeReference {
-                        lifetime,
-                        mut_,
-                        type_no_bounds: t,
-                        span_ref,
-                        span_mut,
-                    }));
-                    if double_ref {
-                        let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Reference(
-                            TypeReference {
-                                lifetime: None,
-                                mut_: false,
-                                type_no_bounds: no_bounds,
-                                span_ref,
-                                span_mut,
-                            },
-                        )));
-                        return Ok(payload);
-                    } else {
-                        let payload = TypePayload::TypeNoBounds(no_bounds);
-                        return Ok(payload);
-                    }
-                } else {
+                let TypePayload::TypeNoBounds(t) = type_.payload else {
                     return Err(s.panic(token, "expected TypeNoBounds"));
-                }
+                };
+
+                let no_bounds = Box::new(TypeNoBounds::Reference(TypeReference {
+                    lifetime,
+                    type_no_bounds: t,
+                    t_ref,
+                    t_mut,
+                }));
+                let payload = TypePayload::TypeNoBounds(no_bounds);
+                return Ok(payload);
             }
             // raw pointer
             T![*] => {
-                let span_pointer = token.span;
-                let mut mut_ = false;
+                let t_pointer = token.clone();
                 let token = s.current();
-                s.plusplus();
-                let span_mut;
-                match &token.code {
-                    T![const] => {
-                        span_mut = token.span;
-                    }
-                    T![mut] => {
-                        mut_ = true;
-                        span_mut = token.span;
-                    }
-                    _ => {
-                        return Err(
-                            s.panic(token, &format!("expected const or mut but got {:?}", token))
-                        );
-                    }
+                let t_mut_const = token.clone();
+                if !matches!(&token.code, T![const] | T![mut]) {
+                    return Err(
+                        s.panic(token, &format!("expected const or mut but got {:?}", token))
+                    );
                 }
+                s.plusplus();
                 let type_ = s.parse_type()?;
                 if let TypePayload::TypeNoBounds(t) = type_.payload {
                     let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::RawPointer(
                         TypeRawPointer {
-                            mut_,
                             type_no_bounds: t,
-                            span_pointer,
-                            span_mut,
+                            t_pointer,
+                            t_mut_const,
                         },
                     )));
                     return Ok(payload);
@@ -4587,7 +4561,7 @@ impl Parse {
             // never
             T![!] => {
                 let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Never(
-                    token.span,
+                    token.clone(),
                 )));
                 return Ok(payload);
             }
@@ -4596,16 +4570,20 @@ impl Parse {
                 let next_token = s.current();
                 if let TokenCode::Lifetime(_) = &next_token.code {
                     let bounds = s.parse_type_param_bounds()?;
-                    let payload = TypePayload::ImplTrait(bounds, token.span);
+                    let payload = TypePayload::ImplTrait(TypeImplTrait {
+                        bounds,
+                        t_impl: token.clone(),
+                    });
                     return Ok(payload);
                 }
+                let t_impl = token.clone();
                 let bound = s.parse_trait_bound()?;
                 let token = s.current();
                 if !matches!(token.code, T![+]) {
                     let payload = TypePayload::TypeNoBounds(Box::new(
                         TypeNoBounds::ImplTraitOneBound(TypeImplTraitOneBound {
                             bound,
-                            span_impl: token.span,
+                            t_impl,
                         }),
                     ));
                     return Ok(payload);
@@ -4616,7 +4594,10 @@ impl Parse {
                 bounds
                     .items
                     .insert(0, (type_bound, Some(token.clone())));
-                let payload = TypePayload::ImplTrait(bounds, token.span);
+                let payload = TypePayload::ImplTrait(TypeImplTrait {
+                    bounds,
+                    t_impl,
+                });
                 return Ok(payload);
             }
             // trait object or trait object one bound
@@ -4626,17 +4607,18 @@ impl Parse {
                     let bounds = s.parse_type_param_bounds()?;
                     let payload = TypePayload::TraitObject(TypeTraitObject {
                         bounds,
-                        span: token.span,
+                        t_dyn: token.clone(),
                     });
                     return Ok(payload);
                 }
+                let t_dyn = token.clone();
                 let bound = s.parse_trait_bound()?;
                 let token = s.current();
                 if !matches!(token.code, T![+]) {
                     let payload = TypePayload::TypeNoBounds(Box::new(
                         TypeNoBounds::TraitObjectOneBound(TypeTraitObjectOneBound {
                             bound,
-                            span_dyn: token.span,
+                            t_dyn,
                         }),
                     ));
                     return Ok(payload);
@@ -4649,18 +4631,19 @@ impl Parse {
                     .insert(0, (type_bound, Some(token.clone())));
                 let payload = TypePayload::TraitObject(TypeTraitObject {
                     bounds,
-                    span: token.span,
+                    t_dyn,
                 });
                 return Ok(payload);
             }
 
             // bare function
             T![for] => {
-                let mut lifetimes = s.parse_for_lifetimes()?;
-                lifetimes.t_for = token.clone();
-                let span_func = s.current().span;
+                s.minusminus();
+                let lifetimes = s.parse_for_lifetimes()?;
+                let token = s.current();
                 s.expect(T![func])?;
-                let mut f = s.parse_func_type(FuncType::Func(span_func))?;
+                let mut f = s.parse_func_type()?;
+                f.t_func = Some(token.clone());
                 f.for_lifetimes = Some(lifetimes);
                 let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::BareFunction(
                     Box::new(f),
@@ -4668,7 +4651,8 @@ impl Parse {
                 return Ok(payload);
             }
             T![fn] => {
-                let f = s.parse_func_type(FuncType::Func(token.span))?;
+                let mut f = s.parse_func_type()?;
+                f.t_func = Some(token.clone());
                 let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::BareFunction(
                     Box::new(f),
                 )));
@@ -4695,7 +4679,7 @@ impl Parse {
 
                 let mut path = SimplePath::default();
                 for item in tp.items {
-                    let result = SimplePathSegment::try_from(item.name);
+                    let result = SimplePathSegment::try_from(item);
                     if let Ok(a) = result {
                         path.items.push(a);
                     } else {
@@ -4716,11 +4700,10 @@ impl Parse {
     }
 
     // (params) (: Type)?
-    fn parse_func_type(&self, func_type: FuncType) -> ParseResult<TypeBareFunction> {
+    fn parse_func_type(&self) -> ParseResult<TypeBareFunction> {
         let s = self;
 
         let mut r = TypeBareFunction::default();
-        r.func_type = func_type;
 
         // qualifier
         let token = s.current();
@@ -4731,28 +4714,28 @@ impl Parse {
                 s.plusplus();
                 match &token.code {
                     T![unsafe] => {
-                        if r.qualifier.unsafe_ {
+                        if r.qualifier.t_unsafe.is_some() {
                             return Err(s.panic(token, "already set unsafe"));
                         }
-                        r.qualifier.unsafe_ = true;
-                        r.qualifier.span_unsafe = Some(token.span);
+                        r.qualifier.t_unsafe = Some(token.clone());
                     }
                     T![extern] => {
-                        if r.qualifier.extern_.is_some() {
+                        if r.qualifier.t_extern.is_some() {
                             return Err(s.panic(token, "already set extern"));
                         }
-                        r.qualifier.span_extern = Some(token.span);
-                        let token = s.current();
+                        let next_token = s.current();
                         if let TokenCode::Literal(Literal {
-                            payload: LiteralPayload::String(a),
+                            payload: LiteralPayload::String(_),
                             ..
-                        }) = &token.code
+                        }) = &next_token.code
                         {
-                            r.qualifier.span_abi = Some(token.span);
-                            r.qualifier.extern_ = Some(Some(a.clone()));
+                            r.qualifier.t_extern = Some((
+                                token.clone(),
+                                Some(next_token.clone()),
+                            ));
                             s.plusplus();
                         } else {
-                            r.qualifier.extern_ = Some(None);
+                            r.qualifier.t_extern = Some((token.clone(), None));
                         }
                     }
                     _ => {
@@ -4778,12 +4761,12 @@ impl Parse {
         }
 
         // params
-        r.span_paren_open = s.current().span;
+        r.t_paren_open = s.current().clone();
         s.expect(T!["("])?;
         while s.has_more() {
             let token = s.current();
             if matches!(&token.code, T![")"]) {
-                r.span_paren_close = token.span;
+                r.t_paren_close = token.clone();
                 s.plusplus();
                 break;
             }
@@ -4795,16 +4778,16 @@ impl Parse {
             if matches!(&token.code, T![...]) {
                 r.variadics = Some(MaybeNamedParamVariadics {
                     outer_attrs: param.outer_attrs,
-                    span: token.span,
+                    t_var: token.clone(),
                 });
                 s.plusplus();
-                r.span_paren_close = s.current().span;
+                r.t_paren_close = s.current().clone();
                 s.expect(T![")"])?;
                 break;
             }
 
             // optional param name
-            if let TokenCode::Identifier(identifier) = &token.code {
+            if let TokenCode::Identifier(_) = &token.code {
                 let next_token = s.nth(1);
 
                 let is_name = matches!(
@@ -4821,7 +4804,7 @@ impl Parse {
                 );
 
                 if is_name {
-                    param.name = Some(identifier.clone());
+                    param.name = Some(token.clone());
                     s.plusplus();
                 }
             }
@@ -4832,11 +4815,18 @@ impl Parse {
             s.plusplus();
             match &token.code {
                 T![")"] => {
-                    r.span_paren_close = token.span;
+                    r.t_paren_close = token.clone();
                     r.params.push(param);
                     break;
                 }
-                T![,] | T![;] => {
+                T![,] => {
+                    param.t_comma = Some(token.clone());
+                    r.params.push(param);
+                }
+                T![;] => {
+                    let mut t = token.clone();
+                    t.code = T![,];
+                    param.t_comma = Some(t);
                     r.params.push(param);
                 }
                 _ => {
@@ -4864,12 +4854,15 @@ impl Parse {
         let s = self;
 
         let mut r = QualifiedPathType::default();
+        r.t_square_open = s.current().clone();
+        s.plusplus();
         r.type_ = s.parse_type()?;
-        if matches!(&s.current().code, T![as]) {
+        let token = s.current();
+        if matches!(&token.code, T![as]) {
             s.plusplus();
-            r.type_path = Some(s.parse_type_path()?);
+            r.type_path = Some((token.clone(), s.parse_type_path()?));
         }
-        r.span_square_close = s.current().span;
+        r.t_square_close = s.current().clone();
         s.expect(T!["]"])?;
 
         Ok(r)
@@ -4895,16 +4888,16 @@ impl Parse {
         while s.has_more() {
             let token = s.current();
             if matches!(&token.code, T!["}"]) {
+                r.t_brace_close = token.clone();
                 s.plusplus();
                 break;
             }
 
             let w_item = if let TokenCode::Lifetime(_) = &token.code {
-                s.plusplus();
                 let bounds = s.parse_lifetime_bounds()?;
                 let item = WhereItemLifetime {
                     lifetime: Lifetime {
-                        name: token.clone(),
+                        name: bounds.lifetime,
                     },
                     lifetime_bounds: bounds.lifetime_bounds,
                 };
@@ -4912,9 +4905,7 @@ impl Parse {
             } else {
                 let mut item = WhereItemTypeBound::default();
                 if matches!(token.code, T![for]) {
-                    s.plusplus();
-                    let mut f = s.parse_for_lifetimes()?;
-                    f.t_for = token.clone();
+                    let f = s.parse_for_lifetimes()?;
                     item.for_lifetimes = Some(f);
                 }
                 item.type_ = s.parse_type()?;
@@ -4926,6 +4917,7 @@ impl Parse {
             match &token.code {
                 T!["}"] => {
                     r.items.push((w_item, None));
+                    r.t_brace_close = token.clone();
                     s.plusplus();
                     break;
                 }
@@ -4955,123 +4947,105 @@ impl Parse {
         let s = self;
         let mut r = TypePath::default();
 
-        let mut expect_name = true;
         while s.has_more() {
+            let a = s.parse_type_path_segment()?;
+            r.items.push(a);
+
             let token = s.current();
-            match &token.code {
-                T![super] | T![self] | T![Self] | T![crate] | TokenCode::Identifier(_) => {
-                    if !expect_name {
-                        break;
-                    }
-                    expect_name = false;
-                    match &token.code {
-                        T![super] => r.items.push(TypePathSegment {
-                            name: PathIdentSegment::Super(token.span),
-                            payload: None,
-                        }),
-                        T![self] => r.items.push(TypePathSegment {
-                            name: PathIdentSegment::SelfValue(token.span),
-                            payload: None,
-                        }),
-                        T![Self] => r.items.push(TypePathSegment {
-                            name: PathIdentSegment::SelfType(token.span),
-                            payload: None,
-                        }),
-                        T![crate] => r.items.push(TypePathSegment {
-                            name: PathIdentSegment::Crate(token.span),
-                            payload: None,
-                        }),
-                        TokenCode::Identifier(identifier) => r.items.push(TypePathSegment {
-                            name: PathIdentSegment::Identifier(identifier.clone()),
-                            payload: None,
-                        }),
-                        _ => {}
-                    }
-
-                    s.plusplus();
-                    let token = s.current();
-                    if matches!(&token.code, T!["("]) {
-                        // it's safe to call parse_func_type, because the next token is (, not [
-                        let f = s.parse_func_type(FuncType::Other)?;
-
-                        let mut a = TypePathFunc {
-                            inputs: Vec::new(),
-                            return_type: None,
-                            span_paren_open: token.span,
-                            span_paren_close: f.span_paren_close,
-                        };
-                        for param in f.params {
-                            a.inputs.push(param.type_);
-                        }
-                        a.return_type = f.return_type;
-                        let last = r.items.pop().unwrap();
-                        r.items.push(TypePathSegment {
-                            name: last.name,
-                            payload: Some(TypePathSegmentPayload::TypePathFunc(a)),
-                        });
-                    }
-                }
-                T![..] => {
-                    if expect_name {
-                        return Err(s.panic(&token, "expected name but got .."));
-                    }
-                    expect_name = true;
-                    s.plusplus();
-                }
-                T!["["] => {
-                    if expect_name {
-                        return Err(s.panic(&token, "expected name but got ["));
-                    }
-                    s.plusplus();
-                    let mut args = s.parse_generic_args()?;
-                    args.span_square_open = token.span;
-                    let last = r.items.pop().unwrap();
-                    r.items.push(TypePathSegment {
-                        name: last.name,
-                        payload: Some(TypePathSegmentPayload::GenericArgs(args)),
-                    });
-                    break;
-                }
-                _ => {
-                    break;
-                }
+            if !matches!(&token.code, T![..]) {
+                break;
             }
         }
 
         Ok(r)
     }
 
+    fn parse_type_path_segment(&self) -> ParseResult<TypePathSegment> {
+        let s = self;
+
+        let token = s.current();
+        let t_sep = if matches!(&token.code, T![..]) {
+            s.plusplus();
+            Some(token.clone())
+        } else {
+            None
+        };
+
+        let token = s.current();
+        if !matches!(&token.code,
+                T![super] | T![self] | T![Self] | T![crate] | TokenCode::Identifier(_)) {
+            return Err(s.panic(token, &format!("required path token but got {:?}", token)));
+        }
+        let name = PathIdentSegment { token: token.clone() };
+        s.plusplus();
+
+        let token = s.current();
+        if matches!(&token.code, T!["("]) {
+            // it's safe to call parse_func_type, because the next token is (, not [
+            let f = s.parse_func_type()?;
+
+            let mut a = TypePathFunc {
+                inputs: Vec::new(),
+                return_type: None,
+                t_paren_open: token.clone(),
+                t_paren_close: f.t_paren_close,
+            };
+            for param in f.params {
+                a.inputs.push((param.type_, param.t_comma));
+            }
+            a.return_type = f.return_type;
+            return Ok(TypePathSegment {
+                t_sep,
+                name,
+                payload: Some(TypePathSegmentPayload::TypePathFunc(a)),
+            });
+        }
+
+        if matches!(&token.code, T!["["]) {
+            let args = s.parse_generic_args()?;
+            return Ok(TypePathSegment {
+                t_sep,
+                name,
+                payload: Some(TypePathSegmentPayload::GenericArgs(args)),
+            });
+        }
+
+        return Ok(TypePathSegment {
+            t_sep,
+            name,
+            payload: None,
+        });
+    }
+
     fn parse_generic_args(&self) -> ParseResult<GenericArgs> {
         let s = self;
 
-        let mut expect_arg = true;
         let mut r = GenericArgs::default();
+        r.t_square_open = s.current().clone();
+        s.plusplus();
+
         while s.has_more() {
             let token = s.current();
-            match &token.code {
-                T![,] => {
-                    if expect_arg {
-                        return Err(s.panic(token, "expected arg but got ,"));
-                    }
-                    expect_arg = true;
-                    s.plusplus();
+            if matches!(&token.code, T!["]"]) {
+                if r.items.is_empty() {
+                    return Err(s.panic(token, "empty generic args"));
                 }
-                T!["]"] => {
-                    if r.items.is_empty() {
-                        return Err(s.panic(token, "empty generic args"));
-                    }
-                    r.span_square_close = token.span;
-                    s.plusplus();
-                    break;
-                }
-                _ => {
-                    if !expect_arg {
-                        return Err(s.panic(token, &format!("expected , or ] but got {:?}", token)));
-                    }
-                    expect_arg = false;
-                    r.items.push(parse_generic_arg(s)?);
-                }
+                r.t_square_close = token.clone();
+                s.plusplus();
+                break;
             }
+
+            let arg = parse_generic_arg(s)?;
+
+            let token = s.current();
+            let t_comma = if matches!(&token.code, T![,]) {
+                s.plusplus();
+                Some(token.clone())
+            } else {
+                None
+            };
+
+            r.items.push((arg, t_comma));
         }
 
         return Ok(r);
@@ -5099,8 +5073,8 @@ impl Parse {
                     if let TokenCode::Literal(literal) = &next_token.code {
                         s.plusplus();
                         GenericArg::Const(GenericArgsConst::MinusLiteralExpr(
+                            token.clone(),
                             ExprLiteral(literal.clone()),
-                            token.span,
                         ))
                     } else {
                         return Err(s.panic(
@@ -5109,27 +5083,34 @@ impl Parse {
                         ));
                     }
                 }
-                TokenCode::Identifier(identifier) => {
-                    let token = s.nth(1);
-                    if matches!(&token.code, T![=]) {
-                        s.inc(2);
-                        let type_ = s.parse_type()?;
-                        GenericArg::Binding(GenericArgsBinding {
-                            name: identifier.clone(),
-                            type_,
-                            span_eq: token.span,
-                        })
-                    } else if matches!(&token.code, T![super] | T![self] | T![Self] | T![crate])
-                        || matches!(&token.code, TokenCode::Identifier(_a))
-                    {
-                        s.plusplus();
-                        let bounds = s.parse_type_param_bounds()?;
-                        GenericArg::Bounds(GenericArgsBounds {
-                            name: identifier.clone(),
-                            bounds,
-                        })
+                TokenCode::Identifier(_) => {
+                    let mut type_ = s.parse_type()?;
+                    if let TypePayload::TypeNoBounds(a) = &mut type_.payload &&
+                            let TypeNoBounds::TypePath(b) = a.as_mut() &&
+                            b.items.len() == 1 {
+
+                        let token = s.current();
+                        if matches!(&token.code, T![=]) {
+                            s.plusplus();
+                            let path_seg = mem::take(&mut b.items[0]);
+                            let t_eq = token.clone();
+                            let type_ = s.parse_type()?;
+                            GenericArg::Binding(GenericArgsBinding {
+                                path_seg,
+                                type_,
+                                t_eq,
+                            })
+                        } else if matches!(&token.code, T![,] | T!["]"]){
+                            GenericArg::Type(type_)
+                        } else {
+                            let path_seg = mem::take(&mut b.items[0]);
+                            let bounds = s.parse_type_param_bounds()?;
+                            GenericArg::Bounds(GenericArgsBounds {
+                                path_seg,
+                                bounds,
+                            })
+                        }
                     } else {
-                        let type_ = s.parse_type()?;
                         GenericArg::Type(type_)
                     }
                 }
@@ -5146,37 +5127,22 @@ impl Parse {
 
         let mut r: Vec<PathExprSegment> = Vec::new();
 
-        let mut expect_name = true;
         while s.has_more() {
             let token = s.current();
-            match &token.code {
-                T![super]
-                | T![self]
-                | T![Self]
-                | T![crate]
-                | T!["["]
-                | TokenCode::Identifier(_) => {
-                    if !expect_name {
-                        return Err(
-                            s.panic(&token, &format!("not expected name but got {:?}", token))
-                        );
-                    }
-                    expect_name = false;
-                    r.push(s.parse_path_expr_segment()?);
-                }
-                T![..] => {
-                    if expect_name {
-                        return Err(s.panic(&token, "expected name but got .."));
-                    }
-                    expect_name = true;
-                    s.plusplus();
-                }
-                _ => {
-                    if expect_name {
-                        return Err(s.panic(&token, &format!("expected name but got {:?}", token)));
-                    }
-                    break;
-                }
+            let t_sep = if matches!(&token.code, T![..]) {
+                s.plusplus();
+                Some(token.clone())
+            } else {
+                None
+            };
+
+            let mut item = s.parse_path_expr_segment()?;
+            item.t_sep = t_sep;
+            r.push(item);
+
+            let token = s.current();
+            if !matches!(&token.code, T![..]) {
+                break;
             }
         }
 
@@ -5190,36 +5156,20 @@ impl Parse {
 
         let token = s.current();
         s.plusplus();
-        match &token.code {
-            T![super] => {
-                r.name = PathIdentSegment::Super(token.span);
-            }
-            T![self] => {
-                r.name = PathIdentSegment::SelfValue(token.span);
-            }
-            T![Self] => {
-                r.name = PathIdentSegment::SelfType(token.span);
-            }
-            T![crate] => {
-                r.name = PathIdentSegment::Crate(token.span);
-            }
-            TokenCode::Identifier(identifier) => {
-                r.name = PathIdentSegment::Identifier(identifier.clone());
-            }
-            _ => {
-                return Err(s.panic(
-                    token,
-                    &format!("illegal token {:?} in path_expr_segment", token),
-                ));
-            }
+        if !matches!(&token.code,
+                T![super] | T![self] | T![Self] | T![crate] | TokenCode::Identifier(_)) {
+            return Err(s.panic(
+                token,
+                &format!("illegal token {:?} in path_expr_segment", token),
+            ));
         }
+        r.name = PathIdentSegment { token: token.clone() };
 
         // possible generics
         let token = s.current();
         if matches!(&token.code, T!["["]) {
-            s.plusplus();
             r.generic_args = s.parse_generic_args()?;
-            r.generic_args.span_square_open = token.span;
+            r.generic_args.need_colons = true;
         }
 
         Ok(r)
@@ -5701,9 +5651,8 @@ impl Parse {
 
             // qualified path in expression
             T!["["] => {
-                let mut type_ = s.parse_qualifyed_path_type()?;
-                type_.span_square_open = token.span;
-                s.expect(T![..])?;
+                s.minusminus();
+                let type_ = s.parse_qualifyed_path_type()?;
                 let items = s.parse_path_expr_segments()?;
                 return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Path(
                     PatternPath::QualifiedPath(QualifiedPathInExpr { type_, items }),
@@ -5744,7 +5693,7 @@ impl Parse {
                                     s.panic(token, "macro call can't contain generic params")
                                 );
                             }
-                            let result = SimplePathSegment::try_from(item.name);
+                            let result = SimplePathSegment::try_from(item);
                             if let Ok(a) = result {
                                 path.items.push(a);
                             } else {

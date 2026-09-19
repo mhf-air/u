@@ -655,7 +655,13 @@ impl ToLang for Func {
 
         // body
         if let Some(body) = &s.body {
-            body.t_brace_open.to_rust(p);
+            if let Some(where_) = &s.where_ {
+                where_.t_brace_close.to_rs_before(p);
+                body.t_brace_open.to_rs_one(p);
+            } else {
+                body.t_brace_open.to_rust(p);
+            }
+
             body.inner_attrs.to_rust(p);
             if s.qualifier.t_no_s.is_none() && s.self_param.is_some() && !body.stmts.is_empty() {
                 let line_paren = body.t_brace_open.span.line;
@@ -701,9 +707,9 @@ impl ToLang for SelfParam {
             SelfParamPayload::Type(a) => {
                 if let Some(t) = &a.t_mut {
                     t.to_rust(p);
-                    p.push_raw(" self:");
+                    p.push_raw(" self: ");
                 } else {
-                    p.push_raw("self:");
+                    p.push_raw("self: ");
                 }
                 a.typ.to_rust(p);
             }
@@ -795,14 +801,20 @@ impl ToLang for TypeAlias {
             generics.to_rust(p);
         }
         if !s.bounds.items.is_empty() {
-            p.push_raw(": ");
+            p.push_raw(":");
             s.bounds.to_rust(p);
         }
         if let Some(where_) = &s.where_ {
             where_.to_rust(p);
         }
         if let Some((t_eq, type_, where_)) = &s.rhs {
-            t_eq.to_rust(p);
+            if let Some(where_) = &s.where_ {
+                where_.t_brace_close.to_rs_before(p);
+                t_eq.to_rs_one(p);
+            } else {
+                t_eq.to_rust(p);
+            }
+
             type_.to_rust(p);
             if let Some(where_) = &where_ {
                 where_.to_rust(p);
@@ -843,7 +855,12 @@ impl ToLang for Struct {
                         where_.to_rust(p);
                     }
                     if let Some(t) = &s.t_brace_open {
-                        t.to_rust(p);
+                        if let Some(where_) = &s.where_ {
+                            where_.t_brace_close.to_rs_before(p);
+                            t.to_rs_one(p);
+                        } else {
+                            t.to_rust(p);
+                        }
                     }
                     for it in a {
                         it.to_rust(p);
@@ -948,9 +965,12 @@ impl ToLang for Enum {
         }
         if let Some(where_) = &s.where_ {
             where_.to_rust(p);
+            where_.t_brace_close.to_rs_before(p);
+            s.t_brace_open.to_rs_one(p);
+        } else {
+            s.t_brace_open.to_rust(p);
         }
 
-        s.t_brace_open.to_rust(p);
         for it in &s.items {
             it.to_rust(p);
         }
@@ -1046,9 +1066,12 @@ impl ToLang for Union {
 
         if let Some(where_) = &s.where_ {
             where_.to_rust(p);
+            where_.t_brace_close.to_rs_before(p);
+            s.t_brace_open.to_rs_one(p);
+        } else {
+            s.t_brace_open.to_rust(p);
         }
 
-        s.t_brace_open.to_rust(p);
         for it in &s.fields {
             it.to_rust(p);
         }
@@ -1149,14 +1172,17 @@ impl ToLang for Trait {
             generics.to_rust(p);
         }
         if !s.bounds.items.is_empty() {
-            p.push_raw(": ");
+            p.push_raw(":");
             s.bounds.to_rust(p);
         }
         if let Some(where_) = &s.where_ {
             where_.to_rust(p);
+            where_.t_brace_close.to_rs_before(p);
+            s.t_brace_open.to_rs_one(p);
+        } else {
+            s.t_brace_open.to_rust(p);
         }
 
-        s.t_brace_open.to_rust(p);
         s.inner_attrs.to_rust(p);
         for it in &s.items {
             it.to_rust(p);
@@ -1254,9 +1280,12 @@ impl ToLang for Impl {
 
         if let Some(where_) = &s.where_ {
             where_.to_rust(p);
+            where_.t_brace_close.to_rs_before(p);
+            s.t_brace_open.to_rs_one(p);
+        } else {
+            s.t_brace_open.to_rust(p);
         }
 
-        s.t_brace_open.to_rust(p);
         s.inner_attrs.to_rust(p);
         if matches!(&s.payload, ImplPayload::Static) {
             p.in_impl_static = true;
@@ -1657,6 +1686,7 @@ pub struct Where {
     pub items: Vec<(WhereItem, Option<Token>)>,
 
     pub t_where: Token,
+    pub t_brace_close: Token,
 }
 impl ToLang for Where {
     fn to_rust(&self, p: &mut LangFormatter) {
@@ -1823,76 +1853,75 @@ impl ToLang for SimplePath {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw("::");
-            } else if let SimplePathSegment::Identifier(a) = item && a.id == "-" {
-                continue;
-            }
-            p.push_rust(item);
+        if s.items.is_empty() {
+            return;
+        }
+
+        // -..crate-abc..Abc turns into ::crate_abc::Abc
+        let first = s.items.first().unwrap();
+        if let TokenCode::Identifier(a) = &first.token.code && a.id == "-" {
+            first.token.to_rs_before(p);
+        } else {
+            first.to_rust(p);
+        }
+
+        for it in &s.items[1..] {
+            it.to_rust(p);
         }
     }
 }
 #[derive(Debug)]
-pub enum SimplePathSegment {
-    Identifier(Identifier),
-    Super(Span),
-    SelfValue(Span),
-    Crate(Span),
+pub struct SimplePathSegment {
+    pub t_sep: Option<Token>,
+    pub token: Token,
 }
 impl ToLang for SimplePathSegment {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        match s {
-            SimplePathSegment::Identifier(a) => p.push_rust(a),
-            SimplePathSegment::Super(span) => p.push_s("super", *span),
-            SimplePathSegment::SelfValue(span) => p.push_s("self", *span),
-            SimplePathSegment::Crate(span) => p.push_s("crate", *span),
+        if let Some(t) = &s.t_sep {
+            t.to_rust(p);
         }
+        s.token.to_rust(p);
     }
 }
 
-impl TryFrom<PathIdentSegment> for SimplePathSegment {
+impl TryFrom<PathExprSegment> for SimplePathSegment {
     type Error = &'static str;
 
-    fn try_from(p: PathIdentSegment) -> Result<Self, Self::Error> {
-        match p {
-            PathIdentSegment::Identifier(identifier) => {
-                Ok(SimplePathSegment::Identifier(identifier))
-            }
-            PathIdentSegment::Super(span) => Ok(SimplePathSegment::Super(span)),
-            PathIdentSegment::SelfValue(span) => Ok(SimplePathSegment::SelfValue(span)),
-            PathIdentSegment::Crate(span) => Ok(SimplePathSegment::Crate(span)),
-            PathIdentSegment::SelfType(_) => Err("illegal simple path segment"),
+    fn try_from(p: PathExprSegment) -> Result<Self, Self::Error> {
+        if matches!(p.name.token.code, T![Self]) {
+            return Err("illegal simple path segment");
         }
+        Ok(SimplePathSegment{
+            t_sep: p.t_sep,
+            token: p.name.token,
+        })
+    }
+}
+impl TryFrom<TypePathSegment> for SimplePathSegment {
+    type Error = &'static str;
+
+    fn try_from(p: TypePathSegment) -> Result<Self, Self::Error> {
+        if matches!(p.name.token.code, T![Self]) {
+            return Err("illegal simple path segment");
+        }
+        Ok(SimplePathSegment{
+            t_sep: p.t_sep,
+            token: p.name.token,
+        })
     }
 }
 
-#[derive(Debug)]
-pub enum PathIdentSegment {
-    Identifier(Identifier),
-    Super(Span),
-    SelfValue(Span),
-    SelfType(Span),
-    Crate(Span),
-}
-impl Default for PathIdentSegment {
-    fn default() -> Self {
-        PathIdentSegment::Super(Span::default())
-    }
+#[derive(Debug, Default)]
+pub struct PathIdentSegment {
+    pub token: Token,
 }
 impl ToLang for PathIdentSegment {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        match s {
-            PathIdentSegment::Identifier(a) => p.push_rust(a),
-            PathIdentSegment::Super(span) => p.push_s("super", *span),
-            PathIdentSegment::SelfValue(span) => p.push_s("self", *span),
-            PathIdentSegment::SelfType(span) => p.push_s("Self", *span),
-            PathIdentSegment::Crate(span) => p.push_s("crate", *span),
-        }
+        s.token.to_rust(p);
     }
 }
 
@@ -1904,14 +1933,20 @@ impl ToLang for PathInExpr {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw("::");
-            } else if let PathIdentSegment::Identifier(a) = &item.name && a.id == "-" {
-                // -..crate-abc..Abc turns into ::crate_abc::Abc
-                continue;
-            }
-            p.push_rust(item);
+        if s.items.is_empty() {
+            return;
+        }
+
+        // -..crate-abc..Abc turns into ::crate_abc::Abc
+        let first = s.items.first().unwrap();
+        if let TokenCode::Identifier(a) = &first.name.token.code && a.id == "-" {
+            first.name.token.to_rs_before(p);
+        } else {
+            first.to_rust(p);
+        }
+
+        for it in &s.items[1..] {
+            it.to_rust(p);
         }
     }
 }
@@ -1932,6 +1967,7 @@ so don't consider such cases for now.
 */
 #[derive(Debug, Default)]
 pub struct PathExprSegment {
+    pub t_sep: Option<Token>,
     pub name: PathIdentSegment,
     pub generic_args: GenericArgs,
 }
@@ -1939,7 +1975,10 @@ impl ToLang for PathExprSegment {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.name);
+        if let Some(t) = &s.t_sep {
+            t.to_rust(p);
+        }
+        s.name.to_rust(p);
         if !s.generic_args.items.is_empty() {
             p.push_raw("::");
             p.push_rust(&s.generic_args);
@@ -1972,32 +2011,31 @@ impl ToLang for QualifiedPathInType {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.type_);
-        for item in &s.items {
-            p.push_raw("::");
-            p.push_rust(item);
+        s.type_.to_rust(p);
+        for it in &s.items {
+            it.to_rust(p);
         }
     }
 }
 #[derive(Debug, Default)]
 pub struct QualifiedPathType {
     pub type_: Type,
-    pub type_path: Option<TypePath>,
+    pub type_path: Option<(Token, TypePath)>,
 
-    pub span_square_open: Span,
-    pub span_square_close: Span,
+    pub t_square_open: Token,
+    pub t_square_close: Token,
 }
 impl ToLang for QualifiedPathType {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("<", s.span_square_open);
-        p.push_rust(&s.type_);
-        if let Some(type_path) = &s.type_path {
-            p.push_raw(" as ");
-            p.push_rust(type_path);
+        s.t_square_open.to_rust(p);
+        s.type_.to_rust(p);
+        if let Some((t, type_path)) = &s.type_path {
+            t.to_rust(p);
+            type_path.to_rust(p);
         }
-        p.push_s(">", s.span_square_close);
+        s.t_square_close.to_rust(p);
     }
 }
 
@@ -2009,19 +2047,26 @@ impl ToLang for TypePath {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw("::");
-            } else if let PathIdentSegment::Identifier(a) = &item.name && a.id == "-" {
-                // -..crate-abc..Abc turns into ::crate_abc::Abc
-                continue;
-            }
-            p.push_rust(item);
+        if s.items.is_empty() {
+            return;
+        }
+
+        // -..crate-abc..Abc turns into ::crate_abc::Abc
+        let first = s.items.first().unwrap();
+        if let TokenCode::Identifier(a) = &first.name.token.code && a.id == "-" {
+            first.name.token.to_rs_before(p);
+        } else {
+            first.to_rust(p);
+        }
+
+        for it in &s.items[1..] {
+            it.to_rust(p);
         }
     }
 }
 #[derive(Debug, Default)]
 pub struct TypePathSegment {
+    pub t_sep: Option<Token>,
     pub name: PathIdentSegment,
     pub payload: Option<TypePathSegmentPayload>,
 }
@@ -2029,11 +2074,14 @@ impl ToLang for TypePathSegment {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.name);
+        if let Some(t) = &s.t_sep {
+            t.to_rust(p);
+        }
+        s.name.to_rust(p);
         if let Some(a) = &s.payload {
             match a {
-                TypePathSegmentPayload::GenericArgs(a) => p.push_rust(a),
-                TypePathSegmentPayload::TypePathFunc(a) => p.push_rust(a),
+                TypePathSegmentPayload::GenericArgs(a) => a.to_rust(p),
+                TypePathSegmentPayload::TypePathFunc(a) => a.to_rust(p),
             }
         }
     }
@@ -2051,51 +2099,55 @@ impl Default for TypePathSegmentPayload {
 
 #[derive(Debug)]
 pub struct TypePathFunc {
-    pub inputs: Vec<Type>,
+    pub inputs: Vec<(Type, Option<Token>)>,
     pub return_type: Option<Type>,
 
-    pub span_paren_open: Span,
-    pub span_paren_close: Span,
+    pub t_paren_open: Token,
+    pub t_paren_close: Token,
 }
 impl ToLang for TypePathFunc {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("(", s.span_paren_open);
-        for (i, item) in s.inputs.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
+        s.t_paren_open.to_rust(p);
+        for (it, t) in &s.inputs {
+            it.to_rust(p);
+            if let Some(t) = t {
+                t.to_rust(p);
             }
-            p.push_rust(item);
         }
-        p.push_s(")", s.span_paren_close);
+        s.t_paren_close.to_rust(p);
 
         if let Some(return_type) = &s.return_type {
-            p.push_raw(" -> ");
-            p.push_rust(return_type);
+            p.push_raw(" ->");
+            return_type.to_rust(p);
         }
     }
 }
 
 #[derive(Debug, Default)]
 pub struct GenericArgs {
-    pub items: Vec<GenericArg>,
+    pub items: Vec<(GenericArg, Option<Token>)>,
+    pub need_colons: bool,
 
-    pub span_square_open: Span,
-    pub span_square_close: Span,
+    pub t_square_open: Token,
+    pub t_square_close: Token,
 }
 impl ToLang for GenericArgs {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("<", s.span_square_open);
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
-            }
-            p.push_rust(item);
+        if s.need_colons {
+            p.push_raw("::");
         }
-        p.push_s(">", s.span_square_close);
+        s.t_square_open.to_rust(p);
+        for (it, t) in &s.items {
+            it.to_rust(p);
+            if let Some(t) = t {
+                t.to_rust(p);
+            }
+        }
+        s.t_square_close.to_rust(p);
     }
 }
 
@@ -2112,20 +2164,20 @@ impl ToLang for GenericArg {
         let s = self;
 
         match s {
-            GenericArg::Lifetime(a) => p.push_rust(a),
-            GenericArg::Type(a) => p.push_rust(a),
-            GenericArg::Const(a) => p.push_rust(a),
+            GenericArg::Lifetime(a) => a.to_rust(p),
+            GenericArg::Type(a) => a.to_rust(p),
+            GenericArg::Const(a) => a.to_rust(p),
             GenericArg::Binding(a) => {
-                p.push_rust(&a.name);
-                p.push_raw(" ");
-                p.push_s("=", a.span_eq);
-                p.push_raw(" ");
-                p.push_rust(&a.type_);
+                a.path_seg.to_rust(p);
+                a.t_eq.to_rust(p);
+                a.type_.to_rust(p);
             }
             GenericArg::Bounds(a) => {
-                p.push_rust(&a.name);
-                p.push_raw(": ");
-                p.push_rust(&a.bounds);
+                a.path_seg.to_rust(p);
+                if !a.bounds.items.is_empty() {
+                    p.push_raw(":");
+                    a.bounds.to_rust(p);
+                }
             }
         }
     }
@@ -2134,32 +2186,31 @@ impl ToLang for GenericArg {
 pub enum GenericArgsConst {
     BlockExpr(BlockExpr),
     LiteralExpr(ExprLiteral),
-    MinusLiteralExpr(ExprLiteral, Span),
+    MinusLiteralExpr(Token, ExprLiteral),
 }
 impl ToLang for GenericArgsConst {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
         match s {
-            GenericArgsConst::BlockExpr(a) => p.push_rust(a),
-            GenericArgsConst::LiteralExpr(a) => p.push_rust(a),
-            GenericArgsConst::MinusLiteralExpr(a, _) => {
-                p.push_raw("-");
-                p.push_rust(a);
+            GenericArgsConst::BlockExpr(a) => a.to_rust(p),
+            GenericArgsConst::LiteralExpr(a) => a.to_rust(p),
+            GenericArgsConst::MinusLiteralExpr(t, a) => {
+                t.to_rust(p);
+                a.to_rust(p);
             }
         }
     }
 }
 #[derive(Debug)]
 pub struct GenericArgsBinding {
-    pub name: Identifier,
+    pub path_seg: TypePathSegment,
     pub type_: Type,
-
-    pub span_eq: Span,
+    pub t_eq: Token,
 }
 #[derive(Debug)]
 pub struct GenericArgsBounds {
-    pub name: Identifier,
+    pub path_seg: TypePathSegment,
     pub bounds: TypeParamBounds,
 }
 
@@ -2551,18 +2602,18 @@ pub struct Type {
 impl ToLang for Type {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
-        p.push_rust(&s.payload);
+        s.payload.to_rust(p);
     }
 }
 #[derive(Debug)]
 pub enum TypePayload {
     TypeNoBounds(Box<TypeNoBounds>),
-    ImplTrait(TypeParamBounds, Span),
+    ImplTrait(TypeImplTrait),
     TraitObject(TypeTraitObject),
 }
 impl Default for TypePayload {
     fn default() -> Self {
-        TypePayload::ImplTrait(TypeParamBounds::default(), Span::default())
+        TypePayload::TraitObject(TypeTraitObject::default())
     }
 }
 impl ToLang for TypePayload {
@@ -2570,16 +2621,14 @@ impl ToLang for TypePayload {
         let s = self;
 
         match s {
-            TypePayload::TypeNoBounds(a) => p.push_rust(a.as_ref()),
-            TypePayload::ImplTrait(a, span) => {
-                p.push_s("impl", *span);
-                p.push_raw(" ");
-                p.push_rust(a);
+            TypePayload::TypeNoBounds(a) => a.to_rust(p),
+            TypePayload::ImplTrait(a) => {
+                a.t_impl.to_rust(p);
+                a.bounds.to_rust(p);
             }
             TypePayload::TraitObject(a) => {
-                p.push_s("dyn", a.span);
-                p.push_raw(" ");
-                p.push_rust(&a.bounds);
+                a.t_dyn.to_rust(p);
+                a.bounds.to_rust(p);
             }
         }
     }
@@ -2587,23 +2636,23 @@ impl ToLang for TypePayload {
 
 #[derive(Debug)]
 pub enum TypeNoBounds {
-    Parenthesized(TypeParenthesized),                     // ( Type )
-    ImplTraitOneBound(TypeImplTraitOneBound),     // impl TraitBound
-    TraitObjectOneBound(TypeTraitObjectOneBound), // dyn TraitBound
-    Tuple(TypeTuple),                                     // () | ( (Type ,)+ Type? )
-    RawPointer(TypeRawPointer),                           // *(mut | const) TypeNoBounds
-    Reference(TypeReference),                             // & Lifetime? mut? TypeNoBounds
-    Array(TypeArray),                                     // {{ Type ; Expression }}
-    Slice(TypeSlice),                                     // {{ Type }}
-    TypePath(TypePath),                                   // TypePathSegment(..TypePathSegment)*
-    QualifiedPathInType(QualifiedPathInType), // [ Type.(TypePath)? ]..(TypePathSegment)+
-    Never(Span),                              // !
-    BareFunction(Box<TypeBareFunction>),      // ForLifetimes? Qualifers func(Param?) ReturnType
-    MacroCall(MacroCall),                     // SimplePath,, DelimTokenTree
+    Parenthesized(TypeParenthesized),               // ( Type )
+    ImplTraitOneBound(TypeImplTraitOneBound),       // impl TraitBound
+    TraitObjectOneBound(TypeTraitObjectOneBound),   // dyn TraitBound
+    Tuple(TypeTuple),                               // () | ( (Type ,)+ Type? )
+    RawPointer(TypeRawPointer),                     // *(mut | const) TypeNoBounds
+    Reference(TypeReference),                       // [&|&&] Lifetime? mut? TypeNoBounds
+    Array(TypeArray),                               // {{ Type ; Expression }}
+    Slice(TypeSlice),                               // {{ Type }}
+    TypePath(TypePath),                             // TypePathSegment(..TypePathSegment)*
+    QualifiedPathInType(QualifiedPathInType),       // [ Type.(TypePath)? ]..(TypePathSegment)+
+    Never(Token),                                   // !
+    BareFunction(Box<TypeBareFunction>),            // ForLifetimes? Qualifers func(Param?) ReturnType
+    MacroCall(MacroCall),                           // SimplePath,, DelimTokenTree
 }
 impl Default for TypeNoBounds {
     fn default() -> Self {
-        TypeNoBounds::Never(Span::default())
+        TypeNoBounds::Never(Token::default())
     }
 }
 impl ToLang for TypeNoBounds {
@@ -2612,71 +2661,58 @@ impl ToLang for TypeNoBounds {
 
         match s {
             TypeNoBounds::Parenthesized(a) => {
-                p.push_s("(", a.span_paren_open);
-                p.push_rust(&a.type_);
-                p.push_s(")", a.span_paren_close);
+                a.t_paren_open.to_rust(p);
+                a.type_.to_rust(p);
+                a.t_paren_close.to_rust(p);
             }
             TypeNoBounds::ImplTraitOneBound(a) => {
-                p.push_s("impl", a.span_impl);
-                p.push_raw(" ");
-                p.push_rust(&a.bound);
+                a.t_impl.to_rust(p);
+                a.bound.to_rust(p);
             }
             TypeNoBounds::TraitObjectOneBound(a) => {
-                p.push_s("dyn", a.span_dyn);
-                p.push_raw(" ");
-                p.push_rust(&a.bound);
+                a.t_dyn.to_rust(p);
+                a.bound.to_rust(p);
             }
             TypeNoBounds::Tuple(a) => {
-                p.push_s("(", a.span_paren_open);
-                for (i, item) in a.items.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(", ");
+                a.t_paren_open.to_rust(p);
+                for (it, t) in &a.items {
+                    it.to_rust(p);
+                    if let Some(t) = t {
+                        t.to_rust(p);
                     }
-                    p.push_rust(item);
                 }
-                if a.items.len() == 1 {
-                    p.push_raw(", ");
-                }
-                p.push_s(")", a.span_paren_close);
+                a.t_paren_close.to_rust(p);
             }
             TypeNoBounds::RawPointer(a) => {
-                p.push_s("*", a.span_pointer);
-                if a.mut_ {
-                    p.push_s("mut", a.span_mut);
-                } else {
-                    p.push_s("const", a.span_mut);
-                }
-                p.push_raw(" ");
-                p.push_rust(&*a.type_no_bounds);
+                a.t_pointer.to_rust(p);
+                a.t_mut_const.to_rust(p);
+                a.type_no_bounds.to_rust(p);
             }
             TypeNoBounds::Reference(a) => {
-                p.push_s("&", a.span_ref);
-                if let Some(lifetime) = &a.lifetime {
-                    p.push_rust(lifetime);
-                    p.push_raw(" ");
+                a.t_ref.to_rust(p);
+                if let Some(a) = &a.lifetime {
+                    a.to_rust(p);
                 }
-                if a.mut_ {
-                    p.push_s("mut", a.span_mut.unwrap());
-                    p.push_raw(" ");
+                if let Some(t) = &a.t_mut {
+                    t.to_rust(p);
                 }
-                p.push_rust(&*a.type_no_bounds);
+                a.type_no_bounds.to_rust(p);
             }
             TypeNoBounds::Array(a) => {
-                p.push_s("[", a.span_double_brace_open);
-                p.push_rust(&a.type_);
-                p.push_s(";", a.span_semicolon);
-                p.push_raw(" ");
-                p.push_rust(&a.expr);
-                p.push_s("]", a.span_double_brace_close);
+                a.t_double_brace_open.to_rust(p);
+                a.type_.to_rust(p);
+                a.t_semicolon.to_rust(p);
+                a.expr.to_rust(p);
+                a.t_double_brace_close.to_rust(p);
             }
             TypeNoBounds::Slice(a) => {
-                p.push_s("[", a.span_double_brace_open);
-                p.push_rust(&a.type_);
-                p.push_s("]", a.span_double_brace_close);
+                a.t_double_brace_open.to_rust(p);
+                a.type_.to_rust(p);
+                a.t_double_brace_close.to_rust(p);
             }
             TypeNoBounds::TypePath(a) => p.push_rust(a),
             TypeNoBounds::QualifiedPathInType(a) => p.push_rust(a),
-            TypeNoBounds::Never(span) => p.push_s("!", *span),
+            TypeNoBounds::Never(t) => t.to_rust(p),
             TypeNoBounds::BareFunction(a) => p.push_rust(a.as_ref()),
             TypeNoBounds::MacroCall(a) => p.push_rust(a),
         }
@@ -2684,59 +2720,64 @@ impl ToLang for TypeNoBounds {
 }
 
 #[derive(Debug, Default)]
+pub struct TypeImplTrait {
+    pub bounds: TypeParamBounds,
+
+    pub t_impl: Token,
+}
+
+#[derive(Debug, Default)]
 pub struct TypeTraitObject {
     pub bounds: TypeParamBounds,
 
-    pub span: Span,
+    pub t_dyn: Token,
 }
 
 #[derive(Debug)]
 pub struct TypeParenthesized {
     pub type_: Type,
 
-    pub span_paren_open: Span,
-    pub span_paren_close: Span,
+    pub t_paren_open: Token,
+    pub t_paren_close: Token,
 }
 
 #[derive(Debug)]
 pub struct TypeImplTraitOneBound {
     pub bound: TraitBound,
 
-    pub span_impl: Span,
+    pub t_impl: Token,
 }
 
 #[derive(Debug)]
 pub struct TypeTraitObjectOneBound {
     pub bound: TraitBound,
 
-    pub span_dyn: Span,
+    pub t_dyn: Token,
 }
 
 #[derive(Debug)]
 pub struct TypeTuple {
-    pub items: Vec<Type>,
+    pub items: Vec<(Type, Option<Token>)>,
 
-    pub span_paren_open: Span,
-    pub span_paren_close: Span,
+    pub t_paren_open: Token,
+    pub t_paren_close: Token,
 }
 
 #[derive(Debug)]
 pub struct TypeRawPointer {
-    pub mut_: bool,
     pub type_no_bounds: Box<TypeNoBounds>,
 
-    pub span_pointer: Span,
-    pub span_mut: Span,
+    pub t_pointer: Token,
+    pub t_mut_const: Token,
 }
 
 #[derive(Debug, Default)]
 pub struct TypeReference {
     pub lifetime: Option<Lifetime>,
-    pub mut_: bool,
     pub type_no_bounds: Box<TypeNoBounds>,
 
-    pub span_ref: Span,
-    pub span_mut: Option<Span>,
+    pub t_ref: Token,
+    pub t_mut: Option<Token>,
 }
 
 #[derive(Debug)]
@@ -2744,108 +2785,94 @@ pub struct TypeArray {
     pub type_: Type,
     pub expr: Expr,
 
-    pub span_double_brace_open: Span,
-    pub span_double_brace_close: Span,
-    pub span_semicolon: Span,
+    pub t_double_brace_open: Token,
+    pub t_double_brace_close: Token,
+    pub t_semicolon: Token,
 }
 
 #[derive(Debug)]
 pub struct TypeSlice {
     pub type_: Type,
 
-    pub span_double_brace_open: Span,
-    pub span_double_brace_close: Span,
+    pub t_double_brace_open: Token,
+    pub t_double_brace_close: Token,
 }
 
 #[derive(Debug, Default)]
 pub struct TypeBareFunction {
     pub for_lifetimes: Option<ForLifetimes>,
-    pub func_type: FuncType,
     pub qualifier: FuncTypeQualifier,
     pub params: Vec<MaybeNamedParam>,
     pub return_type: Option<Type>,
     pub variadics: Option<MaybeNamedParamVariadics>,
 
-    pub span_paren_open: Span,
-    pub span_paren_close: Span,
+    pub t_func: Option<Token>,
+    pub t_paren_open: Token,
+    pub t_paren_close: Token,
 }
 impl ToLang for TypeBareFunction {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
         if let Some(for_) = &s.for_lifetimes {
-            p.push_rust(for_);
+            for_.to_rust(p);
         }
 
-        if s.qualifier.unsafe_ {
-            p.push_s("unsafe", s.qualifier.span_unsafe.unwrap());
-            p.push_raw(" ");
+        if let Some(t) = &s.qualifier.t_unsafe {
+            t.to_rust(p);
         }
-        if let Some(extern_) = &s.qualifier.extern_ {
-            p.push_s("extern", s.qualifier.span_extern.unwrap());
-            p.push_raw(" ");
-            if let Some(abi) = extern_ {
-                abi.push_span(p, s.qualifier.span_abi.unwrap());
-                p.push_raw(" ");
+        if let Some((extern_, abi)) = &s.qualifier.t_extern {
+            extern_.to_rust(p);
+            if let Some(abi) = abi {
+                abi.to_rust(p);
             }
         }
 
-        match s.func_type {
-            FuncType::Func(span) => p.push_s("fn", span),
-            FuncType::Other => {}
+        if let Some(t) = &s.t_func {
+            t.to_rust(p);
         }
 
-        p.push_s("(", s.span_paren_open);
-        for (i, param) in s.params.iter().enumerate() {
-            p.push_rust(&param.outer_attrs);
-            if let Some(name) = &param.name {
-                p.push_rust(name);
+        s.t_paren_open.to_rust(p);
+        for it in &s.params {
+            it.outer_attrs.to_rust(p);
+            if let Some(name) = &it.name {
+                name.to_rust(p);
                 p.push_raw(": ");
             }
-            p.push_rust(&param.type_);
-            if i != s.params.len() - 1 {
-                p.push_raw(", ");
+            it.type_.to_rust(p);
+            if let Some(t) = &it.t_comma {
+                t.to_rust(p);
             }
         }
         if let Some(v) = &s.variadics {
-            p.push_raw(", ");
-            p.push_rust(&v.outer_attrs);
-            p.push_s("...", v.span);
+            v.outer_attrs.to_rust(p);
+            v.t_var.to_rust(p);
         }
-        p.push_s(")", s.span_paren_close);
+        s.t_paren_close.to_rust(p);
 
         if let Some(return_type) = &s.return_type {
-            p.push_raw(" -> ");
-            p.push_rust(return_type);
+            p.push_raw(" ->");
+            return_type.to_rust(p);
         }
     }
 }
 #[derive(Debug, Default)]
-pub enum FuncType {
-    #[default]
-    Other,
-    Func(Span),
-}
-#[derive(Debug, Default)]
 pub struct FuncTypeQualifier {
-    pub unsafe_: bool,
-    pub extern_: Option<Option<LiteralString>>,
-
-    pub span_unsafe: Option<Span>,
-    pub span_extern: Option<Span>,
-    pub span_abi: Option<Span>,
+    pub t_unsafe: Option<Token>,
+    pub t_extern: Option<(Token, Option<Token>)>,
 }
 #[derive(Debug, Default)]
 pub struct MaybeNamedParam {
     pub outer_attrs: Attrs,
-    pub name: Option<Identifier>,
+    pub name: Option<Token>,
     pub type_: Type,
+    pub t_comma: Option<Token>,
 }
 #[derive(Debug)]
 pub struct MaybeNamedParamVariadics {
     pub outer_attrs: Attrs,
 
-    pub span: Span,
+    pub t_var: Token,
 }
 
 // --------------------------------------------------------------------------------
