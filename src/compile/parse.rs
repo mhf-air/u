@@ -1665,17 +1665,13 @@ impl Parse {
             }
         }
 
-        let mut span_where = None;
         let token = s.current();
         match &token.code {
             T![;] => {
                 s.plusplus();
                 return Ok(r);
             }
-            T![where] => {
-                s.plusplus();
-                span_where = Some(token.span);
-            }
+            T![where] => {}
             T!["{"] => (),
             _ => {
                 if let TokenCode::Literal(lit) = &token.code &&
@@ -1685,30 +1681,22 @@ impl Parse {
                 }
                 // return type
                 r.return_type = Some(s.parse_type()?);
-                let token = s.current();
-                if matches!(&token.code, T![where]) {
-                    s.plusplus();
-                    span_where = Some(token.span);
-                }
             }
         }
 
         // where
-        if let Some(span) = span_where {
-            let mut w = s.parse_where()?;
-            w.span_where = span;
-            r.where_ = Some(w);
+        let token = s.current();
+        if matches!(&token.code, T![where]) {
+            r.where_ = Some(s.parse_where()?);
         }
 
         let token = s.current();
-        s.plusplus();
         match &token.code {
             T![;] => {
                 return Ok(r);
             }
             T!["{"] => {
                 // body
-                s.minusminus();
                 let mut a = s.parse_block_expr()?;
                 a.t_brace_open = token.clone();
                 r.body = Some(a);
@@ -1825,10 +1813,7 @@ impl Parse {
         // possible where clause
         let token = s.current();
         if matches!(&token.code, T![where]) {
-            s.plusplus();
-            let mut where_ = s.parse_where()?;
-            where_.span_where = token.span;
-            r.where_ = Some(where_);
+            r.where_ = Some(s.parse_where()?);
         }
 
         let token = s.current();
@@ -1852,10 +1837,7 @@ impl Parse {
             let mut type_where = None;
             let token = s.current();
             if matches!(&token.code, T![where]) {
-                s.plusplus();
-                let mut where_ = s.parse_where()?;
-                where_.span_where = token.span;
-                type_where = Some(where_);
+                type_where = Some(s.parse_where()?);
             }
             r.rhs = Some((t_eq, type_, type_where));
         }
@@ -1921,10 +1903,7 @@ impl Parse {
                     if has_where {
                         return Err(s.panic(token, "already has a where clause"));
                     }
-                    s.plusplus();
-                    let mut w = s.parse_where()?;
-                    w.span_where = token.span;
-                    r.where_ = Some(w);
+                    r.where_ = Some(s.parse_where()?);
                     has_where = true;
                 }
                 _ => {
@@ -2040,10 +2019,7 @@ impl Parse {
                     if has_where {
                         return Err(s.panic(token, "already has a where clause"));
                     }
-                    s.plusplus();
-                    let mut w = s.parse_where()?;
-                    w.span_where = token.span;
-                    r.where_ = Some(w);
+                    r.where_ = Some(s.parse_where()?);
                     has_where = true;
                 }
                 _ => {
@@ -2151,10 +2127,7 @@ impl Parse {
                     if has_where {
                         return Err(s.panic(token, "already has a where clause"));
                     }
-                    s.plusplus();
-                    let mut w = s.parse_where()?;
-                    w.span_where = token.span;
-                    r.where_ = Some(w);
+                    r.where_ = Some(s.parse_where()?);
                     has_where = true;
                 }
                 _ => {
@@ -2256,10 +2229,7 @@ impl Parse {
         // possible where clause
         let token = s.current();
         if matches!(&token.code, T![where]) {
-            s.plusplus();
-            let mut w = s.parse_where()?;
-            w.span_where = token.span;
-            r.where_ = Some(w);
+            r.where_ = Some(s.parse_where()?);
         }
 
         r.t_brace_open = s.current().clone();
@@ -2370,10 +2340,7 @@ impl Parse {
         // possible where clause
         let token = s.current();
         if matches!(&token.code, T![where]) {
-            s.plusplus();
-            let mut w = s.parse_where()?;
-            w.span_where = token.span;
-            r.where_ = Some(w);
+            r.where_ = Some(s.parse_where()?);
         }
 
         r.t_brace_open = s.current().clone();
@@ -4914,15 +4881,25 @@ impl Parse {
 
         let mut r = Where::default();
 
+        r.t_where = s.current().clone();
+        s.expect(T![where])?;
+
+        let span_b = s.current().span;
         s.expect(T!["{"])?;
+        let span_next = s.current().span;
+        // 'where {T Clone}'
+        if span_b.line == span_next.line && span_b.end_column + 1 == span_next.column {
+            return Err(s.panic(s.current(), "there must be whitespace after 'where {'"));
+        }
 
         while s.has_more() {
             let token = s.current();
-            if matches!(token.code, T!["}"]) {
+            if matches!(&token.code, T!["}"]) {
                 s.plusplus();
                 break;
             }
-            if let TokenCode::Lifetime(_) = &token.code {
+
+            let w_item = if let TokenCode::Lifetime(_) = &token.code {
                 s.plusplus();
                 let bounds = s.parse_lifetime_bounds()?;
                 let item = WhereItemLifetime {
@@ -4931,7 +4908,7 @@ impl Parse {
                     },
                     lifetime_bounds: bounds.lifetime_bounds,
                 };
-                r.items.push(WhereItem::Lifetime(item));
+                WhereItem::Lifetime(item)
             } else {
                 let mut item = WhereItemTypeBound::default();
                 if matches!(token.code, T![for]) {
@@ -4942,13 +4919,24 @@ impl Parse {
                 }
                 item.type_ = s.parse_type()?;
                 item.bounds = s.parse_type_param_bounds()?;
-                r.items.push(WhereItem::TypeBound(item));
-            }
+                WhereItem::TypeBound(item)
+            };
 
             let token = s.current();
-            match &s.current().code {
-                T!["}"] => {}
+            match &token.code {
+                T!["}"] => {
+                    r.items.push((w_item, None));
+                    s.plusplus();
+                    break;
+                }
+                T![,] => {
+                    r.items.push((w_item, Some(token.clone())));
+                    s.plusplus();
+                }
                 T![;] => {
+                    let mut t = token.clone();
+                    t.code = T![,];
+                    r.items.push((w_item, Some(t)));
                     s.plusplus();
                 }
                 _ => {

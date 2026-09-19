@@ -138,8 +138,23 @@ impl Lex {
         let need = match &last_token.code {
             TokenCode::Identifier(_)
             | TokenCode::Lifetime(_)
-            | TokenCode::Keyword(_)
             | TokenCode::Literal(_) => true,
+            TokenCode::Keyword(k) => match k {
+                Keyword::Await
+                | Keyword::Break
+                | Keyword::Continue
+                | Keyword::Crate
+                | Keyword::Mod
+                | Keyword::Ret
+                | Keyword::Super
+                | Keyword::Struct
+                | Keyword::SelfType
+                | Keyword::SelfValue
+                | Keyword::Type
+                | Keyword::Unsafe
+                | Keyword::Unsized => true,
+                _ => false,
+            },
             TokenCode::Op(op) => match op {
                 Op::PlusPlus | Op::MinusMinus | Op::Question |
                     Op::Dot | Op::DotDot => true,

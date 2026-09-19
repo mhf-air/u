@@ -1138,11 +1138,12 @@ impl ToLang for Trait {
 
         if let Some(t) = &s.t_unsafe {
             t.to_rs_one(p);
-            s.t_trait.to_rust(p);
+            p.push_raw(" ");
+            s.t_trait.to_rs_one(p);
         } else {
             s.t_trait.to_rs_one(p);
-            s.t_trait.to_rs_before(p);
         }
+        s.t_trait.to_rs_before(p);
         s.name.to_rs_one(p);
         if let Some(generics) = &s.generics {
             generics.to_rust(p);
@@ -1156,7 +1157,7 @@ impl ToLang for Trait {
         }
 
         s.t_brace_open.to_rust(p);
-        p.push_rust(&s.inner_attrs);
+        s.inner_attrs.to_rust(p);
         for it in &s.items {
             it.to_rust(p);
         }
@@ -1631,7 +1632,7 @@ impl ToLang for Lifetime {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.name);
+        s.name.to_rust(p);
     }
 }
 #[derive(Debug, Default)]
@@ -1653,22 +1654,20 @@ pub struct ConstParam {
 // -----------------------------------------------------------------------------
 #[derive(Debug, Default)]
 pub struct Where {
-    pub items: Vec<WhereItem>,
+    pub items: Vec<(WhereItem, Option<Token>)>,
 
-    pub span_where: Span,
+    pub t_where: Token,
 }
 impl ToLang for Where {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_raw(" ");
-        p.push_s("where", s.span_where);
-        p.push_raw(" ");
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
+        s.t_where.to_rust(p);
+        for (it, t) in &s.items {
+            it.to_rust(p);
+            if let Some(t) = t {
+                t.to_rust(p);
             }
-            p.push_rust(item);
         }
     }
 }
@@ -1699,11 +1698,11 @@ impl ToLang for WhereItem {
             }
             WhereItem::TypeBound(a) => {
                 if let Some(for_) = &a.for_lifetimes {
-                    p.push_rust(for_);
+                    for_.to_rust(p);
                 }
-                p.push_rust(&a.type_);
-                p.push_raw(": ");
-                p.push_rust(&a.bounds);
+                a.type_.to_rust(p);
+                p.push_raw(":");
+                a.bounds.to_rust(p);
             }
         }
     }
@@ -1795,7 +1794,7 @@ impl ToLang for TraitBound {
         if let Some(for_) = &s.for_lifetimes {
             for_.to_rust(p);
         }
-        p.push_rust(&s.type_path);
+        s.type_path.to_rust(p);
     }
 }
 

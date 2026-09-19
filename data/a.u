@@ -117,9 +117,9 @@ f func() {
 }
 
 call,,(1, 2, 3)
-call,,[p]{select a from b}
-call,,[s]{select a from b}
-call,,{select a from b}
+call,,[p]{ select a from b }
+call,,[s]{ select a from b }
+call,,{ select a from b }
 call,,{
     let a = 1.1;
     if a > 0 {
@@ -184,12 +184,12 @@ name = "foo"
 }
 
 f func() {
-    a{ name: "", ...b }
-    a{
+    Person { name: "", ...b }
+    Person {
         name: ""
         ...b
     }
-    a{
+    Person {
         name: ""
         age
     }
@@ -228,14 +228,14 @@ f func() {
 }
 
 f func() {
-    a{ name: "", ...Default..default() }
-    a{ name: "", ... }
-    a{
+    Person { name: "", ...Default..default() }
+    Person { name: "", ... }
+    Person {
         name: ""
         ...
     }
 
-    a{ name: "", ...b }
+    Person { name: "", ...b }
 }
 
 identifier func() {
@@ -290,7 +290,7 @@ foo['a, 'b, T] func[async, unsafe](a i32, b i32) i32 where {
     fn(T)   Iterator
     f   Box[dyn Fn-mut(&mut T) + 'a]
     'a   'b
-}{}
+} {}
 
 f func(
     a i32
