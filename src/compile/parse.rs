@@ -461,6 +461,7 @@ impl Parse {
             T![->] => {
                 let mut a = StmtLet::default();
                 a.t_eq = special_token.clone();
+                a.t_eq.code = T![=];
                 a.outer_attrs = outer_attrs;
                 a.expr = Some(s.parse_expr()?);
                 s.expect(T![->])?;
@@ -657,11 +658,11 @@ impl Parse {
                     });
                 }
                 _ => {
-                    unreachable!("not a valid first_special_token");
+                    return Err(s.panic(s.current(), "not a valid first_special_token"));
                 }
             },
             _ => {
-                unreachable!("not a valid first_special_token");
+                return Err(s.panic(s.current(), "not a valid first_special_token"));
             }
         }
 
@@ -3326,7 +3327,7 @@ impl Parse {
                             r_list[index] = ExprOp::Expr(expr);
                         }
                         _ => {
-                            unreachable!("not a valid op");
+                            return Err(s.panic(s.current(), "not a valid op"));
                         }
                     }
                 } else {
@@ -3338,7 +3339,7 @@ impl Parse {
             if let ExprOp::Expr(expr) = item {
                 Ok(expr)
             } else {
-                unreachable!("not an expr")
+                return Err(s.panic(s.current(), "not an expr"));
             }
         }
     }
@@ -3523,17 +3524,15 @@ impl Parse {
                 // Expr as Type
                 T![as] => {
                     let type_ = s.parse_type()?;
-                    let type_no_bounds = if let TypePayload::TypeNoBounds(a) = type_.payload {
-                        *a
-                    } else {
-                        unreachable!("not a TypeNoBounds")
+                    let TypePayload::TypeNoBounds(type_no_bounds) = type_.payload else {
+                        return Err(s.panic(token, "not a TypeNoBounds"))
                     };
                     expr = Expr {
                         outer_attrs: Attrs::default(),
                         payload: ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
                             ExprOperator::TypeCast(Box::new(ExprTypeCast {
                                 expr,
-                                type_no_bounds,
+                                type_no_bounds: *type_no_bounds,
                                 span_as: token.span,
                             })),
                         ))),
@@ -4684,7 +4683,7 @@ impl Parse {
             }
         }
 
-        unreachable!("not a type");
+        return Err(s.panic(token, "not a type"));
     }
 
     // (params) (: Type)?
@@ -5271,15 +5270,18 @@ impl Parse {
 
         let mut r = Pattern::default();
 
-        let token = s.current();
         while s.has_more() {
-            r.items.push(s.parse_pattern_no_top_alt()?);
-            if !matches!(s.current().code, T![|]) {
+            let pat = s.parse_pattern_no_top_alt()?;
+            let token = s.current();
+            if !matches!(&token.code, T![|]) {
+                r.items.push((pat, None));
                 break;
             }
+            r.items.push((pat, Some(token.clone())));
             s.plusplus();
         }
 
+        let token = s.current();
         if r.items.is_empty() {
             return Err(s.panic(token, &format!("expected pattern but got {:?}", token)));
         }
@@ -5294,34 +5296,22 @@ impl Parse {
         s.plusplus();
         match &token.code {
             // literal
-            T![~] => {
-                let next_token = s.current();
-                s.plusplus();
-
-                let literal = match &next_token.code {
-                    TokenCode::Literal(lit) => {
-                        if !matches!(
-                            lit.payload,
-                            LiteralPayload::Int(_) | LiteralPayload::Float(_)
-                        ) {
-                            return Err(s.panic(
-                                next_token,
-                                &format!("expected int or float literal but got {:?}", next_token),
-                            ));
-                        }
-                        lit.clone()
+            T![~] | TokenCode::Literal(_) => {
+                let pattern_literal = if let TokenCode::Literal(lit) = &token.code {
+                    PatternLiteral {
+                        name: lit.clone(),
+                        t_minus: None,
                     }
-                    _ => {
-                        return Err(s.panic(
-                            next_token,
-                            &format!("expected int or float literal but got {:?}", next_token),
-                        ));
+                } else {
+                    let next_token = s.current();
+                    s.plusplus();
+                    let TokenCode::Literal(literal) = &next_token.code else {
+                        return Err(s.panic(next_token, "already checked to be Literal"));
+                    };
+                    PatternLiteral {
+                        name: literal.clone(),
+                        t_minus: Some(token.clone()),
                     }
-                };
-                let pattern_literal = PatternLiteral {
-                    name: literal,
-                    minus: true,
-                    span_minus: Some(token.span),
                 };
 
                 let token = s.current();
@@ -5329,20 +5319,24 @@ impl Parse {
                     T!["``"] => {
                         s.plusplus();
                         let next_token = s.current();
-                        if matches!(next_token.code, T![:]) {
+                        if matches!(next_token.code,
+                            T![~]
+                            | TokenCode::Literal(_)
+                            | TokenCode::Identifier(_)
+                            | T![super] | T![self] | T![Self] | T![crate]
+                            | T!["["]
+                        ) {
+                            let bound = parse_range_pattern_bound(s)?;
                             return Ok(PatternNoTopAlt::WithRange(PatternRange {
                                 start: Some(PatternRangeBound::Literal(pattern_literal)),
-                                end: None,
-                                inclusive: false,
-                                span: token.span,
+                                end: Some(bound),
+                                t_seq: token.clone(),
                             }));
                         }
-                        let bound = parse_range_pattern_bound(s)?;
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start: Some(PatternRangeBound::Literal(pattern_literal)),
-                            end: Some(bound),
-                            inclusive: false,
-                            span: token.span,
+                            end: None,
+                            t_seq: token.clone(),
                         }));
                     }
                     T!["``="] => {
@@ -5351,8 +5345,7 @@ impl Parse {
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start: Some(PatternRangeBound::Literal(pattern_literal)),
                             end: Some(bound),
-                            inclusive: true,
-                            span: token.span,
+                            t_seq: token.clone(),
                         }));
                     }
                     T![...] => {
@@ -5362,8 +5355,7 @@ impl Parse {
                             PatternWithoutRange::Obsolete(PatternRange {
                                 start: Some(PatternRangeBound::Literal(pattern_literal)),
                                 end: Some(bound),
-                                inclusive: true,
-                                span: token.span,
+                                t_seq: token.clone(),
                             }),
                         ));
                     }
@@ -5374,111 +5366,43 @@ impl Parse {
                     }
                 }
             }
-            TokenCode::Literal(literal) => {
-                let pattern_literal = PatternLiteral {
-                    name: literal.clone(),
-                    minus: false,
-                    span_minus: None,
-                };
-                let token = s.current();
-                match &token.code {
-                    T!["``"] => {
-                        s.plusplus();
-                        let next_token = s.current();
-                        if matches!(next_token.code, T![:]) {
-                            return Ok(PatternNoTopAlt::WithRange(PatternRange {
-                                start: Some(PatternRangeBound::Literal(pattern_literal)),
-                                end: None,
-                                inclusive: false,
-                                span: token.span,
-                            }));
-                        }
-                        let bound = parse_range_pattern_bound(s)?;
-                        return Ok(PatternNoTopAlt::WithRange(PatternRange {
-                            start: Some(PatternRangeBound::Literal(pattern_literal)),
-                            end: Some(bound),
-                            inclusive: false,
-                            span: token.span,
-                        }));
-                    }
-                    T!["``="] => {
-                        s.plusplus();
-                        let bound = parse_range_pattern_bound(s)?;
-                        return Ok(PatternNoTopAlt::WithRange(PatternRange {
-                            start: Some(PatternRangeBound::Literal(pattern_literal)),
-                            end: Some(bound),
-                            inclusive: true,
-                            span: token.span,
-                        }));
-                    }
-                    T![...] => {
-                        s.plusplus();
-                        let bound = parse_range_pattern_bound(s)?;
-                        return Ok(PatternNoTopAlt::WithoutRange(
-                            PatternWithoutRange::Obsolete(PatternRange {
-                                start: Some(PatternRangeBound::Literal(pattern_literal)),
-                                end: Some(bound),
-                                inclusive: true,
-                                span: token.span,
-                            }),
-                        ));
-                    }
-                    _ => {
-                        return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Literal(
-                            pattern_literal,
-                        )));
-                    }
-                }
+            // `` RangePattern
+            // ``= RangePattern
+            T!["``"] | T!["``="] => {
+                let bound = parse_range_pattern_bound(s)?;
+                return Ok(PatternNoTopAlt::WithRange(PatternRange {
+                    start: None,
+                    end: Some(bound),
+                    t_seq: token.clone(),
+                }));
             }
 
             // identifier
-            T![ref] => {
+            T![ref] | T![mut] => {
                 let mut r = PatternIdentifier::default();
-                r.ref_ = true;
-                r.span_ref = Some(token.span);
+                if matches!(&token.code, T![ref]) {
+                    r.t_ref = Some(token.clone());
+                    s.plusplus();
+                }
                 let token = s.current();
                 if matches!(&token.code, T![mut]) {
-                    r.span_mut = Some(token.span);
-                    r.mut_ = true;
+                    r.t_mut = Some(token.clone());
                     s.plusplus();
                 }
                 let token = s.current();
                 s.plusplus();
-                if let TokenCode::Identifier(identifier) = &token.code {
-                    r.name = identifier.clone();
-                } else {
+                let TokenCode::Identifier(_) = &token.code else {
                     return Err(s.panic(token, &format!("expected identifier but got {:?}", token)));
-                }
+                };
+                r.name = token.clone();
 
                 // possible @
                 let token = s.current();
                 if matches!(&token.code, T![@]) {
-                    r.span_at = Some(token.span);
+                    let t_at = token.clone();
                     s.plusplus();
-                    r.pattern = Some(Box::new(s.parse_pattern()?));
-                }
-                return Ok(PatternNoTopAlt::WithoutRange(
-                    PatternWithoutRange::Identifier(r),
-                ));
-            }
-            T![mut] => {
-                let mut r = PatternIdentifier::default();
-                r.span_mut = Some(token.span);
-                r.mut_ = true;
-                let token = s.current();
-                s.plusplus();
-                if let TokenCode::Identifier(identifier) = &token.code {
-                    r.name = identifier.clone();
-                } else {
-                    return Err(s.panic(token, &format!("expected identifier but got {:?}", token)));
-                }
-
-                // possible @
-                let token = s.current();
-                if matches!(&token.code, T![@]) {
-                    r.span_at = Some(token.span);
-                    s.plusplus();
-                    r.pattern = Some(Box::new(s.parse_pattern()?));
+                    let pat = s.parse_pattern_no_top_alt()?;
+                    r.pattern = Some((t_at, Box::new(pat)));
                 }
                 return Ok(PatternNoTopAlt::WithoutRange(
                     PatternWithoutRange::Identifier(r),
@@ -5487,90 +5411,58 @@ impl Parse {
 
             // rest
             T![...] => {
-                return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Rest(
-                    token.span,
-                )));
-            }
-            // `` RangePattern
-            T!["``"] => {
-                let bound = parse_range_pattern_bound(s)?;
-                return Ok(PatternNoTopAlt::WithRange(PatternRange {
-                    start: None,
-                    end: Some(bound),
-                    inclusive: false,
-                    span: token.span,
-                }));
-            }
-            // ``= RangePattern
-            T!["``="] => {
-                let bound = parse_range_pattern_bound(s)?;
-                return Ok(PatternNoTopAlt::WithRange(PatternRange {
-                    start: None,
-                    end: Some(bound),
-                    inclusive: true,
-                    span: token.span,
-                }));
+                return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Rest(token.clone())));
             }
 
             // grouped or tuple
             T!["("] => {
-                let span_paren_open = token.span;
-                let mut list: Vec<Pattern> = Vec::new();
-                let mut is_tuple = false;
+                let t_paren_open = token.clone();
+                let mut list: Vec<(Pattern, Option<Token>)> = Vec::new();
                 while s.has_more() {
                     let token = s.current();
-                    match &token.code {
-                        T![")"] => {
-                            s.plusplus();
-                            if list.len() == 1 && !is_tuple {
-                                let a = mem::take(&mut list[0]);
-                                if a.items.len() > 1 {
-                                    return Ok(PatternNoTopAlt::WithoutRange(
-                                        PatternWithoutRange::Grouped(PatternGrouped {
-                                            pattern: Box::new(a),
-                                            span_paren_open,
-                                            span_paren_close: token.span,
-                                        }),
-                                    ));
-                                }
-                                if let PatternNoTopAlt::WithoutRange(PatternWithoutRange::Rest(
-                                    rest,
-                                )) = a.items[0]
-                                {
-                                    return Ok(PatternNoTopAlt::WithoutRange(
-                                        PatternWithoutRange::Tuple(PatternTuple {
-                                            payload: PatternTuplePayload::Rest(rest),
-                                            span_paren_open,
-                                            span_paren_close: token.span,
-                                        }),
-                                    ));
-                                } else {
-                                    return Ok(PatternNoTopAlt::WithoutRange(
-                                        PatternWithoutRange::Grouped(PatternGrouped {
-                                            pattern: Box::new(a),
-                                            span_paren_open,
-                                            span_paren_close: token.span,
-                                        }),
-                                    ));
-                                }
-                            } else {
-                                return Ok(PatternNoTopAlt::WithoutRange(
-                                    PatternWithoutRange::Tuple(PatternTuple {
-                                        payload: PatternTuplePayload::Patterns(list),
-                                        span_paren_open,
-                                        span_paren_close: token.span,
-                                    }),
-                                ));
-                            }
+                    if matches!(&token.code, T![")"]) {
+                        if list.is_empty() {
+                            return Err(s.panic(token, "empty () pattern"));
                         }
-                        T![,] => {
-                            is_tuple = true;
-                            s.plusplus();
+
+                        s.plusplus();
+                        // grouped
+                        if list.len() == 1 && list[0].1.is_none() {
+                            let a = mem::take(&mut list[0]);
+                            return Ok(PatternNoTopAlt::WithoutRange(
+                                PatternWithoutRange::Grouped(PatternGrouped {
+                                    pattern: Box::new(a.0),
+                                    t_paren_open,
+                                    t_paren_close: token.clone(),
+                                }),
+                            ));
                         }
-                        _ => {
-                            list.push(s.parse_pattern()?);
+
+                        let last = list.last().unwrap();
+                        if last.1.is_some() && matches!(last.0.items[0].0,
+                                PatternNoTopAlt::WithoutRange(PatternWithoutRange::Rest(_))) {
+                            return Err(s.panic(token, "can't have ... followed by ,"));
                         }
+
+                        return Ok(PatternNoTopAlt::WithoutRange(
+                            PatternWithoutRange::Tuple(PatternTuple {
+                                items: list,
+                                t_paren_open,
+                                t_paren_close: token.clone(),
+                            }),
+                        ));
                     }
+
+                    let pat = s.parse_pattern()?;
+
+                    let token = s.current();
+                    let t_comma = if matches!(&token.code, T![,]) {
+                        s.plusplus();
+                        Some(token.clone())
+                    } else {
+                        None
+                    };
+                    list.push((pat, t_comma));
                 }
             }
             // slice
@@ -5580,17 +5472,21 @@ impl Parse {
                     return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Slice(
                         PatternSlice {
                             items: Vec::new(),
-                            span_square_open: token.span,
-                            span_square_close: next_token.span,
+                            t_square_open: token.clone(),
+                            t_square_close: next_token.clone(),
                         },
                     )));
                 }
-                let mut items: Vec<Pattern> = Vec::new();
+                let mut items: Vec<(Pattern, Option<Token>)> = Vec::new();
                 while s.has_more() {
-                    items.push(s.parse_pattern()?);
-                    if !matches!(&s.current().code, T![,]) {
+                    let pat = s.parse_pattern()?;
+                    let token = s.current();
+                    if !matches!(&token.code, T![,]) {
+                        items.push((pat, None));
                         break;
                     }
+                    let t_comma = Some(token.clone());
+                    items.push((pat, t_comma));
                     s.plusplus();
                 }
                 let next_token = s.current();
@@ -5598,43 +5494,36 @@ impl Parse {
                 return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Slice(
                     PatternSlice {
                         items,
-                        span_square_open: token.span,
-                        span_square_close: next_token.span,
+                        t_square_open: token.clone(),
+                        t_square_close: next_token.clone(),
                     },
                 )));
             }
             // reference
             T![&] | T![&&] => {
-                let multi_ref = matches!(&token.code, T![&&]);
-                let span_ref = token.span;
-                let mut span_mut = None;
+                let t_ref = token.clone();
 
                 // possible mut
-                let mut mut_ = false;
+                let mut t_mut = None;
                 let token = s.current();
                 if matches!(&token.code, T![mut]) {
-                    span_mut = Some(token.span);
-                    mut_ = true;
+                    t_mut = Some(token.clone());
                     s.plusplus();
                 }
 
                 let token = s.current();
                 let mut pat = s.parse_pattern()?;
                 let a = mem::take(&mut pat.items[0]);
-                if let PatternNoTopAlt::WithoutRange(p) = a {
-                    return Ok(PatternNoTopAlt::WithoutRange(
-                        PatternWithoutRange::Reference(PatternReference {
-                            multi_ref,
-                            mut_,
-                            pattern_without_range: Box::new(p),
-
-                            span_ref,
-                            span_mut,
-                        }),
-                    ));
-                } else {
+                let PatternNoTopAlt::WithoutRange(p) = a.0 else {
                     return Err(s.panic(token, "expected PatternWithoutRange"));
-                }
+                };
+                return Ok(PatternNoTopAlt::WithoutRange(
+                    PatternWithoutRange::Reference(PatternReference {
+                        pattern_without_range: Box::new(p),
+                        t_ref,
+                        t_mut,
+                    }),
+                ));
             }
 
             // qualified path in expression
@@ -5652,20 +5541,20 @@ impl Parse {
                 let next_token = s.current();
                 if matches!(&next_token.code, T![@]) {
                     // possible @
-                    if let TokenCode::Identifier(identifier) = &token.code {
-                        let mut a = PatternIdentifier::default();
-                        a.name = identifier.clone();
-                        a.span_at = Some(next_token.span);
-                        s.plusplus();
-                        a.pattern = Some(Box::new(s.parse_pattern()?));
-                        return Ok(PatternNoTopAlt::WithoutRange(
-                            PatternWithoutRange::Identifier(a),
-                        ));
-                    } else {
+                    let TokenCode::Identifier(_) = &token.code else {
                         return Err(
                             s.panic(token, &format!("expected identifier but got {:?}", token))
                         );
-                    }
+                    };
+                    let mut a = PatternIdentifier::default();
+                    a.name = token.clone();
+                    let t_at = next_token.clone();
+                    s.plusplus();
+                    let pat = s.parse_pattern_no_top_alt()?;
+                    a.pattern = Some((t_at, Box::new(pat)));
+                    return Ok(PatternNoTopAlt::WithoutRange(
+                        PatternWithoutRange::Identifier(a),
+                    ));
                 }
 
                 s.minusminus();
@@ -5703,16 +5592,14 @@ impl Parse {
                             return Ok(PatternNoTopAlt::WithRange(PatternRange {
                                 start,
                                 end: None,
-                                inclusive: false,
-                                span: token.span,
+                                t_seq: token.clone(),
                             }));
                         }
                         let bound = parse_range_pattern_bound(s)?;
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start,
                             end: Some(bound),
-                            inclusive: false,
-                            span: token.span,
+                            t_seq: token.clone(),
                         }));
                     }
                     // RangePattern ``= RangePattern
@@ -5723,8 +5610,7 @@ impl Parse {
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start,
                             end: Some(bound),
-                            inclusive: true,
-                            span: token.span,
+                            t_seq: token.clone(),
                         }));
                     }
                     // RangePattern ... RangePattern
@@ -5736,8 +5622,7 @@ impl Parse {
                             PatternWithoutRange::Obsolete(PatternRange {
                                 start,
                                 end: Some(bound),
-                                inclusive: true,
-                                span: token.span,
+                                t_seq: token.clone(),
                             }),
                         ));
                     }
@@ -5755,7 +5640,7 @@ impl Parse {
                                 s.plusplus();
                                 let mut a = parse_struct_pattern(s)?;
                                 a.path = path;
-                                a.span_brace_open = token.span;
+                                a.t_brace_open = token.clone();
                                 return Ok(PatternNoTopAlt::WithoutRange(
                                     PatternWithoutRange::Struct(a),
                                 ));
@@ -5764,7 +5649,7 @@ impl Parse {
                                 s.plusplus();
                                 let mut a = parse_tuple_struct_pattern(s)?;
                                 a.path = path;
-                                a.span_paren_open = token.span;
+                                a.t_paren_open = token.clone();
                                 return Ok(PatternNoTopAlt::WithoutRange(
                                     PatternWithoutRange::TupleStruct(a),
                                 ));
@@ -5783,25 +5668,23 @@ impl Parse {
             }
         }
 
-        unreachable!("not a pattern");
+        return Err(s.panic(token, "not a pattern"));
 
-        // after ``=, `` or ...
-        // only one PatternNoTopAlt is allowed
         fn parse_range_pattern_bound(s: &Parse) -> ParseResult<PatternRangeBound> {
-            let mut pattern = s.parse_pattern()?;
-            let pat = mem::take(&mut pattern.items[0]);
-            Ok(match pat {
-                PatternNoTopAlt::WithoutRange(PatternWithoutRange::Literal(a)) => {
-                    PatternRangeBound::Literal(a)
-                }
-                PatternNoTopAlt::WithoutRange(PatternWithoutRange::Path(PatternPath::Path(p))) => {
-                    PatternRangeBound::Path(p)
-                }
-                PatternNoTopAlt::WithoutRange(PatternWithoutRange::Path(
-                    PatternPath::QualifiedPath(p),
-                )) => PatternRangeBound::QualifiedPath(p),
+            use PatternNoTopAlt as A;
+            use PatternWithoutRange as B;
+            use PatternPath as C;
+            use PatternRangeBound as R;
+
+            let token = s.current();
+            let mut pat = s.parse_pattern()?;
+            let pat = mem::take(&mut pat.items[0]);
+            Ok(match pat.0 {
+                A::WithoutRange(B::Literal(a)) => R::Literal(a),
+                A::WithoutRange(B::Path(C::Path(p))) => R::Path(p),
+                A::WithoutRange(B::Path(C::QualifiedPath(p))) => R::QualifiedPath(p),
                 _ => {
-                    unreachable!("not a pattern range bound");
+                    return Err(s.panic(token, "not a pattern range bound"));
                 }
             })
         }
@@ -5810,32 +5693,21 @@ impl Parse {
         fn parse_struct_pattern(s: &Parse) -> ParseResult<PatternStruct> {
             let mut r = PatternStruct::default();
 
-            let mut expect_field = true;
             while s.has_more() {
                 let token = s.current();
-                match &token.code {
-                    T!["}"] => {
-                        r.span_brace_close = token.span;
-                        s.plusplus();
-                        break;
-                    }
-                    T![,] | T![;] => {
-                        if expect_field {
-                            return Err(
-                                s.panic(token, &format!("expected field but got {:?}", token))
-                            );
-                        }
-                        expect_field = true;
-                        s.plusplus();
-                    }
-                    _ => {
-                        if !expect_field {
-                            return Err(
-                                s.panic(token, &format!("expected , or }} but got {:?}", token))
-                            );
-                        }
-                        expect_field = false;
-                        r.items.push(parse_struct_pattern_item(s)?);
+                if matches!(&token.code, T!["}"]) {
+                    r.t_brace_close = token.clone();
+                    s.plusplus();
+                    break;
+                }
+                let item = parse_struct_pattern_item(s)?;
+                let token = s.current();
+                if matches!(&token.code, T![,] | T![;]) {
+                    s.plusplus();
+                    if let PatternStructItem::Field(mut f) = item {
+                        let mut t = token.clone();
+                        t.code = T![,];
+                        f.t_comma = Some(t);
                     }
                 }
             }
@@ -5851,56 +5723,60 @@ impl Parse {
                 s.plusplus();
                 match &token.code {
                     T![...] => {
-                        r = PatternStructItem::Etc(outer_attrs, token.span);
+                        r = PatternStructItem::Etc(token.clone());
                     }
                     TokenCode::Literal(Literal {
-                        payload: LiteralPayload::Int(name),
+                        payload: LiteralPayload::Int(_),
                         ..
                     }) => {
+                        let t_colon = token.clone();
                         s.expect(T![:])?;
                         let pattern = s.parse_pattern()?;
                         r = PatternStructItem::Field(PatternStructField {
                             outer_attrs,
                             payload: PatternStructFieldPayload::A(PatternStructFieldA {
-                                tuple_index: name.clone(),
                                 pattern,
-                                span_tuple_index: token.span,
+                                t_colon,
+                                t_tuple_index: token.clone(),
                             }),
+                            t_comma: None,
                         });
                     }
-                    TokenCode::Identifier(identifier) => {
+                    TokenCode::Identifier(_) => {
                         if matches!(&s.current().code, T![:]) {
+                            let t_colon = s.current().clone();
                             s.plusplus();
                             let pattern = s.parse_pattern()?;
                             r = PatternStructItem::Field(PatternStructField {
                                 outer_attrs,
                                 payload: PatternStructFieldPayload::B(PatternStructFieldB {
-                                    name: identifier.clone(),
+                                    name: token.clone(),
+                                    t_colon,
                                     pattern,
                                 }),
+                                t_comma: None,
                             });
                         } else {
                             let mut c = PatternStructFieldC::default();
-                            c.name = identifier.clone();
+                            c.name = token.clone();
                             r = PatternStructItem::Field(PatternStructField {
                                 outer_attrs,
                                 payload: PatternStructFieldPayload::C(c),
+                                t_comma: None,
                             });
                         }
                     }
                     T![ref] => {
                         let mut c = PatternStructFieldC::default();
-                        c.span_ref = Some(token.span);
-                        c.ref_ = true;
+                        c.t_ref = Some(token.clone());
                         let token = s.current();
                         if matches!(&token.code, T![mut]) {
-                            c.span_mut = Some(token.span);
-                            c.mut_ = true;
+                            c.t_mut = Some(token.clone());
                             s.plusplus();
                         }
                         let token = s.current();
-                        if let TokenCode::Identifier(identifier) = &token.code {
-                            c.name = identifier.clone();
+                        if let TokenCode::Identifier(_) = &token.code {
+                            c.name = token.clone();
                             s.plusplus();
                         } else {
                             return Err(s.panic(
@@ -5911,15 +5787,15 @@ impl Parse {
                         r = PatternStructItem::Field(PatternStructField {
                             outer_attrs,
                             payload: PatternStructFieldPayload::C(c),
+                            t_comma: None,
                         });
                     }
                     T![mut] => {
                         let mut c = PatternStructFieldC::default();
-                        c.span_mut = Some(token.span);
-                        c.mut_ = true;
+                        c.t_mut = Some(token.clone());
                         let token = s.current();
-                        if let TokenCode::Identifier(identifier) = &token.code {
-                            c.name = identifier.clone();
+                        if let TokenCode::Identifier(_) = &token.code {
+                            c.name = token.clone();
                             s.plusplus();
                         } else {
                             return Err(s.panic(
@@ -5930,6 +5806,7 @@ impl Parse {
                         r = PatternStructItem::Field(PatternStructField {
                             outer_attrs,
                             payload: PatternStructFieldPayload::C(c),
+                            t_comma: None,
                         });
                     }
                     _ => {
@@ -5947,30 +5824,22 @@ impl Parse {
         fn parse_tuple_struct_pattern(s: &Parse) -> ParseResult<PatternTupleStruct> {
             let mut r = PatternTupleStruct::default();
 
-            let mut expect_pattern = true;
             while s.has_more() {
                 let token = s.current();
-                match &token.code {
-                    T![")"] => {
-                        r.span_paren_close = token.span;
-                        s.plusplus();
-                        break;
-                    }
-                    T![,] => {
-                        if expect_pattern {
-                            return Err(s.panic(&token, "expected pattern but got ,"));
-                        }
-                        expect_pattern = true;
-                        s.plusplus();
-                    }
-                    _ => {
-                        if !expect_pattern {
-                            return Err(s.panic(&token, "not expected pattern"));
-                        }
-                        expect_pattern = false;
-                        r.items.push(s.parse_pattern()?);
-                    }
+                if matches!(&token.code, T![")"]) {
+                    r.t_paren_close = token.clone();
+                    s.plusplus();
+                    break;
                 }
+                let pat = s.parse_pattern()?;
+                let token = s.current();
+                let t_comma = if matches!(&token.code, T![,]) {
+                    s.plusplus();
+                    Some(token.clone())
+                } else {
+                    None
+                };
+                r.items.push((pat, t_comma));
             }
 
             Ok(r)

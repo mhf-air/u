@@ -2217,17 +2217,17 @@ pub struct GenericArgsBounds {
 // --------------------------------------------------------------------------------
 #[derive(Debug, Default)]
 pub struct Pattern {
-    pub items: Vec<PatternNoTopAlt>,
+    pub items: Vec<(PatternNoTopAlt, Option<Token>)>,
 }
 impl ToLang for Pattern {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(" | ");
+        for (it, t) in &s.items {
+            it.to_rust(p);
+            if let Some(t) = t {
+                t.to_rust(p);
             }
-            p.push_rust(item);
         }
     }
 }
@@ -2239,7 +2239,7 @@ pub enum PatternNoTopAlt {
 }
 impl Default for PatternNoTopAlt {
     fn default() -> Self {
-        PatternNoTopAlt::WithoutRange(PatternWithoutRange::Rest(Span::default()))
+        PatternNoTopAlt::WithoutRange(PatternWithoutRange::Rest(Token::default()))
     }
 }
 impl ToLang for PatternNoTopAlt {
@@ -2258,7 +2258,7 @@ pub enum PatternWithoutRange {
     Literal(PatternLiteral),
     Identifier(PatternIdentifier),
     // Wildcard,
-    Rest(Span),
+    Rest(Token),
     Obsolete(PatternRange), // must have end range
     Reference(PatternReference),
     Struct(PatternStruct),
@@ -2276,98 +2276,80 @@ impl ToLang for PatternWithoutRange {
         match s {
             PatternWithoutRange::Literal(a) => p.push_rust(a),
             PatternWithoutRange::Identifier(a) => {
-                if a.ref_ {
-                    p.push_s("ref", a.span_ref.unwrap());
-                    p.push_raw(" ");
+                if let Some(t) = &a.t_ref {
+                    t.to_rust(p);
                 }
-                if a.mut_ {
-                    p.push_s("mut", a.span_mut.unwrap());
-                    p.push_raw(" ");
+                if let Some(t) = &a.t_mut {
+                    t.to_rust(p);
                 }
-                p.push_rust(&a.name);
-                if let Some(pattern) = &a.pattern {
-                    p.push_raw(" ");
-                    p.push_s("@", a.span_at.unwrap());
-                    p.push_raw(" ");
-                    p.push_rust(pattern.as_ref());
+                a.name.to_rust(p);
+                if let Some((t, pat)) = &a.pattern {
+                    t.to_rust(p);
+                    pat.to_rust(p);
                 }
             }
-            PatternWithoutRange::Rest(span) => p.push_s("..", *span),
+            PatternWithoutRange::Rest(t) => {
+                t.to_rust(p);
+            }
             PatternWithoutRange::Obsolete(a) => {
                 if let Some(start) = &a.start {
-                    p.push_rust(start);
+                    start.to_rust(p);
                 }
-                p.push_s("...", a.span);
+                a.t_seq.to_rust(p);
                 if let Some(end) = &a.end {
-                    p.push_rust(end);
+                    end.to_rust(p);
                 }
             }
             PatternWithoutRange::Reference(a) => {
-                p.push_s("&", a.span_ref);
-                if a.mut_ {
-                    p.push_s("mut", a.span_mut.unwrap());
-                    p.push_raw(" ");
+                a.t_ref.to_rust(p);
+                if let Some(t) = &a.t_mut {
+                    t.to_rust(p);
                 }
-                p.push_rust(a.pattern_without_range.as_ref());
+                a.pattern_without_range.to_rust(p);
             }
             PatternWithoutRange::Struct(a) => {
-                p.push_rust(&a.path);
-                p.push_s("{", a.span_brace_open);
-                for (i, item) in a.items.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(", ");
-                    }
-                    p.push_rust(item);
+                a.path.to_rust(p);
+                a.t_brace_open.to_rust(p);
+                for it in &a.items {
+                    it.to_rust(p);
                 }
-                p.push_s("}", a.span_brace_close);
+                a.t_brace_close.to_rust(p);
             }
             PatternWithoutRange::TupleStruct(a) => {
-                p.push_rust(&a.path);
-                p.push_s("(", a.span_paren_open);
-                for (i, item) in a.items.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(", ");
+                a.path.to_rust(p);
+                a.t_paren_open.to_rust(p);
+                for (it, t) in &a.items {
+                    it.to_rust(p);
+                    if let Some(t) = t {
+                        t.to_rust(p);
                     }
-                    p.push_rust(item);
                 }
-                p.push_s(")", a.span_paren_close);
+                a.t_paren_close.to_rust(p);
             }
             PatternWithoutRange::Tuple(a) => {
-                p.push_s("(", a.span_paren_open);
-                match &a.payload {
-                    PatternTuplePayload::Patterns(b) => {
-                        for (i, item) in b.iter().enumerate() {
-                            if i != 0 {
-                                p.push_raw(", ");
-                            }
-                            p.push_rust(item);
-                        }
-                        if b.len() == 1 {
-                            p.push_raw(", ");
-                        }
-                    }
-                    PatternTuplePayload::Rest(span) => {
-                        p.push_raw(" ");
-                        p.push_s("..", *span);
-                        p.push_raw(" ");
+                a.t_paren_open.to_rust(p);
+                for (pat, t) in &a.items {
+                    pat.to_rust(p);
+                    if let Some(t) = t {
+                        t.to_rust(p);
                     }
                 }
-                p.push_s(")", a.span_paren_close);
+                a.t_paren_close.to_rust(p);
             }
             PatternWithoutRange::Grouped(a) => {
-                p.push_s("(", a.span_paren_open);
-                p.push_rust(a.pattern.as_ref());
-                p.push_s(")", a.span_paren_close);
+                a.t_paren_open.to_rust(p);
+                a.pattern.to_rust(p);
+                a.t_paren_close.to_rust(p);
             }
             PatternWithoutRange::Slice(a) => {
-                p.push_s("[", a.span_square_open);
-                for (i, item) in a.items.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(", ");
+                a.t_square_open.to_rust(p);
+                for (it, t) in &a.items {
+                    it.to_rust(p);
+                    if let Some(t) = t {
+                        t.to_rust(p);
                     }
-                    p.push_rust(item);
                 }
-                p.push_s("]", a.span_square_close);
+                a.t_square_close.to_rust(p);
             }
             PatternWithoutRange::Path(a) => match a {
                 PatternPath::Path(b) => p.push_rust(b),
@@ -2380,39 +2362,33 @@ impl ToLang for PatternWithoutRange {
 #[derive(Debug)]
 pub struct PatternLiteral {
     pub name: Literal,
-    pub minus: bool,
 
-    pub span_minus: Option<Span>,
+    pub t_minus: Option<Token>,
 }
 impl ToLang for PatternLiteral {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if s.minus {
-            p.push_s("-", s.span_minus.unwrap());
+        if let Some(t) = &s.t_minus {
+            t.to_rust(p);
         }
-        p.push_rust(&s.name);
+        s.name.to_rust(p);
     }
 }
 #[derive(Debug, Default)]
 pub struct PatternIdentifier {
-    pub ref_: bool,
-    pub mut_: bool,
-    pub name: Identifier,
-    pub pattern: Option<Box<Pattern>>,
+    pub name: Token,
+    pub pattern: Option<(Token, Box<PatternNoTopAlt>)>,
 
-    pub span_ref: Option<Span>,
-    pub span_mut: Option<Span>,
-    pub span_at: Option<Span>,
+    pub t_ref: Option<Token>,
+    pub t_mut: Option<Token>,
 }
 #[derive(Debug)]
 pub struct PatternReference {
-    pub multi_ref: bool,
-    pub mut_: bool,
     pub pattern_without_range: Box<PatternWithoutRange>,
 
-    pub span_ref: Span,
-    pub span_mut: Option<Span>,
+    pub t_ref: Token,
+    pub t_mut: Option<Token>,
 }
 
 #[derive(Debug, Default)]
@@ -2420,17 +2396,17 @@ pub struct PatternStruct {
     pub path: PathInExpr,
     pub items: Vec<PatternStructItem>,
 
-    pub span_brace_open: Span,
-    pub span_brace_close: Span,
+    pub t_brace_open: Token,
+    pub t_brace_close: Token,
 }
 #[derive(Debug)]
 pub enum PatternStructItem {
     Field(PatternStructField),
-    Etc(Attrs, Span),
+    Etc(Token),
 }
 impl Default for PatternStructItem {
     fn default() -> Self {
-        PatternStructItem::Etc(Attrs::default(), Span::default())
+        PatternStructItem::Etc(Token::default())
     }
 }
 impl ToLang for PatternStructItem {
@@ -2439,34 +2415,34 @@ impl ToLang for PatternStructItem {
 
         match s {
             PatternStructItem::Field(f) => {
-                p.push_rust(&f.outer_attrs);
+                f.outer_attrs.to_rust(p);
                 match &f.payload {
                     PatternStructFieldPayload::A(a) => {
-                        p.push_s(&a.tuple_index, a.span_tuple_index);
-                        p.push_raw(": ");
-                        p.push_rust(&a.pattern);
+                        a.t_tuple_index.to_rust(p);
+                        a.t_colon.to_rust(p);
+                        a.pattern.to_rust(p);
                     }
                     PatternStructFieldPayload::B(b) => {
-                        p.push_rust(&b.name);
-                        p.push_raw(": ");
-                        p.push_rust(&b.pattern);
+                        b.name.to_rust(p);
+                        b.t_colon.to_rust(p);
+                        b.pattern.to_rust(p);
                     }
                     PatternStructFieldPayload::C(c) => {
-                        if c.ref_ {
-                            p.push_s("ref", c.span_ref.unwrap());
-                            p.push_raw(" ");
+                        if let Some(t) = &c.t_ref {
+                            t.to_rust(p);
                         }
-                        if c.mut_ {
-                            p.push_s("mut", c.span_mut.unwrap());
-                            p.push_raw(" ");
+                        if let Some(t) = &c.t_mut {
+                            t.to_rust(p);
                         }
-                        p.push_rust(&c.name);
+                        c.name.to_rust(p);
                     }
                 }
+                if let Some(t) = &f.t_comma {
+                    t.to_rust(p);
+                }
             }
-            PatternStructItem::Etc(a, span) => {
-                p.push_rust(a);
-                p.push_s("..", *span);
+            PatternStructItem::Etc(t) => {
+                t.to_rust(p);
             }
         }
     }
@@ -2476,6 +2452,7 @@ impl ToLang for PatternStructItem {
 pub struct PatternStructField {
     pub outer_attrs: Attrs,
     pub payload: PatternStructFieldPayload,
+    pub t_comma: Option<Token>,
 }
 #[derive(Debug)]
 pub enum PatternStructFieldPayload {
@@ -2490,59 +2467,52 @@ impl Default for PatternStructFieldPayload {
 }
 #[derive(Debug)]
 pub struct PatternStructFieldA {
-    pub tuple_index: String,
     pub pattern: Pattern,
-
-    pub span_tuple_index: Span,
+    pub t_tuple_index: Token,
+    pub t_colon: Token,
 }
 #[derive(Debug)]
 pub struct PatternStructFieldB {
-    pub name: Identifier,
+    pub name: Token,
     pub pattern: Pattern,
+    pub t_colon: Token,
 }
 #[derive(Debug, Default)]
 pub struct PatternStructFieldC {
-    pub ref_: bool,
-    pub mut_: bool,
-    pub name: Identifier,
+    pub name: Token,
 
-    pub span_ref: Option<Span>,
-    pub span_mut: Option<Span>,
+    pub t_ref: Option<Token>,
+    pub t_mut: Option<Token>,
 }
 
 #[derive(Debug, Default)]
 pub struct PatternTupleStruct {
     pub path: PathInExpr,
-    pub items: Vec<Pattern>,
+    pub items: Vec<(Pattern, Option<Token>)>,
 
-    pub span_paren_open: Span,
-    pub span_paren_close: Span,
+    pub t_paren_open: Token,
+    pub t_paren_close: Token,
 }
 #[derive(Debug)]
 pub struct PatternTuple {
-    pub payload: PatternTuplePayload,
+    pub items: Vec<(Pattern, Option<Token>)>,
 
-    pub span_paren_open: Span,
-    pub span_paren_close: Span,
-}
-#[derive(Debug)]
-pub enum PatternTuplePayload {
-    Patterns(Vec<Pattern>), // p.len() > 0
-    Rest(Span),
+    pub t_paren_open: Token,
+    pub t_paren_close: Token,
 }
 #[derive(Debug)]
 pub struct PatternGrouped {
     pub pattern: Box<Pattern>,
 
-    pub span_paren_open: Span,
-    pub span_paren_close: Span,
+    pub t_paren_open: Token,
+    pub t_paren_close: Token,
 }
 #[derive(Debug)]
 pub struct PatternSlice {
-    pub items: Vec<Pattern>,
+    pub items: Vec<(Pattern, Option<Token>)>,
 
-    pub span_square_open: Span,
-    pub span_square_close: Span,
+    pub t_square_open: Token,
+    pub t_square_close: Token,
 }
 #[derive(Debug)]
 pub enum PatternPath {
@@ -2554,24 +2524,19 @@ pub enum PatternPath {
 pub struct PatternRange {
     pub start: Option<PatternRangeBound>,
     pub end: Option<PatternRangeBound>,
-    pub inclusive: bool,
 
-    pub span: Span,
+    pub t_seq: Token,
 }
 impl ToLang for PatternRange {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
         if let Some(start) = &s.start {
-            p.push_rust(start);
+            start.to_rust(p);
         }
-        if s.inclusive {
-            p.push_s("..=", s.span);
-        } else {
-            p.push_s("..", s.span);
-        }
+        s.t_seq.to_rust(p);
         if let Some(end) = &s.end {
-            p.push_rust(end);
+            end.to_rust(p);
         }
     }
 }
@@ -2924,8 +2889,9 @@ impl ToLang for StmtLet {
             name.to_rs_before(p);
         }
 
-        p.push_raw("let ");
+        p.push_raw("let");
         if let Some((name, t_mut)) = &s.short {
+            p.push_raw(" ");
             if let Some(t) = t_mut {
                 t.to_rs_one(p);
                 t.to_rs_before(p);
