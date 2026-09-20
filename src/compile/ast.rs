@@ -2904,40 +2904,50 @@ impl ToLang for Stmt {
 
 #[derive(Debug, Default)]
 pub struct StmtLet {
-    pub outer_attrs: Attrs,
     pub pattern: Pattern,
+    pub short: Option<(Token, Option<Token>)>,
+
+    pub outer_attrs: Attrs,
     pub type_: Option<Type>,
     pub expr: Option<Expr>,
-    pub else_: Option<BlockExpr>,
+    pub else_: Option<(Token, BlockExpr)>,
 
-    pub span_eq: Span,
-    pub span_else: Option<Span>,
+    pub t_eq: Token,
 }
 impl ToLang for StmtLet {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.outer_attrs);
-        p.indent();
+        s.outer_attrs.to_rust(p);
+
+        if let Some((name, _)) = &s.short {
+            name.to_rs_before(p);
+        }
+
         p.push_raw("let ");
-        p.push_rust(&s.pattern);
+        if let Some((name, t_mut)) = &s.short {
+            if let Some(t) = t_mut {
+                t.to_rs_one(p);
+                t.to_rs_before(p);
+            }
+            name.to_rs_one(p);
+        } else {
+            s.pattern.to_rust(p);
+        }
+
         if let Some(type_) = &s.type_ {
-            p.push_raw(": ");
-            p.push_rust(type_);
+            p.push_raw(":");
+            type_.to_rust(p);
         }
         if let Some(expr) = &s.expr {
-            p.push_raw(" ");
-            p.push_s("=", s.span_eq);
-            p.push_raw(" ");
-            p.push_rust(expr);
+            s.t_eq.to_rust(p);
+            expr.to_rust(p);
+            if let Some((t, else_)) = &s.else_ {
+                t.to_rust(p);
+                else_.to_rust(p);
+            }
         }
-        if let Some(else_) = &s.else_ {
-            p.push_raw(" ");
-            p.push_s("else", s.span_else.unwrap());
-            p.push_raw(" ");
-            p.push_rust(else_);
-        }
-        p.push_raw(";\n");
+        p.push_raw(";");
     }
 }
 

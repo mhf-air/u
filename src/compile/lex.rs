@@ -1518,7 +1518,7 @@ impl Token {
             TokenCode::Assign(assign) => {
                 match assign {
                     Assign::Assign => "=",
-                    Assign::Declare => ":=",
+                    Assign::Declare => "=",
                     Assign::Add => "+=",
                     Assign::Sub => "-=",
                     Assign::Star => "*=",

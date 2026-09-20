@@ -460,7 +460,7 @@ impl Parse {
             // Expr -> Pattern (let Type)? (else)?
             T![->] => {
                 let mut a = StmtLet::default();
-                a.span_eq = special_token.span;
+                a.t_eq = special_token.clone();
                 a.outer_attrs = outer_attrs;
                 a.expr = Some(s.parse_expr()?);
                 s.expect(T![->])?;
@@ -469,11 +469,12 @@ impl Parse {
                     s.plusplus();
                     a.type_ = Some(s.parse_type()?);
                 }
-                if matches!(&s.current().code, T![else]) {
-                    let span_else = s.current().span;
-                    a.span_else = Some(span_else);
+                let token = s.current();
+                if matches!(&token.code, T![else]) {
+                    let t_else = token.clone();
                     s.plusplus();
-                    a.else_ = Some(s.parse_block_expr()?);
+                    let block = s.parse_block_expr()?;
+                    a.else_ = Some((t_else, block));
                 } else {
                     s.expect(T![;])?;
                 }
@@ -3031,50 +3032,37 @@ impl Parse {
     fn parse_let(&self) -> ParseResult<StmtLet> {
         let s = self;
 
-        let token = s.current();
-        let TokenCode::Identifier(identifier) = &token.code else {
-            return Err(s.panic(token, &format!("expected identifier, but got {:?}", token)));
-        };
+        let t_name = s.current().clone();
+        if !matches!(&t_name.code, TokenCode::Identifier(_)) {
+            return Err(s.panic(&t_name, &format!("expected identifier, but got {:?}", t_name)));
+        }
         s.plusplus();
 
         let token = s.current();
-        let mut_ = if matches!(token.code, T![mut]) {
+        let t_mut = if matches!(token.code, T![mut]) {
             s.plusplus();
-            true
+            Some(token.clone())
         } else {
-            false
+            None
         };
 
-        let mut a = StmtLet::default();
-        a.pattern = Pattern {
-            items: vec![PatternNoTopAlt::WithoutRange(
-                PatternWithoutRange::Identifier(PatternIdentifier {
-                    mut_,
-                    ref_: false,
-                    name: identifier.clone(),
-                    pattern: None,
-
-                    span_ref: None,
-                    span_mut: Some(token.span),
-                    span_at: None,
-                }),
-            )],
-        };
+        let mut r = StmtLet::default();
+        r.short = Some((t_name, t_mut));
 
         let token = s.current();
         if !matches!(token.code, T![:=]) {
-            a.type_ = Some(s.parse_type()?);
+            r.type_ = Some(s.parse_type()?);
         }
-        a.span_eq = token.span;
+        r.t_eq = token.clone();
         s.expect(T![:=])?;
 
         let token = s.current();
         if matches!(token.code, T![;]) {
-            return Ok(a);
+            return Ok(r);
         }
-        a.expr = Some(s.parse_expr()?);
+        r.expr = Some(s.parse_expr()?);
         s.expect(T![;])?;
-        Ok(a)
+        Ok(r)
     }
 
     // --------------------------------------------------------------------------------
