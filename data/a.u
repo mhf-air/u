@@ -685,7 +685,7 @@ f func() {
             2: -,
         }:
             a
-        -:
+        -: {}
     }
 
     match msg {
@@ -723,7 +723,7 @@ f func() {
 
     for (i, item) in list.enumerate() {}
 
-    for n in (0``) {}
+    for n in 0`` {}
 
 }
 

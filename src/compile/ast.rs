@@ -2940,10 +2940,10 @@ impl ToLang for Expr {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.outer_attrs);
+        s.outer_attrs.to_rust(p);
         match &s.payload {
-            ExprPayload::WithBlock(a) => p.push_rust(a.as_ref()),
-            ExprPayload::WithoutBlock(a) => p.push_rust(a.as_ref()),
+            ExprPayload::WithBlock(a) => a.to_rust(p),
+            ExprPayload::WithoutBlock(a) => a.to_rust(p),
         }
     }
 }
@@ -2964,7 +2964,6 @@ impl Default for ExprPayload {
 #[derive(Debug, Default)]
 pub struct BlockExpr {
     pub inner_attrs: Attrs,
-    pub label: Option<(Token, Token)>,
     pub stmts: Vec<Stmt>,
 
     pub t_brace_open: Token,
@@ -2974,11 +2973,6 @@ pub struct BlockExpr {
 impl ToLang for BlockExpr {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
-
-        if let Some((t_label, t_colon)) = &s.label {
-            t_label.to_rust(p);
-            t_colon.to_rust(p);
-        }
 
         s.t_brace_open.to_rust(p);
         s.inner_attrs.to_rust(p);
@@ -3004,104 +2998,99 @@ impl ToLang for ExprWithBlock {
         let s = self;
 
         match s {
-            ExprWithBlock::BlockExpr(a) => p.push_rust(a),
-            ExprWithBlock::AsyncBlock(a) => p.push_rust(a),
-            ExprWithBlock::UnsafeBlock(a) => p.push_rust(a),
-            ExprWithBlock::ConstBlock(a) => p.push_rust(a),
-            ExprWithBlock::Loop(a) => p.push_rust(a.as_ref()),
-            ExprWithBlock::If(a) => p.push_rust(a),
-            ExprWithBlock::Match(a) => p.push_rust(a),
+            ExprWithBlock::BlockExpr(a) => a.to_rust(p),
+            ExprWithBlock::AsyncBlock(a) => a.to_rust(p),
+            ExprWithBlock::UnsafeBlock(a) => a.to_rust(p),
+            ExprWithBlock::ConstBlock(a) => a.to_rust(p),
+            ExprWithBlock::Loop(a) => a.to_rust(p),
+            ExprWithBlock::If(a) => a.to_rust(p),
+            ExprWithBlock::Match(a) => a.to_rust(p),
         }
     }
 }
 #[derive(Debug, Default)]
 pub struct ExprAsyncBlock {
-    pub move_: bool,
     pub block: BlockExpr,
 
-    pub span_async: Span,
-    pub span_move: Option<Span>,
+    pub t_async: Token,
+    pub t_move: Option<Token>,
 }
 impl ToLang for ExprAsyncBlock {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("async", s.span_async);
-        if s.move_ {
+        s.t_async.to_rust(p);
+        if let Some(t) = &s.t_move {
             p.push_raw(" ");
-            p.push_s("move", s.span_move.unwrap());
+            t.to_rust(p);
         }
-        p.push_raw(" ");
-        p.push_rust(&s.block);
+        s.block.to_rust(p);
     }
 }
 #[derive(Debug)]
 pub struct ExprUnsafeBlock {
     pub block: BlockExpr,
 
-    pub span_unsafe: Span,
+    pub t_unsafe: Token,
 }
 impl ToLang for ExprUnsafeBlock {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("unsafe", s.span_unsafe);
-        p.push_raw(" ");
-        p.push_rust(&s.block);
+        s.t_unsafe.to_rust(p);
+        s.block.to_rust(p);
     }
 }
 #[derive(Debug)]
 pub struct ExprConstBlock {
     pub block: BlockExpr,
 
-    pub span_const: Span,
+    pub t_const: Token,
 }
 impl ToLang for ExprConstBlock {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("const", s.span_const);
-        p.push_raw(" ");
-        p.push_rust(&s.block);
+        s.t_const.to_rust(p);
+        s.block.to_rust(p);
     }
 }
 #[derive(Debug, Default)]
 pub struct ExprLoop {
-    pub label: Option<Token>,
+    pub label: Option<(Token, Token)>,
     pub body: BlockExpr,
     pub payload: ExprLoopPayload,
 
-    pub span_for: Span,
-    pub t_label: Option<(Token, Token)>,
+    pub t_for: Token,
 }
 impl ToLang for ExprLoop {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if let Some(label) = &s.label {
-            p.push_rust(label);
-            p.push_raw(": ");
+        if let Some((t_label, t_colon)) = &s.label {
+            t_label.to_rust(p);
+            t_colon.to_rust(p);
+        }
+        if matches!(&s.payload, ExprLoopPayload::Block) {
+            s.body.to_rust(p);
+            return;
         }
 
+        s.t_for.to_rust(p);
         match &s.payload {
-            ExprLoopPayload::Loop => p.push_s("loop", s.span_for),
+            ExprLoopPayload::Loop => {
+            }
             ExprLoopPayload::While(a) => {
-                p.push_s("while", s.span_for);
-                p.push_rust(&a.conditions);
+                a.conditions.to_rust(p);
             }
             ExprLoopPayload::In(a) => {
-                p.push_s("for", s.span_for);
-                p.push_raw(" ");
-                p.push_rust(&a.pattern);
-                p.push_raw(" ");
-                p.push_s("in", a.span_in);
-                p.push_raw(" ");
-                p.push_rust(&a.in_expr);
+                a.pattern.to_rust(p);
+                a.t_in.to_rust(p);
+                a.in_expr.to_rust(p);
             }
+            ExprLoopPayload::Block => {}
         }
-
-        p.push_raw(" ");
-        p.push_rust(&s.body);
+        s.body.to_rust(p);
     }
 }
 #[derive(Debug, Default)]
@@ -3110,6 +3099,7 @@ pub enum ExprLoopPayload {
     Loop,
     While(ExprLoopWhile),
     In(ExprLoopIn),
+    Block,
 }
 // while and while let
 #[derive(Debug)]
@@ -3122,93 +3112,90 @@ pub struct ExprLoopIn {
     pub pattern: Pattern,
     pub in_expr: Expr, // except struct expression
 
-    pub span_in: Span,
+    pub t_in: Token,
 }
 
-#[derive(Debug)]
-pub enum Conditions {
-    Expr(Expr),
-    LetChain(Vec<LetChainCondition>),
-}
-impl Default for Conditions {
-    fn default() -> Self {
-        Conditions::LetChain(Vec::new())
-    }
+#[derive(Debug, Default)]
+pub struct Conditions {
+    pub items: Vec<(ConditionItem, Option<Token>)>,
 }
 impl ToLang for Conditions {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_raw(" ");
-        match &s {
-            Conditions::Expr(expr) => {
-                p.push_rust(expr);
-            }
-            Conditions::LetChain(list) => {
-                for (i, item) in list.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(" && ");
-                    }
-                    match item {
-                        LetChainCondition::Expr(expr) => {
-                            p.push_rust(expr);
-                        }
-                        LetChainCondition::Condition(a) => {
-                            p.push_rust(&a.outer_attrs);
-                            p.push_raw("let ");
-                            p.push_rust(&a.pattern);
-                            p.push_raw(" = ");
-                            p.push_rust(&a.scrutinee);
-                        }
-                    }
+        for (it, t) in &s.items {
+            it.to_rust(p);
+            if let Some(t) = t {
+                // for cases such as "if a -> b, c { }"
+                let has_blank = t.tokens_before
+                    .iter()
+                    .any(|it| it.code == TokenCode::Blank);
+                if !has_blank {
+                    p.push_raw(" ");
                 }
+                t.to_rust(p);
             }
         }
-        p.push_raw(" ");
     }
 }
 
 #[derive(Debug)]
-pub enum LetChainCondition {
+pub enum ConditionItem {
     Expr(Expr),
-    Condition(LetChainConditionItem),
+    LetChain(LetChainCondition),
 }
-impl Default for LetChainCondition {
+impl Default for ConditionItem {
     fn default() -> Self {
-        LetChainCondition::Expr(Expr::default())
+        ConditionItem::Expr(Expr::default())
+    }
+}
+impl ToLang for ConditionItem {
+    fn to_rust(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        match &s {
+            ConditionItem::Expr(expr) => {
+                p.push_rust(expr);
+            }
+            ConditionItem::LetChain(a) => {
+                a.outer_attrs.to_rust(p);
+                p.push_raw("let");
+                a.pattern.to_rust(p);
+                a.t_eq.to_rust(p);
+                a.scrutinee.to_rust(p);
+            }
+        }
     }
 }
 #[derive(Debug)]
-pub struct LetChainConditionItem {
+pub struct LetChainCondition {
     pub outer_attrs: Attrs,
     pub pattern: Pattern,
     pub scrutinee: Expr,
+    pub t_eq: Token,
 }
 
 #[derive(Debug, Default)]
 pub struct ExprIf {
     pub conditions: Conditions,
     pub body: BlockExpr,
-    pub else_: Option<ExprIfElse>,
+    pub else_: Option<(Token, ExprIfElse)>,
 
-    pub span_if: Span,
-    pub span_else: Option<Span>,
+    pub t_if: Token,
 }
 impl ToLang for ExprIf {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("if", s.span_if);
-        p.push_rust(&s.conditions);
-        p.push_rust(&s.body);
+        s.t_if.to_rust(p);
+        s.conditions.to_rust(p);
+        s.body.to_rust(p);
 
         if let Some(else_) = &s.else_ {
-            p.push_raw(" ");
-            p.push_s("else", s.span_else.unwrap());
-            p.push_raw(" ");
-            match else_ {
-                ExprIfElse::BlockExpr(a) => p.push_rust(a),
-                ExprIfElse::If(a) => p.push_rust(a.as_ref()),
+            else_.0.to_rust(p);
+            match &else_.1 {
+                ExprIfElse::BlockExpr(a) => a.to_rust(p),
+                ExprIfElse::If(a) => a.to_rust(p),
             }
         }
     }
