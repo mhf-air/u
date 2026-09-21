@@ -156,7 +156,7 @@ impl Lex {
                 _ => false,
             },
             TokenCode::Op(op) => match op {
-                Op::PlusPlus | Op::MinusMinus | Op::Question |
+                Op::PlusPlus | Op::MinusMinus | Op::Question | Op::TickTick |
                     Op::Dot | Op::DotDot => true,
                 _ => false,
             },
@@ -1556,7 +1556,7 @@ impl Token {
                     Op::BitXor => "^",
                     Op::Dot => ".",
                     Op::DotDot => "::",
-                    Op::DotDotDot => "...",
+                    Op::DotDotDot => "..",
                     Op::Tick => "`",
                     Op::TickTick => "..",
                     Op::TickTickEq => "..=",

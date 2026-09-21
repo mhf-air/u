@@ -2657,7 +2657,6 @@ impl Parse {
         }
         if let TokenCode::Lifetime(_) = &token.code {
             r.label = Some(token.clone());
-            r.span_label = Some(token.span);
             s.plusplus();
         } else {
             return Err(s.panic(token, &format!("expected lifetime, but got {:?}", token)));
@@ -2681,7 +2680,6 @@ impl Parse {
         if let TokenCode::Lifetime(_) = &token.code {
             s.plusplus();
             r.label = Some(token.clone());
-            r.span_label = Some(token.span);
         }
 
         let token = s.current();
@@ -2947,7 +2945,7 @@ impl Parse {
             return Ok(r);
         }
 
-        r.span_brace_open = s.current().span;
+        r.t_brace_open = s.current().clone();
         s.expect(T!["{"])?;
         r.inner_attrs = s.parse_inner_attrs()?;
 
@@ -2955,7 +2953,7 @@ impl Parse {
             let token = s.current();
             match &token.code {
                 T!["}"] => {
-                    r.span_brace_close = token.span;
+                    r.t_brace_close = token.clone();
                     s.plusplus();
                     break;
                 }
@@ -2978,23 +2976,30 @@ impl Parse {
             // guard
             let token = s.current();
             if matches!(&token.code, T![if]) {
+                let t_if = token.clone();
                 s.plusplus();
                 r.arm.guard = Some(ExprMatchArmGuard {
                     conditions: s.parse_conditions()?,
-                    span_if: token.span,
+                    t_if,
                 });
             }
 
+            let token = s.current();
             // for auto completion
-            if s.magic && matches!(&s.current().code, T![;]) {
+            if s.magic && matches!(&token.code, T![;]) {
                 s.plusplus();
                 return Ok(r);
             }
+            r.t_sep = token.clone();
+            r.t_sep.code = T![=>];
             s.expect(T![:])?;
 
             // expr
             r.expr = s.parse_expr()?;
             s.skip_semicolons();
+            if matches!(s.current().code, T![,]) {
+                s.plusplus();
+            }
 
             Ok(r)
         }
@@ -3275,9 +3280,8 @@ impl Parse {
                                 payload: ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Range(ExprRange {
                                         start: left_option,
-                                        inclusive: false,
                                         end: right_option,
-                                        span: op.span,
+                                        t_sep: op,
                                     }),
                                 )),
                             };
@@ -3289,9 +3293,8 @@ impl Parse {
                                 payload: ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Range(ExprRange {
                                         start: left_option,
-                                        inclusive: true,
                                         end: right_option,
-                                        span: op.span,
+                                        t_sep: op,
                                     }),
                                 )),
                             };
@@ -3363,32 +3366,36 @@ impl Parse {
 
                 // Expr(CallParams?)
                 T!["("] => {
-                    let span_paren_open = token.span;
+                    let t_paren_open = token.clone();
                     let mut params = Vec::new();
                     while s.has_more() {
                         let token = s.current();
-                        match &token.code {
-                            T![")"] => {
-                                s.plusplus();
-                                expr = Expr {
-                                    outer_attrs: Attrs::default(),
-                                    payload: ExprPayload::WithoutBlock(Box::new(
-                                        ExprWithoutBlock::Call(ExprCall {
-                                            left: expr,
-                                            params,
-                                            span_paren_open,
-                                            span_paren_close: token.span,
-                                        }),
-                                    )),
-                                };
-                                break;
-                            }
-                            T![,] | T![;] => {
-                                s.plusplus();
-                            }
-                            _ => {
-                                params.push(s.parse_expr()?);
-                            }
+                        if matches!(&token.code, T![")"]) {
+                            s.plusplus();
+                            expr = Expr {
+                                outer_attrs: Attrs::default(),
+                                payload: ExprPayload::WithoutBlock(Box::new(
+                                    ExprWithoutBlock::Call(ExprCall {
+                                        left: expr,
+                                        params,
+                                        t_paren_open,
+                                        t_paren_close: token.clone(),
+                                    }),
+                                )),
+                            };
+                            break;
+                        }
+
+                        let expr = s.parse_expr()?;
+
+                        let token = s.current();
+                        if matches!(&token.code, T![,] | T![;]) {
+                            let mut t = token.clone();
+                            t.code = T![,];
+                            s.plusplus();
+                            params.push((expr, Some(t)));
+                        } else {
+                            params.push((expr, None));
                         }
                     }
                 }
@@ -3401,9 +3408,8 @@ impl Parse {
                             payload: ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Range(
                                 ExprRange {
                                     start: Some(expr),
-                                    inclusive: false,
                                     end: None,
-                                    span: token.span,
+                                    t_sep: token.clone(),
                                 },
                             ))),
                         };
@@ -3416,9 +3422,9 @@ impl Parse {
 
                 // Expr{{Expr}}
                 T!["{{"] => {
-                    let span_double_brace_open = token.span;
+                    let t_double_brace_open = token.clone();
                     let right = s.parse_expr()?;
-                    let span_double_brace_close = s.current().span;
+                    let t_double_brace_close = s.current().clone();
                     s.expect(T!["}}"])?;
                     expr = Expr {
                         outer_attrs: Attrs::default(),
@@ -3426,8 +3432,8 @@ impl Parse {
                             ExprIndex {
                                 left: expr,
                                 right,
-                                span_double_brace_open,
-                                span_double_brace_close,
+                                t_double_brace_open,
+                                t_double_brace_close,
                             },
                         ))),
                     };
@@ -3449,21 +3455,9 @@ impl Parse {
                     expr = Expr {
                         outer_attrs: Attrs::default(),
                         payload: ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
-                            ExprOperator::CompoundAssignment(ExprCompoundAssignment {
-                                op: T![+=],
-                                left: expr,
-                                right: Expr {
-                                    outer_attrs: Attrs::default(),
-                                    payload: ExprPayload::WithoutBlock(Box::new(
-                                        ExprWithoutBlock::Literal(ExprLiteral(Literal {
-                                            payload: LiteralPayload::Int("1".to_string()),
-                                            span: token.span,
-                                            prefix: None,
-                                            suffix: None,
-                                        })),
-                                    )),
-                                },
-                                span_op: token.span,
+                            ExprOperator::IncDec(ExprIncDec {
+                                expr,
+                                inc: true,
                             }),
                         ))),
                     };
@@ -3473,21 +3467,9 @@ impl Parse {
                     expr = Expr {
                         outer_attrs: Attrs::default(),
                         payload: ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
-                            ExprOperator::CompoundAssignment(ExprCompoundAssignment {
-                                op: T![~=],
-                                left: expr,
-                                right: Expr {
-                                    outer_attrs: Attrs::default(),
-                                    payload: ExprPayload::WithoutBlock(Box::new(
-                                        ExprWithoutBlock::Literal(ExprLiteral(Literal {
-                                            payload: LiteralPayload::Int("1".to_string()),
-                                            span: token.span,
-                                            prefix: None,
-                                            suffix: None,
-                                        })),
-                                    )),
-                                },
-                                span_op: token.span,
+                            ExprOperator::IncDec(ExprIncDec {
+                                expr,
+                                inc: false,
                             }),
                         ))),
                     };
@@ -3512,7 +3494,7 @@ impl Parse {
 
                 // Expr.await, Expr.TupleIndex, Expr.PathExprSegment(CallParams?)
                 T![.] => {
-                    let span_dot = token.span;
+                    let t_dot = token.clone();
                     let token = s.current();
                     match &token.code {
                         T![await] => {
@@ -3521,14 +3503,15 @@ impl Parse {
                                 payload: ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Await(ExprAwait {
                                         expr,
-                                        span: token.span,
+                                        t_dot,
+                                        t_await: token.clone(),
                                     }),
                                 )),
                             };
                             s.plusplus();
                         }
                         TokenCode::Literal(Literal {
-                            payload: LiteralPayload::Int(a),
+                            payload: LiteralPayload::Int(_),
                             ..
                         }) => {
                             expr = Expr {
@@ -3536,9 +3519,8 @@ impl Parse {
                                 payload: ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::TupleIndexing(ExprTupleIndexing {
                                         left: expr,
-                                        index: a.clone(),
-                                        span_dot,
-                                        span_index: token.span,
+                                        index: token.clone(),
+                                        t_dot,
                                     }),
                                 )),
                             };
@@ -3549,7 +3531,7 @@ impl Parse {
                             if matches!(s.current().code, T!["("]) {
                                 let mut a = parse_method_call_expr(s, segment)?;
                                 a.left = expr;
-                                a.span_dot = span_dot;
+                                a.t_dot = t_dot;
                                 expr = Expr {
                                     outer_attrs: Attrs::default(),
                                     payload: ExprPayload::WithoutBlock(Box::new(
@@ -3557,22 +3539,20 @@ impl Parse {
                                     )),
                                 };
                             } else {
-                                let name = match segment.name.token.code {
-                                    TokenCode::Identifier(a) => a,
-                                    _ => {
-                                        return Err(s.panic(
-                                            token,
-                                            &format!("expected identifier but got {:?}", token),
-                                        ));
-                                    }
-                                };
+                                let name_token = segment.name.token;
+                                if !matches!(name_token.code, TokenCode::Identifier(_)) {
+                                    return Err(s.panic(
+                                        token,
+                                        &format!("expected identifier but got {:?}", token),
+                                    ));
+                                }
                                 expr = Expr {
                                     outer_attrs: Attrs::default(),
                                     payload: ExprPayload::WithoutBlock(Box::new(
                                         ExprWithoutBlock::Field(ExprField {
                                             left: expr,
-                                            name,
-                                            span_dot,
+                                            name: name_token,
+                                            t_dot,
                                         }),
                                     )),
                                 };
@@ -3603,34 +3583,28 @@ impl Parse {
         ) -> ParseResult<ExprMethodCall> {
             let mut r = ExprMethodCall::default();
             r.path_expr_segment = segment;
-            r.span_paren_open = s.current().span;
+            r.t_paren_open = s.current().clone();
             s.plusplus();
 
-            let mut expect_expr = true;
             while s.has_more() {
                 let token = s.current();
-                match &token.code {
-                    T![")"] => {
-                        r.span_paren_close = token.span;
-                        s.plusplus();
-                        break;
-                    }
-                    T![,] | T![;] => {
-                        if expect_expr {
-                            return Err(
-                                s.panic(&token, &format!("expected expr but got {:?}", token))
-                            );
-                        }
-                        expect_expr = true;
-                        s.plusplus();
-                    }
-                    _ => {
-                        if !expect_expr {
-                            return Err(s.panic(token, "not expected expr"));
-                        }
-                        expect_expr = false;
-                        r.params.push(s.parse_expr()?);
-                    }
+
+                if matches!(&token.code, T![")"]) {
+                    r.t_paren_close = token.clone();
+                    s.plusplus();
+                    break;
+                }
+
+                let expr = s.parse_expr()?;
+
+                let token = s.current();
+                if matches!(&token.code, T![,] | T![;]) {
+                    let mut t = token.clone();
+                    t.code = T![,];
+                    s.plusplus();
+                    r.params.push((expr, Some(t)));
+                } else {
+                    r.params.push((expr, None));
                 }
             }
 
@@ -3648,9 +3622,9 @@ impl Parse {
         s.plusplus();
         match &token.code {
             // literal
-            TokenCode::Literal(literal) => {
+            TokenCode::Literal(_) => {
                 r.payload = ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Literal(
-                    ExprLiteral(literal.clone()),
+                    ExprLiteral(token.clone()),
                 )));
             }
 
@@ -3680,63 +3654,60 @@ impl Parse {
 
             // grouped or tuple
             T!["("] => {
-                let span_paren_open = token.span;
-                let inner_attrs = s.parse_inner_attrs()?;
+                let t_paren_open = token.clone();
 
-                let mut list: Vec<Expr> = Vec::new();
-                let mut is_tuple = false;
+                let mut items: Vec<(Expr, Option<Token>)> = Vec::new();
                 while s.has_more() {
                     let token = s.current();
-                    match &token.code {
-                        T![")"] => {
-                            let span_paren_close = token.span;
-                            s.plusplus();
-                            if list.len() == 1 && !is_tuple {
-                                let expr = mem::take(&mut list[0]);
-                                r.payload = ExprPayload::WithoutBlock(Box::new(
-                                    ExprWithoutBlock::Grouped(ExprGrouped {
-                                        inner_attrs,
-                                        expr,
-                                        span_paren_open,
-                                        span_paren_close,
-                                    }),
-                                ));
-                            } else {
-                                r.payload = ExprPayload::WithoutBlock(Box::new(
-                                    ExprWithoutBlock::Tuple(ExprTuple {
-                                        inner_attrs,
-                                        items: list,
-                                        span_paren_open,
-                                        span_paren_close,
-                                    }),
-                                ));
-                            }
-                            return Ok(r);
+                    if matches!(&token.code, T![")"]) {
+                        let t_paren_close = token.clone();
+                        s.plusplus();
+                        if items.len() == 1 && items[0].1.is_none() {
+                            let expr = mem::take(&mut items[0]).0;
+                            r.payload = ExprPayload::WithoutBlock(Box::new(
+                                ExprWithoutBlock::Grouped(ExprGrouped {
+                                    expr,
+                                    t_paren_open,
+                                    t_paren_close,
+                                }),
+                            ));
+                        } else {
+                            r.payload = ExprPayload::WithoutBlock(Box::new(
+                                ExprWithoutBlock::Tuple(ExprTuple {
+                                    items,
+                                    t_paren_open,
+                                    t_paren_close,
+                                }),
+                            ));
                         }
-                        T![,] | T![;] => {
-                            is_tuple = true;
-                            s.plusplus();
-                        }
-                        _ => {
-                            list.push(s.parse_expr()?);
-                        }
+                        return Ok(r);
+                    }
+
+                    let expr = s.parse_expr()?;
+
+                    let token = s.current();
+                    if matches!(&token.code, T![,] | T![;]) {
+                        let mut t = token.clone();
+                        t.code = T![,];
+                        items.push((expr, Some(t)));
+                        s.plusplus();
+                    } else {
+                        items.push((expr, None));
                     }
                 }
             }
             // array
             T!["{{"] => {
-                let span_double_brace_open = token.span;
-                let inner_attrs = s.parse_inner_attrs()?;
+                let t_double_brace_open = token.clone();
                 // {{}}
                 let token = s.current();
                 if matches!(&token.code, T!["}}"]) {
                     s.plusplus();
                     r.payload =
                         ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Array(ExprArray {
-                            inner_attrs,
                             payload: ExprArrayPayload::Many(ExprArrayMany(Vec::new())),
-                            span_double_brace_open,
-                            span_double_brace_close: token.span,
+                            t_double_brace_open,
+                            t_double_brace_close: token.clone(),
                         })));
                     return Ok(r);
                 }
@@ -3745,62 +3716,61 @@ impl Parse {
                 let token = s.current();
                 if matches!(&token.code, T![:]) {
                     // {{ Expr: Expr }}
-                    let span_semicolon = token.span;
+                    let mut t_semicolon = token.clone();
+                    t_semicolon.code = T![;];
                     s.plusplus();
                     let len = s.parse_expr()?;
-                    let span_double_brace_close = s.current().span;
+                    let t_double_brace_close = s.current().clone();
                     s.expect(T!["}}"])?;
                     r.payload =
                         ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Array(ExprArray {
-                            inner_attrs,
                             payload: ExprArrayPayload::One(ExprArrayOne {
                                 value: first_expr,
                                 len,
-                                span_semicolon,
+                                t_semicolon,
                             }),
-                            span_double_brace_open,
-                            span_double_brace_close,
+                            t_double_brace_open,
+                            t_double_brace_close,
                         })));
                     return Ok(r);
                 }
 
+                let t_comma = if matches!(&token.code, T![,] | T![;]) {
+                    let mut t = token.clone();
+                    t.code = T![,];
+                    s.plusplus();
+                    Some(t)
+                } else {
+                    None
+                };
+
                 // {{ Expr([,;] Expr)* }}
-                let mut items: Vec<Expr> = vec![first_expr];
-                let mut expect_expr = false;
+                let mut items: Vec<(Expr, Option<Token>)> = vec![(first_expr, t_comma)];
                 while s.has_more() {
                     let token = s.current();
-                    match &token.code {
-                        T!["}}"] => {
-                            s.plusplus();
-                            r.payload = ExprPayload::WithoutBlock(Box::new(
-                                ExprWithoutBlock::Array(ExprArray {
-                                    inner_attrs,
-                                    payload: ExprArrayPayload::Many(ExprArrayMany(items)),
-                                    span_double_brace_open,
-                                    span_double_brace_close: token.span,
-                                }),
-                            ));
-                            return Ok(r);
-                        }
-                        T![,] | T![;] => {
-                            if expect_expr {
-                                return Err(
-                                    s.panic(&token, &format!("expected expr but got {:?}", token))
-                                );
-                            }
-                            expect_expr = true;
-                            s.plusplus();
-                        }
-                        _ => {
-                            if !expect_expr {
-                                return Err(s.panic(
-                                    &token,
-                                    &format!("expected , ; or }} but got {:?}", token),
-                                ));
-                            }
-                            expect_expr = false;
-                            items.push(s.parse_expr()?);
-                        }
+
+                    if matches!(&token.code, T!["}}"]) {
+                        s.plusplus();
+                        r.payload = ExprPayload::WithoutBlock(Box::new(
+                            ExprWithoutBlock::Array(ExprArray {
+                                payload: ExprArrayPayload::Many(ExprArrayMany(items)),
+                                t_double_brace_open,
+                                t_double_brace_close: token.clone(),
+                            }),
+                        ));
+                        return Ok(r);
+                    }
+
+                    let expr = s.parse_expr()?;
+
+                    let token = s.current();
+                    if matches!(&token.code, T![,] | T![;]) {
+                        let mut t = token.clone();
+                        t.code = T![,];
+                        items.push((expr, Some(t)));
+                        s.plusplus();
+                    } else {
+                        items.push((expr, None));
                     }
                 }
             }
@@ -3825,7 +3795,7 @@ impl Parse {
                     match &token.code {
                         // struct expr
                         T!["{"] => {
-                            let span_brace_open = token.span;
+                            let t_brace_open = token.clone();
                             if s.stop_on_brace_open.get() {
                                 r.payload = ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Path(ExprPath::Path(path)),
@@ -3835,85 +3805,49 @@ impl Parse {
                             }
 
                             s.plusplus();
-                            let mut a = ExprStructStruct::default();
+                            let mut a = ExprStruct::default();
                             a.path = path;
-                            a.inner_attrs = s.parse_inner_attrs()?;
-                            a.span_brace_open = span_brace_open;
+                            a.t_brace_open = t_brace_open;
 
-                            let mut expect_field = true;
                             while s.has_more() {
                                 let token = s.current();
-                                match &token.code {
-                                    T!["}"] => {
-                                        a.span_brace_close = token.span;
+                                if matches!(&token.code, T!["}"]) {
+                                    a.t_brace_close = token.clone();
+                                    s.plusplus();
+                                    break;
+                                }
+
+                                if matches!(&token.code, T![...]) {
+                                    let t_sep = token.clone();
+                                    s.plusplus();
+                                    let e = if !matches!(s.current().code, T!["}"]) {
+                                        Some(s.parse_expr()?)
+                                    } else {
+                                        None
+                                    };
+                                    a.base = Some((t_sep, e));
+                                    if matches!(s.current().code, T![;]) {
                                         s.plusplus();
-                                        break;
                                     }
-                                    T![,] | T![;] => {
-                                        if expect_field {
-                                            return Err(s.panic(
-                                                token,
-                                                &format!("expected field but got {:?}", token),
-                                            ));
-                                        }
-                                        expect_field = true;
-                                        s.plusplus();
-                                    }
-                                    _ => {
-                                        if !expect_field {
-                                            return Err(s.panic(
-                                                token,
-                                                &format!("expected , or }} but got {:?}", token),
-                                            ));
-                                        }
-                                        expect_field = false;
-                                        let field = parse_struct_expr_field(s)?;
-                                        a.fields.push(field);
-                                    }
+                                    a.t_brace_close = s.current().clone();
+                                    s.expect(T!["}"])?;
+                                    break;
+                                }
+
+                                let field = parse_struct_expr_field(s)?;
+
+                                let token = s.current();
+                                if matches!(&token.code, T![,] | T![;]) {
+                                    let mut t = token.clone();
+                                    t.code = T![,];
+                                    s.plusplus();
+                                    a.fields.push((field, Some(t)));
+                                } else {
+                                    a.fields.push((field, None));
                                 }
                             }
                             r.payload = ExprPayload::WithoutBlock(Box::new(
-                                ExprWithoutBlock::Struct(ExprStruct::Struct(a)),
-                            ));
-                        }
-                        // struct tuple expr
-                        T!["("] => {
-                            s.plusplus();
-                            let mut a = ExprStructTuple::default();
-                            a.path = path;
-                            a.inner_attrs = s.parse_inner_attrs()?;
-                            a.span_paren_open = token.span;
-
-                            let mut expect_expr = true;
-                            while s.has_more() {
-                                let token = s.current();
-                                match &token.code {
-                                    T![")"] => {
-                                        a.span_paren_close = token.span;
-                                        s.plusplus();
-                                        break;
-                                    }
-                                    T![,] | T![;] => {
-                                        if expect_expr {
-                                            return Err(s.panic(token, "expected expr but got ,"));
-                                        }
-                                        expect_expr = true;
-                                        s.plusplus();
-                                    }
-                                    _ => {
-                                        if !expect_expr {
-                                            return Err(s.panic(
-                                                token,
-                                                &format!("expected , or ) but got {:?}", token),
-                                            ));
-                                        }
-                                        expect_expr = false;
-                                        a.exprs.push(s.parse_expr()?);
-                                    }
-                                }
-                            }
-                            r.payload = ExprPayload::WithoutBlock(Box::new(
-                                ExprWithoutBlock::Struct(ExprStruct::Tuple(a)),
+                                ExprWithoutBlock::Struct(a),
                             ));
                         }
                         _ => {
@@ -3989,25 +3923,25 @@ impl Parse {
                     }
                     Keyword::Match => {
                         let mut a = s.parse_match()?;
-                        a.span_match = token.span;
+                        a.t_match = token.clone();
                         r.payload = ExprPayload::WithBlock(Box::new(ExprWithBlock::Match(a)));
                     }
 
                     // without block
                     Keyword::Break => {
                         let mut a = s.parse_break()?;
-                        a.span_break = token.span;
+                        a.t_break = token.clone();
                         r.payload = ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Break(a)));
                     }
                     Keyword::Continue => {
                         let mut a = s.parse_continue()?;
-                        a.span_continue = token.span;
+                        a.t_continue = token.clone();
                         r.payload =
                             ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Continue(a)));
                     }
                     Keyword::Ret => {
                         let mut a = s.parse_ret()?;
-                        a.span_return = token.span;
+                        a.t_return = token.clone();
                         r.payload =
                             ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Return(a)));
                     }
@@ -4025,6 +3959,7 @@ impl Parse {
                     // ``, `` Expr
                     Op::TickTick => {
                         let mut range = ExprRange::default();
+                        range.t_sep = token.clone();
                         if !s.at_range_end(&s.current().code) {
                             range.end = Some(s.parse_expr()?);
                         }
@@ -4034,7 +3969,7 @@ impl Parse {
                     // ``= Expr
                     Op::TickTickEq => {
                         let mut range = ExprRange::default();
-                        range.inclusive = true;
+                        range.t_sep = token.clone();
                         range.end = Some(s.parse_expr()?);
                         r.payload =
                             ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Range(range)));
@@ -4161,50 +4096,32 @@ impl Parse {
         }
 
         fn parse_struct_expr_field(s: &Parse) -> ParseResult<ExprStructField> {
-            let r;
+            let mut r = ExprStructField::default();
+
+            r.outer_attrs = s.parse_outer_attrs()?;
+            r.name = s.current().clone();
+            s.plusplus();
 
             let token = s.current();
-            s.plusplus();
-            match &token.code {
-                TokenCode::Identifier(identifier) => {
-                    if matches!(&s.current().code, T![,] | T![;] | T!["}"]) {
-                        r = ExprStructField::A(ExprStructFieldA {
-                            name: identifier.clone(),
-                        });
-                    } else {
-                        s.expect(T![:])?;
-                        r = ExprStructField::B(ExprStructFieldB {
-                            name: identifier.clone(),
-                            expr: s.parse_expr()?,
-                        });
-                    }
-                }
-                TokenCode::Literal(Literal {
-                    payload: LiteralPayload::Int(name),
-                    ..
-                }) => {
-                    s.expect(T![:])?;
-                    r = ExprStructField::C(ExprStructFieldC {
-                        tuple_index: name.clone(),
-                        expr: s.parse_expr()?,
-                        span_index: token.span,
-                    });
-                }
-                T![...] => {
-                    let token = s.current();
-                    if matches!(&token.code, T!["}"] | T![,] | T![;]) {
-                        r = ExprStructField::Base(None, token.span);
-                    } else {
-                        r = ExprStructField::Base(Some(s.parse_expr()?), token.span);
-                    }
-                }
-                _ => {
+            if matches!(&token.code, T![:]) {
+                s.plusplus();
+                r.expr = Some((token.clone(), s.parse_expr()?));
+                if !matches!(r.name.code,
+                        TokenCode::Identifier(_)
+                        | TokenCode::Literal(Literal {
+                            payload: LiteralPayload::Int(_),
+                            ..
+                        })) {
                     return Err(s.panic(
                         token,
-                        &format!(
-                            "expected identifier, int literal or ... but got {:?}",
-                            token
-                        ),
+                        &format!("expected tuple index but got {:?}", token),
+                    ));
+                }
+            } else {
+                if !matches!(r.name.code, TokenCode::Identifier(_)) {
+                    return Err(s.panic(
+                        token,
+                        &format!("expected identifier but got {:?}", token),
                     ));
                 }
             }
@@ -5027,18 +4944,18 @@ impl Parse {
                     let b = s.parse_block_expr()?;
                     GenericArg::Const(GenericArgsConst::BlockExpr(b))
                 }
-                TokenCode::Literal(literal) => {
+                TokenCode::Literal(_) => {
                     s.plusplus();
-                    GenericArg::Const(GenericArgsConst::LiteralExpr(ExprLiteral(literal.clone())))
+                    GenericArg::Const(GenericArgsConst::LiteralExpr(ExprLiteral(token.clone())))
                 }
                 T![~] => {
                     s.plusplus();
                     let next_token = s.current();
-                    if let TokenCode::Literal(literal) = &next_token.code {
+                    if let TokenCode::Literal(_) = &next_token.code {
                         s.plusplus();
                         GenericArg::Const(GenericArgsConst::MinusLiteralExpr(
                             token.clone(),
-                            ExprLiteral(literal.clone()),
+                            ExprLiteral(next_token.clone()),
                         ))
                     } else {
                         return Err(s.panic(
@@ -5274,19 +5191,19 @@ impl Parse {
         match &token.code {
             // literal
             T![~] | TokenCode::Literal(_) => {
-                let pattern_literal = if let TokenCode::Literal(lit) = &token.code {
+                let pattern_literal = if let TokenCode::Literal(_) = &token.code {
                     PatternLiteral {
-                        name: lit.clone(),
+                        name: token.clone(),
                         t_minus: None,
                     }
                 } else {
                     let next_token = s.current();
                     s.plusplus();
-                    let TokenCode::Literal(literal) = &next_token.code else {
+                    let TokenCode::Literal(_) = &next_token.code else {
                         return Err(s.panic(next_token, "already checked to be Literal"));
                     };
                     PatternLiteral {
-                        name: literal.clone(),
+                        name: next_token.clone(),
                         t_minus: Some(token.clone()),
                     }
                 };
@@ -5356,6 +5273,7 @@ impl Parse {
 
             // identifier
             T![ref] | T![mut] => {
+                s.minusminus();
                 let mut r = PatternIdentifier::default();
                 if matches!(&token.code, T![ref]) {
                     r.t_ref = Some(token.clone());
@@ -5366,6 +5284,7 @@ impl Parse {
                     r.t_mut = Some(token.clone());
                     s.plusplus();
                 }
+
                 let token = s.current();
                 s.plusplus();
                 let TokenCode::Identifier(_) = &token.code else {
@@ -5677,39 +5596,31 @@ impl Parse {
                     s.plusplus();
                     break;
                 }
-                let item = parse_struct_pattern_item(s)?;
-                let token = s.current();
-                if matches!(&token.code, T![,] | T![;]) {
-                    s.plusplus();
-                    if let PatternStructItem::Field(mut f) = item {
-                        let mut t = token.clone();
-                        t.code = T![,];
-                        f.t_comma = Some(t);
-                    }
-                }
+                let a = parse_struct_pattern_item(s)?;
+                r.items.push(a);
             }
 
             return Ok(r);
 
             fn parse_struct_pattern_item(s: &Parse) -> ParseResult<PatternStructItem> {
-                let r;
-
                 let outer_attrs = s.parse_outer_attrs()?;
 
                 let token = s.current();
                 s.plusplus();
-                match &token.code {
-                    T![...] => {
-                        r = PatternStructItem::Etc(token.clone());
-                    }
+
+                if matches!(&token.code, T![...]) {
+                    return Ok(PatternStructItem::Etc(token.clone()));
+                }
+
+                let mut r = match &token.code {
                     TokenCode::Literal(Literal {
                         payload: LiteralPayload::Int(_),
                         ..
                     }) => {
-                        let t_colon = token.clone();
+                        let t_colon = s.current().clone();
                         s.expect(T![:])?;
                         let pattern = s.parse_pattern()?;
-                        r = PatternStructItem::Field(PatternStructField {
+                        PatternStructField {
                             outer_attrs,
                             payload: PatternStructFieldPayload::A(PatternStructFieldA {
                                 pattern,
@@ -5717,14 +5628,14 @@ impl Parse {
                                 t_tuple_index: token.clone(),
                             }),
                             t_comma: None,
-                        });
+                        }
                     }
                     TokenCode::Identifier(_) => {
                         if matches!(&s.current().code, T![:]) {
                             let t_colon = s.current().clone();
                             s.plusplus();
                             let pattern = s.parse_pattern()?;
-                            r = PatternStructItem::Field(PatternStructField {
+                            PatternStructField {
                                 outer_attrs,
                                 payload: PatternStructFieldPayload::B(PatternStructFieldB {
                                     name: token.clone(),
@@ -5732,15 +5643,15 @@ impl Parse {
                                     pattern,
                                 }),
                                 t_comma: None,
-                            });
+                            }
                         } else {
                             let mut c = PatternStructFieldC::default();
                             c.name = token.clone();
-                            r = PatternStructItem::Field(PatternStructField {
+                            PatternStructField {
                                 outer_attrs,
                                 payload: PatternStructFieldPayload::C(c),
                                 t_comma: None,
-                            });
+                            }
                         }
                     }
                     T![ref] => {
@@ -5761,11 +5672,11 @@ impl Parse {
                                 &format!("expected identifier but got {:?}", token),
                             ));
                         }
-                        r = PatternStructItem::Field(PatternStructField {
+                        PatternStructField {
                             outer_attrs,
                             payload: PatternStructFieldPayload::C(c),
                             t_comma: None,
-                        });
+                        }
                     }
                     T![mut] => {
                         let mut c = PatternStructFieldC::default();
@@ -5780,20 +5691,28 @@ impl Parse {
                                 &format!("expected identifier but got {:?}", token),
                             ));
                         }
-                        r = PatternStructItem::Field(PatternStructField {
+                        PatternStructField {
                             outer_attrs,
                             payload: PatternStructFieldPayload::C(c),
                             t_comma: None,
-                        });
+                        }
                     }
                     _ => {
                         return Err(
                             s.panic(&token, &format!("illegal token {:?} for pattern", token))
                         );
                     }
+                };
+
+                let token = s.current();
+                if matches!(&token.code, T![,] | T![;]) {
+                    s.plusplus();
+                    let mut t = token.clone();
+                    t.code = T![,];
+                    r.t_comma = Some(t);
                 }
 
-                Ok(r)
+                Ok(PatternStructItem::Field(r))
             }
         }
 

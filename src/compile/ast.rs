@@ -1860,7 +1860,11 @@ impl ToLang for SimplePath {
         // -..crate-abc..Abc turns into ::crate_abc::Abc
         let first = s.items.first().unwrap();
         if let TokenCode::Identifier(a) = &first.token.code && a.id == "-" {
-            first.token.to_rs_before(p);
+            if s.items.len() == 1 {
+                first.to_rust(p);
+            } else {
+                first.token.to_rs_before(p);
+            }
         } else {
             first.to_rust(p);
         }
@@ -1940,7 +1944,11 @@ impl ToLang for PathInExpr {
         // -..crate-abc..Abc turns into ::crate_abc::Abc
         let first = s.items.first().unwrap();
         if let TokenCode::Identifier(a) = &first.name.token.code && a.id == "-" {
-            first.name.token.to_rs_before(p);
+            if s.items.len() == 1 {
+                first.to_rust(p);
+            } else {
+                first.name.token.to_rs_before(p);
+            }
         } else {
             first.to_rust(p);
         }
@@ -2054,7 +2062,11 @@ impl ToLang for TypePath {
         // -..crate-abc..Abc turns into ::crate_abc::Abc
         let first = s.items.first().unwrap();
         if let TokenCode::Identifier(a) = &first.name.token.code && a.id == "-" {
-            first.name.token.to_rs_before(p);
+            if s.items.len() == 1 {
+                first.to_rust(p);
+            } else {
+                first.name.token.to_rs_before(p);
+            }
         } else {
             first.to_rust(p);
         }
@@ -2352,8 +2364,8 @@ impl ToLang for PatternWithoutRange {
                 a.t_square_close.to_rust(p);
             }
             PatternWithoutRange::Path(a) => match a {
-                PatternPath::Path(b) => p.push_rust(b),
-                PatternPath::QualifiedPath(b) => p.push_rust(b),
+                PatternPath::Path(b) => b.to_rust(p),
+                PatternPath::QualifiedPath(b) => b.to_rust(p),
             },
             PatternWithoutRange::MacroCall(a) => p.push_rust(a),
         }
@@ -2361,7 +2373,7 @@ impl ToLang for PatternWithoutRange {
 }
 #[derive(Debug)]
 pub struct PatternLiteral {
-    pub name: Literal,
+    pub name: Token,
 
     pub t_minus: Option<Token>,
 }
@@ -2551,9 +2563,9 @@ impl ToLang for PatternRangeBound {
         let s = self;
 
         match s {
-            PatternRangeBound::Literal(a) => p.push_rust(a),
-            PatternRangeBound::Path(a) => p.push_rust(a),
-            PatternRangeBound::QualifiedPath(a) => p.push_rust(a),
+            PatternRangeBound::Literal(a) => a.to_rust(p),
+            PatternRangeBound::Path(a) => a.to_rust(p),
+            PatternRangeBound::QualifiedPath(a) => a.to_rust(p),
         }
     }
 }
@@ -2956,7 +2968,7 @@ pub enum ExprPayload {
 impl Default for ExprPayload {
     fn default() -> Self {
         ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Literal(ExprLiteral(
-            Literal::default(),
+            Token::default(),
         ))))
     }
 }
@@ -3217,42 +3229,43 @@ pub struct ExprMatch {
     pub inner_attrs: Attrs,
     pub arms: Vec<ExprMatchItem>,
 
-    pub span_match: Span,
-    pub span_brace_open: Span,
-    pub span_brace_close: Span,
+    pub t_match: Token,
+    pub t_brace_open: Token,
+    pub t_brace_close: Token,
 }
 impl ToLang for ExprMatch {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("match", s.span_match);
-        p.push_raw(" ");
-        p.push_rust(&s.expr);
+        s.t_match.to_rust(p);
+        s.expr.to_rust(p);
 
-        p.push_raw(" ");
-        p.push_s("{", s.span_brace_open);
-        p.push_raw("\n");
-        p.inc_indent();
+        s.t_brace_open.to_rust(p);
+        s.inner_attrs.to_rust(p);
+        for it in &s.arms {
+            it.arm.to_rust(p);
 
-        p.push_rust(&s.inner_attrs);
-        for item in &s.arms {
-            p.indent();
-            p.push_rust(&item.arm);
-            p.push_raw(" => ");
-            p.push_rust(&item.expr);
-            p.push_raw(",\n");
+            let has_blank = it.t_sep.tokens_before
+                .iter()
+                .any(|it| it.code == TokenCode::Blank);
+            if !has_blank {
+                p.push_raw(" ");
+            }
+            it.t_sep.to_rust(p);
+
+            it.expr.to_rust(p);
+            if matches!(&it.expr.payload, ExprPayload::WithoutBlock(_)) {
+                p.push_raw(",");
+            }
         }
-
-        p.dec_indent();
-        p.indent();
-        p.push_s("}", s.span_brace_close);
-        p.push_raw("\n");
+        s.t_brace_close.to_rust(p);
     }
 }
 #[derive(Debug, Default)]
 pub struct ExprMatchItem {
     pub arm: ExprMatchArm,
     pub expr: Expr,
+    pub t_sep: Token,
 }
 #[derive(Debug, Default)]
 pub struct ExprMatchArm {
@@ -3264,13 +3277,11 @@ impl ToLang for ExprMatchArm {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.outer_attrs);
-        p.push_rust(&s.pattern);
-        if let Some(guard) = &s.guard {
-            p.push_raw(" ");
-            p.push_s("if", guard.span_if);
-            p.push_raw(" ");
-            p.push_rust(&guard.conditions);
+        s.outer_attrs.to_rust(p);
+        s.pattern.to_rust(p);
+        if let Some(a) = &s.guard {
+            a.t_if.to_rust(p);
+            a.conditions.to_rust(p);
         }
     }
 }
@@ -3278,7 +3289,7 @@ impl ToLang for ExprMatchArm {
 pub struct ExprMatchArmGuard {
     pub conditions: Conditions,
 
-    pub span_if: Span,
+    pub t_if: Token,
 }
 
 #[derive(Debug)]
@@ -3305,7 +3316,7 @@ pub enum ExprWithoutBlock {
 }
 impl Default for ExprWithoutBlock {
     fn default() -> Self {
-        ExprWithoutBlock::Literal(ExprLiteral(Literal::default()))
+        ExprWithoutBlock::Literal(ExprLiteral(Token::default()))
     }
 }
 impl ToLang for ExprWithoutBlock {
@@ -3313,36 +3324,36 @@ impl ToLang for ExprWithoutBlock {
         let s = self;
 
         match s {
-            ExprWithoutBlock::Literal(a) => p.push_rust(a),
-            ExprWithoutBlock::Path(a) => p.push_rust(a),
-            ExprWithoutBlock::Operator(a) => p.push_rust(a),
-            ExprWithoutBlock::Grouped(a) => p.push_rust(a),
-            ExprWithoutBlock::Array(a) => p.push_rust(a),
-            ExprWithoutBlock::Await(a) => p.push_rust(a),
-            ExprWithoutBlock::Index(a) => p.push_rust(a),
-            ExprWithoutBlock::Tuple(a) => p.push_rust(a),
-            ExprWithoutBlock::TupleIndexing(a) => p.push_rust(a),
-            ExprWithoutBlock::Struct(a) => p.push_rust(a),
-            ExprWithoutBlock::Call(a) => p.push_rust(a),
-            ExprWithoutBlock::MethodCall(a) => p.push_rust(a),
-            ExprWithoutBlock::Field(a) => p.push_rust(a),
-            ExprWithoutBlock::Closure(a) => p.push_rust(a),
-            ExprWithoutBlock::Continue(a) => p.push_rust(a),
-            ExprWithoutBlock::Break(a) => p.push_rust(a),
-            ExprWithoutBlock::Range(a) => p.push_rust(a),
-            ExprWithoutBlock::Return(a) => p.push_rust(a),
-            ExprWithoutBlock::MacroCall(a) => p.push_rust(a),
+            ExprWithoutBlock::Literal(a) => a.to_rust(p),
+            ExprWithoutBlock::Path(a) => a.to_rust(p),
+            ExprWithoutBlock::Operator(a) => a.to_rust(p),
+            ExprWithoutBlock::Grouped(a) => a.to_rust(p),
+            ExprWithoutBlock::Array(a) => a.to_rust(p),
+            ExprWithoutBlock::Await(a) => a.to_rust(p),
+            ExprWithoutBlock::Index(a) => a.to_rust(p),
+            ExprWithoutBlock::Tuple(a) => a.to_rust(p),
+            ExprWithoutBlock::TupleIndexing(a) => a.to_rust(p),
+            ExprWithoutBlock::Struct(a) => a.to_rust(p),
+            ExprWithoutBlock::Call(a) => a.to_rust(p),
+            ExprWithoutBlock::MethodCall(a) => a.to_rust(p),
+            ExprWithoutBlock::Field(a) => a.to_rust(p),
+            ExprWithoutBlock::Closure(a) => a.to_rust(p),
+            ExprWithoutBlock::Continue(a) => a.to_rust(p),
+            ExprWithoutBlock::Break(a) => a.to_rust(p),
+            ExprWithoutBlock::Range(a) => a.to_rust(p),
+            ExprWithoutBlock::Return(a) => a.to_rust(p),
+            ExprWithoutBlock::MacroCall(a) => a.to_rust(p),
         }
     }
 }
 
 #[derive(Debug)]
-pub struct ExprLiteral(pub Literal);
+pub struct ExprLiteral(pub Token);
 impl ToLang for ExprLiteral {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.0);
+        s.0.to_rust(p);
     }
 }
 
@@ -3367,6 +3378,7 @@ pub enum ExprOperator {
     Borrow(ExprBorrow),
     Dereference(ExprDereference),
     ErrorPropagation(ExprErrorPropagation),
+    IncDec(ExprIncDec),
     Negation(ExprNegation),
     ArithmeticOrLogical(ExprArithmeticOrLogical),
     Comparison(ExprComparison),
@@ -3401,6 +3413,15 @@ impl ToLang for ExprOperator {
             ExprOperator::ErrorPropagation(a) => {
                 p.push_rust(&a.expr);
                 p.push_s("?", a.span);
+            }
+            ExprOperator::IncDec(a) => {
+                a.expr.to_rust(p);
+                if a.inc {
+                    p.push_raw(" +");
+                } else {
+                    p.push_raw(" -");
+                }
+                p.push_raw("= 1");
             }
             ExprOperator::Negation(a) => {
                 if a.not {
@@ -3521,6 +3542,12 @@ pub struct ExprErrorPropagation {
     pub span: Span,
 }
 #[derive(Debug)]
+pub struct ExprIncDec {
+    pub expr: Expr,
+
+    pub inc: bool,
+}
+#[derive(Debug)]
 pub struct ExprNegation {
     pub not: bool, // true for -, false for !(bitwise not)
     pub expr: Expr,
@@ -3576,53 +3603,48 @@ pub struct ExprCompoundAssignment {
 
 #[derive(Debug)]
 pub struct ExprGrouped {
-    pub inner_attrs: Attrs,
     pub expr: Expr,
 
-    pub span_paren_open: Span,
-    pub span_paren_close: Span,
+    pub t_paren_open: Token,
+    pub t_paren_close: Token,
 }
 impl ToLang for ExprGrouped {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("(", s.span_paren_open);
-        p.push_rust(&s.inner_attrs);
-        p.push_rust(&s.expr);
-        p.push_s(")", s.span_paren_close);
+        s.t_paren_open.to_rust(p);
+        s.expr.to_rust(p);
+        s.t_paren_close.to_rust(p);
     }
 }
 #[derive(Debug)]
 pub struct ExprArray {
-    pub inner_attrs: Attrs,
     pub payload: ExprArrayPayload,
 
-    pub span_double_brace_open: Span,
-    pub span_double_brace_close: Span,
+    pub t_double_brace_open: Token,
+    pub t_double_brace_close: Token,
 }
 impl ToLang for ExprArray {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("[", s.span_double_brace_open);
-        p.push_rust(&s.inner_attrs);
+        s.t_double_brace_open.to_rust(p);
         match &s.payload {
             ExprArrayPayload::One(a) => {
-                p.push_rust(&a.value);
-                p.push_s(";", a.span_semicolon);
-                p.push_raw(" ");
-                p.push_rust(&a.len);
+                a.value.to_rust(p);
+                a.t_semicolon.to_rust(p);
+                a.len.to_rust(p);
             }
             ExprArrayPayload::Many(a) => {
-                for (i, item) in a.0.iter().enumerate() {
-                    if i != 0 {
-                        p.push_raw(", ");
+                for (it, t) in &a.0 {
+                    it.to_rust(p);
+                    if let Some(t) = t {
+                        t.to_rust(p);
                     }
-                    p.push_rust(item);
                 }
             }
         }
-        p.push_s("]", s.span_double_brace_close);
+        s.t_double_brace_close.to_rust(p);
     }
 }
 #[derive(Debug)]
@@ -3635,23 +3657,25 @@ pub struct ExprArrayOne {
     pub value: Expr,
     pub len: Expr,
 
-    pub span_semicolon: Span,
+    pub t_semicolon: Token,
 }
 #[derive(Debug)]
-pub struct ExprArrayMany(pub Vec<Expr>);
+pub struct ExprArrayMany(pub Vec<(Expr, Option<Token>)>);
 
 #[derive(Debug)]
 pub struct ExprAwait {
     pub expr: Expr,
 
-    pub span: Span,
+    pub t_dot: Token,
+    pub t_await: Token,
 }
 impl ToLang for ExprAwait {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.expr);
-        p.push_s(".await", s.span);
+        s.expr.to_rust(p);
+        s.t_dot.to_rust(p);
+        s.t_await.to_rust(p);
     }
 }
 
@@ -3660,247 +3684,171 @@ pub struct ExprIndex {
     pub left: Expr,
     pub right: Expr,
 
-    pub span_double_brace_open: Span,
-    pub span_double_brace_close: Span,
+    pub t_double_brace_open: Token,
+    pub t_double_brace_close: Token,
 }
 impl ToLang for ExprIndex {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.left);
-        p.push_s("[", s.span_double_brace_open);
-        p.push_rust(&s.right);
-        p.push_s("]", s.span_double_brace_close);
+        s.left.to_rust(p);
+        s.t_double_brace_open.to_rust(p);
+        s.right.to_rust(p);
+        s.t_double_brace_close.to_rust(p);
     }
 }
 #[derive(Debug)]
 pub struct ExprTuple {
-    pub inner_attrs: Attrs,
-    pub items: Vec<Expr>,
+    pub items: Vec<(Expr, Option<Token>)>,
 
-    pub span_paren_open: Span,
-    pub span_paren_close: Span,
+    pub t_paren_open: Token,
+    pub t_paren_close: Token,
 }
 impl ToLang for ExprTuple {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("(", s.span_paren_open);
-        p.push_rust(&s.inner_attrs);
-        for (i, item) in s.items.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
+        s.t_paren_open.to_rust(p);
+        for (it, t) in &s.items {
+            it.to_rust(p);
+            if let Some(t) = t {
+                t.to_rust(p);
             }
-            p.push_rust(item);
         }
-        if s.items.len() == 1 {
-            p.push_raw(", ");
-        }
-        p.push_s(")", s.span_paren_close);
+        s.t_paren_close.to_rust(p);
     }
 }
 #[derive(Debug)]
 pub struct ExprTupleIndexing {
     pub left: Expr,
-    pub index: String,
+    pub index: Token,
 
-    pub span_dot: Span,
-    pub span_index: Span,
+    pub t_dot: Token,
 }
 impl ToLang for ExprTupleIndexing {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.left);
-        p.push_s(".", s.span_dot);
-        p.push_s(&s.index, s.span_index);
+        s.left.to_rust(p);
+        s.t_dot.to_rust(p);
+        s.index.to_rust(p);
     }
 }
-#[derive(Debug)]
-pub enum ExprStruct {
-    Struct(ExprStructStruct),
-    Tuple(ExprStructTuple),
+#[derive(Debug, Default)]
+pub struct ExprStruct {
+    pub path: PathInExpr,
+    pub fields: Vec<(ExprStructField, Option<Token>)>,
+    pub base: Option<(Token, Option<Expr>)>,
+
+    pub t_brace_open: Token,
+    pub t_brace_close: Token,
 }
 impl ToLang for ExprStruct {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        match s {
-            ExprStruct::Struct(a) => p.push_rust(a),
-            ExprStruct::Tuple(a) => p.push_rust(a),
+        s.path.to_rust(p);
+        s.t_brace_open.to_rust(p);
+        for (it, t) in &s.fields {
+            it.to_rust(p);
+            if let Some(t) = t {
+                t.to_rust(p);
+            }
         }
+        if let Some((t, expr)) = &s.base {
+            t.to_rust(p);
+            if let Some(expr) = expr {
+                expr.to_rust(p);
+            } else {
+                p.push_raw("Default::default()")
+            }
+        }
+        s.t_brace_close.to_rust(p);
     }
 }
 #[derive(Debug, Default)]
-pub struct ExprStructStruct {
-    pub path: PathInExpr,
-    pub inner_attrs: Attrs,
-    pub fields: Vec<ExprStructField>,
-    pub span_brace_open: Span,
-    pub span_brace_close: Span,
-    pub span_base: Option<Span>,
-}
-impl ToLang for ExprStructStruct {
-    fn to_rust(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_rust(&s.path);
-        p.push_s("{", s.span_brace_open);
-        p.push_rust(&s.inner_attrs);
-        for (i, item) in s.fields.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
-            }
-            p.push_rust(item);
-        }
-        p.push_s("}", s.span_brace_close);
-    }
-}
-#[derive(Debug)]
-pub enum ExprStructField {
-    A(ExprStructFieldA),
-    B(ExprStructFieldB),
-    C(ExprStructFieldC),
-    Base(Option<Expr>, Span),
+pub struct ExprStructField {
+    pub outer_attrs: Attrs,
+    pub name: Token,
+    pub expr: Option<(Token, Expr)>,
 }
 impl ToLang for ExprStructField {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        match s {
-            ExprStructField::A(a) => p.push_rust(&a.name),
-            ExprStructField::B(a) => {
-                p.push_rust(&a.name);
-                p.push_raw(": ");
-                p.push_rust(&a.expr);
-            }
-            ExprStructField::C(a) => {
-                p.push_s(&a.tuple_index, a.span_index);
-                p.push_raw(": ");
-                p.push_rust(&a.expr);
-            }
-            ExprStructField::Base(a, span) => {
-                p.push_s("..", *span);
-                if let Some(a) = a {
-                    p.push_rust(a);
-                } else {
-                    p.push_raw("Default::default()")
-                }
-            }
+        s.outer_attrs.to_rust(p);
+        s.name.to_rust(p);
+        if let Some((t, expr)) = &s.expr {
+            t.to_rust(p);
+            expr.to_rust(p);
         }
-    }
-}
-impl Default for ExprStructField {
-    fn default() -> Self {
-        ExprStructField::A(ExprStructFieldA::default())
-    }
-}
-#[derive(Debug, Default)]
-pub struct ExprStructFieldA {
-    pub name: Identifier,
-}
-#[derive(Debug, Default)]
-pub struct ExprStructFieldB {
-    pub name: Identifier,
-    pub expr: Expr,
-}
-#[derive(Debug, Default)]
-pub struct ExprStructFieldC {
-    pub tuple_index: String,
-    pub expr: Expr,
-
-    pub span_index: Span,
-}
-#[derive(Debug, Default)]
-pub struct ExprStructTuple {
-    pub path: PathInExpr,
-    pub inner_attrs: Attrs,
-    pub exprs: Vec<Expr>,
-
-    pub span_paren_open: Span,
-    pub span_paren_close: Span,
-}
-impl ToLang for ExprStructTuple {
-    fn to_rust(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        p.push_rust(&s.path);
-        p.push_s("(", s.span_paren_open);
-        p.push_rust(&s.inner_attrs);
-        for (i, item) in s.exprs.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
-            }
-            p.push_rust(item);
-        }
-        p.push_s(")", s.span_paren_close);
     }
 }
 
 #[derive(Debug)]
 pub struct ExprCall {
     pub left: Expr,
-    pub params: Vec<Expr>,
+    pub params: Vec<(Expr, Option<Token>)>,
 
-    pub span_paren_open: Span,
-    pub span_paren_close: Span,
+    pub t_paren_open: Token,
+    pub t_paren_close: Token,
 }
 impl ToLang for ExprCall {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.left);
-        p.push_s("(", s.span_paren_open);
-        for (i, item) in s.params.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
+        s.left.to_rust(p);
+        s.t_paren_open.to_rust(p);
+        for (it, t) in &s.params {
+            it.to_rust(p);
+            if let Some(t) = t {
+                t.to_rust(p);
             }
-            p.push_rust(item);
         }
-        p.push_s(")", s.span_paren_close);
+        s.t_paren_close.to_rust(p);
     }
 }
 #[derive(Debug, Default)]
 pub struct ExprMethodCall {
     pub left: Expr,
     pub path_expr_segment: PathExprSegment,
-    pub params: Vec<Expr>,
+    pub params: Vec<(Expr, Option<Token>)>,
 
-    pub span_dot: Span,
-    pub span_paren_open: Span,
-    pub span_paren_close: Span,
+    pub t_dot: Token,
+    pub t_paren_open: Token,
+    pub t_paren_close: Token,
 }
 impl ToLang for ExprMethodCall {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.left);
-        p.push_s(".", s.span_dot);
-        p.push_rust(&s.path_expr_segment);
-        p.push_s("(", s.span_paren_open);
-        for (i, item) in s.params.iter().enumerate() {
-            if i != 0 {
-                p.push_raw(", ");
+        s.left.to_rust(p);
+        s.t_dot.to_rust(p);
+        s.path_expr_segment.to_rust(p);
+        s.t_paren_open.to_rust(p);
+        for (it, t) in &s.params {
+            it.to_rust(p);
+            if let Some(t) = t {
+                t.to_rust(p);
             }
-            p.push_rust(item);
         }
-        p.push_s(")", s.span_paren_close);
+        s.t_paren_close.to_rust(p);
     }
 }
 #[derive(Debug)]
 pub struct ExprField {
     pub left: Expr,
-    pub name: Identifier,
+    pub name: Token,
 
-    pub span_dot: Span,
+    pub t_dot: Token,
 }
 impl ToLang for ExprField {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.left);
-        p.push_s(".", s.span_dot);
-        p.push_rust(&s.name);
+        s.left.to_rust(p);
+        s.t_dot.to_rust(p);
+        s.name.to_rust(p);
     }
 }
 #[derive(Debug, Default)]
@@ -3966,17 +3914,15 @@ impl ToLang for ExprClosure {
 pub struct ExprContinue {
     pub label: Option<Token>,
 
-    pub span_continue: Span,
-    pub span_label: Option<Span>,
+    pub t_continue: Token,
 }
 impl ToLang for ExprContinue {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("continue", s.span_continue);
-        if let Some(identifier) = &s.label {
-            p.push_raw(" ");
-            p.push_rust(identifier);
+        s.t_continue.to_rust(p);
+        if let Some(a) = &s.label {
+            a.to_rust(p);
         }
     }
 }
@@ -3985,21 +3931,18 @@ pub struct ExprBreak {
     pub label: Option<Token>,
     pub expr: Option<Expr>,
 
-    pub span_break: Span,
-    pub span_label: Option<Span>,
+    pub t_break: Token,
 }
 impl ToLang for ExprBreak {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("break", s.span_break);
-        if let Some(identifier) = &s.label {
-            p.push_raw(" ");
-            p.push_rust(identifier);
+        s.t_break.to_rust(p);
+        if let Some(a) = &s.label {
+            a.to_rust(p);
         }
         if let Some(expr) = &s.expr {
-            p.push_raw(" ");
-            p.push_rust(expr);
+            expr.to_rust(p);
         }
     }
 }
@@ -4007,41 +3950,35 @@ impl ToLang for ExprBreak {
 pub struct ExprReturn {
     pub expr: Option<Expr>,
 
-    pub span_return: Span,
+    pub t_return: Token,
 }
 impl ToLang for ExprReturn {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_s("return", s.span_return);
+        s.t_return.to_rust(p);
         if let Some(expr) = &s.expr {
-            p.push_raw(" ");
-            p.push_rust(expr);
+            expr.to_rust(p);
         }
     }
 }
 #[derive(Debug, Default)]
 pub struct ExprRange {
     pub start: Option<Expr>,
-    pub inclusive: bool, // can't be false when start == None && end == None
     pub end: Option<Expr>,
 
-    pub span: Span,
+    pub t_sep: Token,
 }
 impl ToLang for ExprRange {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if let Some(start) = &s.start {
-            p.push_rust(start);
+        if let Some(t) = &s.start {
+            t.to_rust(p);
         }
-        if s.inclusive {
-            p.push_s("..=", s.span);
-        } else {
-            p.push_s("..", s.span);
-        }
-        if let Some(end) = &s.end {
-            p.push_rust(end);
+        s.t_sep.to_rust(p);
+        if let Some(t) = &s.end {
+            t.to_rust(p);
         }
     }
 }
