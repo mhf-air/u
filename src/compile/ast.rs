@@ -1988,7 +1988,6 @@ impl ToLang for PathExprSegment {
         }
         s.name.to_rust(p);
         if !s.generic_args.items.is_empty() {
-            p.push_raw("::");
             p.push_rust(&s.generic_args);
         }
     }
@@ -2933,12 +2932,15 @@ impl ToLang for StmtLet {
 pub struct StmtValue {
     pub outer_attrs: Attrs,
     pub expr: Expr,
+    pub t_sep: Token,
 }
 impl ToLang for StmtValue {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.expr);
+        s.outer_attrs.to_rust(p);
+        s.t_sep.to_rs_before(p);
+        s.expr.to_rust(p);
     }
 }
 
@@ -3393,26 +3395,22 @@ impl ToLang for ExprOperator {
 
         match s {
             ExprOperator::Borrow(a) => {
-                p.push_s("&", a.span_ref);
-                if a.raw {
-                    p.push_s("raw", a.span_raw.unwrap());
-                    p.push_raw(" ");
+                a.t_ref.to_rust(p);
+                if let Some(t) = &a.t_raw {
+                    t.to_rust(p);
                 }
-                if a.mut_ {
-                    p.push_s("mut", a.span_mut.unwrap());
-                    p.push_raw(" ");
-                } else if a.raw {
-                    p.push_raw("const ");
+                if let Some(t) = &a.t_mut {
+                    t.to_rust(p);
                 }
-                p.push_rust(&a.expr);
+                a.expr.to_rust(p);
             }
             ExprOperator::Dereference(a) => {
-                p.push_s("*", a.span);
-                p.push_rust(&a.expr);
+                a.t_sep.to_rust(p);
+                a.expr.to_rust(p);
             }
             ExprOperator::ErrorPropagation(a) => {
-                p.push_rust(&a.expr);
-                p.push_s("?", a.span);
+                a.expr.to_rust(p);
+                a.t_sep.to_rust(p);
             }
             ExprOperator::IncDec(a) => {
                 a.expr.to_rust(p);
@@ -3424,96 +3422,38 @@ impl ToLang for ExprOperator {
                 p.push_raw("= 1");
             }
             ExprOperator::Negation(a) => {
-                if a.not {
-                    p.push_s("!", a.span);
-                } else {
-                    p.push_s("-", a.span);
-                }
-                p.push_rust(&a.expr);
+                a.t_sep.to_rust(p);
+                a.expr.to_rust(p);
             }
             ExprOperator::ArithmeticOrLogical(a) => {
-                p.push_rust(&a.left);
-                p.push_raw(" ");
-                if let TokenCode::Op(op) = &a.op {
-                    match op {
-                        Op::Add => p.push_s("+", a.span_op),
-                        Op::Sub => p.push_s("-", a.span_op),
-                        Op::Star => p.push_s("*", a.span_op),
-                        Op::Div => p.push_s("/", a.span_op),
-                        Op::Rem => p.push_s("%", a.span_op),
-                        Op::BitAnd => p.push_s("&", a.span_op),
-                        Op::BitOr => p.push_s("|", a.span_op),
-                        Op::BitXor => p.push_s("^", a.span_op),
-                        Op::LeftShift => p.push_s("<<", a.span_op),
-                        Op::RightShift => p.push_s(">>", a.span_op),
-                        _ => {}
-                    }
-                }
-                p.push_raw(" ");
-                p.push_rust(&a.right);
+                a.left.to_rust(p);
+                a.op.to_rust(p);
+                a.right.to_rust(p);
             }
             ExprOperator::Comparison(a) => {
-                p.push_rust(&a.left);
-                p.push_raw(" ");
-                if let TokenCode::Op(op) = &a.op {
-                    match op {
-                        Op::Eq => p.push_s("==", a.span_op),
-                        Op::Neq => p.push_s("!=", a.span_op),
-                        Op::Greater => p.push_s(">", a.span_op),
-                        Op::Less => p.push_s("<", a.span_op),
-                        Op::GreaterEq => p.push_s(">=", a.span_op),
-                        Op::LessEq => p.push_s("<=", a.span_op),
-                        _ => {}
-                    }
-                }
-                p.push_raw(" ");
-                p.push_rust(&a.right);
+                a.left.to_rust(p);
+                a.op.to_rust(p);
+                a.right.to_rust(p);
             }
             ExprOperator::LazyBoolean(a) => {
-                p.push_rust(&a.left);
-                p.push_raw(" ");
-                if let TokenCode::Op(op) = &a.op {
-                    match op {
-                        Op::And => p.push_s("&&", a.span_op),
-                        Op::Or => p.push_s("||", a.span_op),
-                        _ => {}
-                    }
-                }
-                p.push_raw(" ");
-                p.push_rust(&a.right);
+                a.left.to_rust(p);
+                a.op.to_rust(p);
+                a.right.to_rust(p);
             }
             ExprOperator::TypeCast(a) => {
-                p.push_rust(&a.expr);
-                p.push_raw(" as ");
-                p.push_rust(&a.type_no_bounds);
+                a.expr.to_rust(p);
+                a.t_as.to_rust(p);
+                a.type_no_bounds.to_rust(p);
             }
             ExprOperator::Assignment(a) => {
-                p.push_rust(&a.left);
-                p.push_raw(" ");
-                p.push_s("=", a.span_op);
-                p.push_raw(" ");
-                p.push_rust(&a.right);
+                a.left.to_rust(p);
+                a.op.to_rust(p);
+                a.right.to_rust(p);
             }
             ExprOperator::CompoundAssignment(a) => {
-                p.push_rust(&a.left);
-                p.push_raw(" ");
-                if let TokenCode::Assign(assign) = &a.op {
-                    match assign {
-                        Assign::Add => p.push_s("+=", a.span_op),
-                        Assign::Sub => p.push_s("-=", a.span_op),
-                        Assign::Star => p.push_s("*=", a.span_op),
-                        Assign::Div => p.push_s("/=", a.span_op),
-                        Assign::Rem => p.push_s("%=", a.span_op),
-                        Assign::BitAnd => p.push_s("&=", a.span_op),
-                        Assign::BitOr => p.push_s("|=", a.span_op),
-                        Assign::BitXor => p.push_s("^=", a.span_op),
-                        Assign::LeftShift => p.push_s("<<=", a.span_op),
-                        Assign::RightShift => p.push_s(">>=", a.span_op),
-                        _ => {}
-                    }
-                }
-                p.push_raw(" ");
-                p.push_rust(&a.right);
+                a.left.to_rust(p);
+                a.op.to_rust(p);
+                a.right.to_rust(p);
             }
         }
     }
@@ -3521,25 +3461,23 @@ impl ToLang for ExprOperator {
 
 #[derive(Debug, Default)]
 pub struct ExprBorrow {
-    pub raw: bool,
-    pub mut_: bool,
     pub expr: Expr,
 
-    pub span_ref: Span,
-    pub span_raw: Option<Span>,
-    pub span_mut: Option<Span>,
+    pub t_ref: Token,
+    pub t_raw: Option<Token>,
+    pub t_mut: Option<Token>,
 }
 #[derive(Debug)]
 pub struct ExprDereference {
     pub expr: Expr,
 
-    pub span: Span,
+    pub t_sep: Token,
 }
 #[derive(Debug)]
 pub struct ExprErrorPropagation {
     pub expr: Expr,
 
-    pub span: Span,
+    pub t_sep: Token,
 }
 #[derive(Debug)]
 pub struct ExprIncDec {
@@ -3549,56 +3487,46 @@ pub struct ExprIncDec {
 }
 #[derive(Debug)]
 pub struct ExprNegation {
-    pub not: bool, // true for -, false for !(bitwise not)
     pub expr: Expr,
 
-    pub span: Span,
+    pub t_sep: Token,
 }
 #[derive(Debug)]
 pub struct ExprArithmeticOrLogical {
     pub left: Expr,
-    pub op: TokenCode, // must be TokenCode::Op(+ ~ * / % & | ^ << >>)
+    pub op: Token, // must be TokenCode::Op(+ ~ * / % & | ^ << >>)
     pub right: Expr,
-
-    pub span_op: Span,
 }
 #[derive(Debug)]
 pub struct ExprComparison {
     pub left: Expr,
-    pub op: TokenCode, // must be TokenCode::Op(== != > < >= <=)
+    pub op: Token, // must be TokenCode::Op(== != > < >= <=)
     pub right: Expr,
-
-    pub span_op: Span,
 }
 #[derive(Debug)]
 pub struct ExprLazyBoolean {
     pub left: Expr,
-    pub op: TokenCode, // must be TokenCode::Op(&& ||)
+    pub op: Token, // must be TokenCode::Op(&& ||)
     pub right: Expr,
-
-    pub span_op: Span,
 }
 #[derive(Debug)]
 pub struct ExprTypeCast {
     pub expr: Expr,
     pub type_no_bounds: TypeNoBounds,
 
-    pub span_as: Span,
+    pub t_as: Token,
 }
 #[derive(Debug)]
 pub struct ExprAssignment {
     pub left: Expr,
+    pub op: Token, // must be TokenCode::Op(=)
     pub right: Expr,
-
-    pub span_op: Span,
 }
 #[derive(Debug)]
 pub struct ExprCompoundAssignment {
-    pub op: TokenCode, // must be TokenCode::Op(+= ~= *= /= %= &= |= ^= <<= >>=)
     pub left: Expr,
+    pub op: Token, // must be TokenCode::Op(+= ~= *= /= %= &= |= ^= <<= >>=)
     pub right: Expr,
-
-    pub span_op: Span,
 }
 
 #[derive(Debug)]
@@ -3851,65 +3779,101 @@ impl ToLang for ExprField {
         s.name.to_rust(p);
     }
 }
-#[derive(Debug, Default)]
-pub struct FuncParamOptionalType {
-    pub outer_attrs: Attrs,
-    pub name: Identifier,
-    pub pat: Option<Pattern>,
-    pub type_: Option<Type>,
-}
+
 #[derive(Debug, Default)]
 pub struct ExprClosure {
-    pub async_: bool,
-    pub move_: bool,
-    pub params: Vec<FuncParamOptionalType>,
+    pub params: Vec<(FuncParamOptionalType, Option<Token>)>,
     pub return_type: Option<TypeNoBounds>,
     pub expr: Expr,
 
-    pub span_async: Option<Span>,
-    pub span_move: Option<Span>,
-    pub span_paren_open: Span,
-    pub span_paren_close: Span,
+    pub t_async: Option<Token>,
+    pub t_move: Option<Token>,
+    pub t_delim_open: Token,
+    pub t_delim_close: Token,
 }
 impl ToLang for ExprClosure {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if s.async_ {
-            p.push_s("async", s.span_async.unwrap());
-            p.push_raw(" ");
-        }
-        if s.move_ {
-            p.push_s("move", s.span_move.unwrap());
-            p.push_raw(" ");
-        }
+        s.t_delim_open.to_rs_before(p);
 
-        p.push_s("|", s.span_paren_open);
-        for (i, item) in s.params.iter().enumerate() {
-            p.push_rust(&item.outer_attrs);
-            if let Some(pat) = &item.pat {
-                p.push_rust(pat);
+        let mut is_first = true;
+        // qualifier
+        if let Some(t) = &s.t_async {
+            if is_first {
+                t.to_rs_one(p);
+                is_first = false;
             } else {
-                p.push_rust(&item.name);
-            }
-            if let Some(type_) = &item.type_ {
-                p.push_raw(": ");
-                p.push_rust(type_);
-            }
-            if i != s.params.len() - 1 {
-                p.push_raw(", ");
+                t.to_rust(p);
             }
         }
-        p.push_s("|", s.span_paren_close);
+        if let Some(t) = &s.t_move {
+            if is_first {
+                t.to_rs_one(p);
+                is_first = false;
+            } else {
+                t.to_rust(p);
+            }
+        }
 
-        if let Some(return_type) = &s.return_type {
-            p.push_raw(" -> ");
-            p.push_rust(return_type);
+        if !is_first {
+            p.push_raw(" ");
         }
-        p.push_raw(" ");
-        p.push_rust(&s.expr);
+        s.t_delim_open.to_rs_one(p);
+        for (i, (it, t)) in s.params.iter().enumerate() {
+            it.outer_attrs.to_rust(p);
+            if let Some(pat) = &it.pat {
+                pat.to_rust(p);
+            } else {
+                if i == 0 {
+                    if s.t_async.is_some() || s.t_move.is_some() {
+                        // NOTE don't consider the case when the first param is on another line
+                        // let need = it.name.tokens_before.iter()
+                        //     .any(|it| {
+                        //         it.code == TokenCode::Blank && it.span.line != it.span.end_line
+                        //     });
+                        // if need {
+                        //     it.name.to_rust(p);
+                        // } else {
+                        //     it.name.to_rs_one(p);
+                        // }
+                        it.name.to_rs_one(p);
+                    } else {
+                        it.name.to_rust(p);
+                    }
+                } else {
+                    it.name.to_rust(p);
+                }
+            }
+            if let Some((t, type_)) = &it.type_ {
+                if let Some(t) = t {
+                    t.to_rust(p);
+                } else {
+                    p.push_raw(":");
+                }
+                type_.to_rust(p);
+            }
+            if let Some(t) = t {
+                t.to_rust(p);
+            }
+        }
+        s.t_delim_close.to_rust(p);
+
+        if let Some(a) = &s.return_type {
+            p.push_raw(" ->");
+            a.to_rust(p);
+        }
+        s.expr.to_rust(p);
     }
 }
+#[derive(Debug, Default)]
+pub struct FuncParamOptionalType {
+    pub outer_attrs: Attrs,
+    pub name: Token,
+    pub pat: Option<PatternNoTopAlt>,
+    pub type_: Option<(Option<Token>, Type)>,
+}
+
 #[derive(Debug, Default)]
 pub struct ExprContinue {
     pub label: Option<Token>,

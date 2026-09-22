@@ -416,10 +416,16 @@ impl Parse {
 
         // < Expr
         // can end with }, i.e. if true { < 1 } else { < 0 }
-        if matches!(&s.current().code, T![<]) {
+        let token = s.current();
+        if matches!(&token.code, T![<]) {
+            let t_sep = token.clone();
             s.plusplus();
             let expr = s.parse_expr()?;
-            return Ok(Stmt::Value(StmtValue { outer_attrs, expr }));
+            return Ok(Stmt::Value(StmtValue {
+                outer_attrs,
+                expr,
+                t_sep,
+            }));
         }
 
         // get_first_special_token
@@ -3030,7 +3036,7 @@ impl Parse {
         if !matches!(token.code, T![:=]) {
             r.type_ = Some(s.parse_type()?);
         }
-        r.t_eq = token.clone();
+        r.t_eq = s.current().clone();
         s.expect(T![:=])?;
 
         let token = s.current();
@@ -3231,10 +3237,9 @@ impl Parse {
                                 payload: ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Operator(ExprOperator::ArithmeticOrLogical(
                                         ExprArithmeticOrLogical {
-                                            op: op.code,
+                                            op,
                                             left: left_option.unwrap(),
                                             right: right_option.unwrap(),
-                                            span_op: op.span,
                                         },
                                     )),
                                 )),
@@ -3247,10 +3252,9 @@ impl Parse {
                                 payload: ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Operator(ExprOperator::Comparison(
                                         ExprComparison {
-                                            op: op.code,
+                                            op,
                                             left: left_option.unwrap(),
                                             right: right_option.unwrap(),
-                                            span_op: op.span,
                                         },
                                     )),
                                 )),
@@ -3263,10 +3267,9 @@ impl Parse {
                                 payload: ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Operator(ExprOperator::LazyBoolean(
                                         ExprLazyBoolean {
-                                            op: op.code,
+                                            op,
                                             left: left_option.unwrap(),
                                             right: right_option.unwrap(),
-                                            span_op: op.span,
                                         },
                                     )),
                                 )),
@@ -3334,9 +3337,9 @@ impl Parse {
                     let right = s.parse_expr()?;
                     r.payload = ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
                         ExprOperator::Assignment(ExprAssignment {
+                            op: token.clone(),
                             left: expr,
                             right,
-                            span_op: token.span,
                         }),
                     )));
                     break;
@@ -3355,10 +3358,9 @@ impl Parse {
                     let right = s.parse_expr()?;
                     r.payload = ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
                         ExprOperator::CompoundAssignment(ExprCompoundAssignment {
-                            op: token.code.clone(),
+                            op: token.clone(),
                             left: expr,
                             right,
-                            span_op: token.span,
                         }),
                     )));
                     break;
@@ -3445,7 +3447,7 @@ impl Parse {
                         payload: ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
                             ExprOperator::ErrorPropagation(ExprErrorPropagation {
                                 expr,
-                                span: token.span,
+                                t_sep: token.clone(),
                             }),
                         ))),
                     };
@@ -3486,7 +3488,7 @@ impl Parse {
                             ExprOperator::TypeCast(Box::new(ExprTypeCast {
                                 expr,
                                 type_no_bounds: *type_no_bounds,
-                                span_as: token.span,
+                                t_as: token.clone(),
                             })),
                         ))),
                     };
@@ -3977,26 +3979,15 @@ impl Parse {
 
                     // unary Expr
                     Op::BitAnd => {
-                        let borrow = parse_borrow(s, &token, false)?;
+                        let borrow = parse_borrow(s, token)?;
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Operator(ExprOperator::Borrow(borrow)),
                         ));
                     }
                     Op::And => {
-                        let borrow = parse_borrow(s, &token, true)?;
-
-                        let mut outer_borrow = ExprBorrow::default();
-                        let mut outer_span = token.span;
-                        outer_span.width = 1;
-                        outer_borrow.span_ref = outer_span;
-                        outer_borrow.expr = Expr {
-                            outer_attrs: Attrs::default(),
-                            payload: ExprPayload::WithoutBlock(Box::new(
-                                ExprWithoutBlock::Operator(ExprOperator::Borrow(borrow)),
-                            )),
-                        };
+                        let borrow = parse_borrow(s, token)?;
                         r.payload = ExprPayload::WithoutBlock(Box::new(
-                            ExprWithoutBlock::Operator(ExprOperator::Borrow(outer_borrow)),
+                            ExprWithoutBlock::Operator(ExprOperator::Borrow(borrow)),
                         ));
                     }
                     Op::Star => {
@@ -4005,7 +3996,7 @@ impl Parse {
                             ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
                                 ExprOperator::Dereference(ExprDereference {
                                     expr,
-                                    span: token.span,
+                                    t_sep: token.clone(),
                                 }),
                             )));
                     }
@@ -4013,9 +4004,8 @@ impl Parse {
                         let expr = s.parse_binary_expr()?;
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Operator(ExprOperator::Negation(ExprNegation {
-                                not: false,
                                 expr,
-                                span: token.span,
+                                t_sep: token.clone(),
                             })),
                         ));
                     }
@@ -4023,9 +4013,8 @@ impl Parse {
                         let expr = s.parse_binary_expr()?;
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Operator(ExprOperator::Negation(ExprNegation {
-                                not: true,
                                 expr,
-                                span: token.span,
+                                t_sep: token.clone(),
                             })),
                         ));
                     }
@@ -4058,14 +4047,11 @@ impl Parse {
 
         return Ok(r);
 
-        fn parse_borrow(s: &Parse, token: &Token, is_inner: bool) -> ParseResult<ExprBorrow> {
-            let mut borrow = ExprBorrow::default();
-            let mut inner_span = token.span;
-            if is_inner {
-                inner_span.column += 1;
-                inner_span.width = 1;
-            }
-            borrow.span_ref = inner_span;
+        fn parse_borrow(s: &Parse, ref_token: &Token) -> ParseResult<ExprBorrow> {
+            let mut r = ExprBorrow::default();
+
+            r.t_ref = ref_token.clone();
+
             let token = s.current();
             if matches!(&token.code, T!["["]) {
                 s.plusplus();
@@ -4080,19 +4066,18 @@ impl Parse {
                         s.panic(token, &format!("illegal id {:?} for borrow expr", ident.id))
                     );
                 }
-                borrow.span_raw = Some(token.span);
-                borrow.raw = true;
+                r.t_raw = Some(token.clone());
                 s.plusplus();
                 s.expect(T!["]"])?;
             }
+
             let token = s.current();
             if matches!(&token.code, T![mut]) {
-                borrow.span_mut = Some(token.span);
-                borrow.mut_ = true;
+                r.t_mut = Some(token.clone());
                 s.plusplus();
             }
-            borrow.expr = s.parse_binary_expr()?;
-            return Ok(borrow);
+            r.expr = s.parse_expr()?;
+            return Ok(r);
         }
 
         fn parse_struct_expr_field(s: &Parse) -> ParseResult<ExprStructField> {
@@ -4140,6 +4125,7 @@ impl Parse {
     }
 
     // |a, b, c| Expr
+    // |a i32, b, c| Expr
     // || Expr
     // |:Pattern: Type|: Type BlockExpr
     // |[move] a, b, c| Expr
@@ -4152,35 +4138,52 @@ impl Parse {
 
         // params
         let token = s.current();
-        r.span_paren_open = token.span;
+        r.t_delim_open = token.clone();
         s.plusplus();
         match token.code {
             T![|] => {
-                while s.has_more() {
-                    let token = s.current();
-                    if matches!(token.code, T!["["]) {
-                        s.plusplus();
+                // qualifiers
+                let token = s.current();
+                if matches!(token.code, T!["["]) {
+                    s.plusplus();
+                    while s.has_more() {
                         let token = s.current();
-                        if matches!(token.code, T![async]) {
-                            r.async_ = true;
-                            r.span_async = Some(token.span);
+                        if matches!(token.code, T!["]"]) {
                             s.plusplus();
-                            if matches!(s.current().code, T![,]) {
-                                s.plusplus();
+                            break;
+                        }
+                        match &token.code {
+                            T![async] => {
+                                r.t_async = Some(token.clone());
+                            }
+                            T![move] => {
+                                r.t_move = Some(token.clone());
+                            }
+                            _ => {
+                                return Err(s.panic(
+                                    token,
+                                    &format!("{:?} is not a legal closure qualifier", token),
+                                ));
                             }
                         }
-                        let token = s.current();
-                        if matches!(token.code, T![move]) {
-                            r.move_ = true;
-                            r.span_move = Some(token.span);
+                        s.plusplus();
+                        if !matches!(s.current().code, T![,] | T!["]"]) {
+                            return Err(s.panic(
+                                token,
+                                &format!("expected ',' or ']' but got {:?}", token),
+                            ));
+                        }
+                        if matches!(s.current().code, T![,]) {
                             s.plusplus();
                         }
-                        s.expect(T!["]"])?;
                     }
+                }
 
+                // params
+                while s.has_more() {
                     let token = s.current();
                     if matches!(&token.code, T![|]) {
-                        r.span_paren_close = token.span;
+                        r.t_delim_close = token.clone();
                         s.plusplus();
                         break;
                     }
@@ -4188,31 +4191,38 @@ impl Parse {
                     let mut param = FuncParamOptionalType::default();
                     param.outer_attrs = s.parse_outer_attrs()?;
 
+                    let token = s.current();
                     match &token.code {
-                        TokenCode::Identifier(identifier) => {
-                            param.name = identifier.clone();
+                        TokenCode::Identifier(_) => {
+                            param.name = token.clone();
                             s.plusplus();
 
                             let token = s.current();
-                            match &token.code {
-                                T![|] | T![,] => {}
-                                _ => {
-                                    if matches!(&token.code, T![:]) {
-                                        return Err(s.panic(
-                                            token,
-                                            &format!("don't add ':' after param name '{:?}'",
-                                                param.name),
-                                        ));
-                                    }
-                                    param.type_ = Some(s.parse_type()?);
-                                }
+                            let t_colon = if matches!(&token.code, T![:]) {
+                                s.plusplus();
+                                Some(token.clone())
+                            } else {
+                                None
+                            };
+
+                            if !matches!(&token.code, T![,] | T![|]) {
+                                let type_ = s.parse_type()?;
+                                param.type_ = Some((t_colon, type_));
                             }
                         }
                         T![:] => {
                             s.plusplus();
-                            param.pat = Some(s.parse_pattern()?);
-                            s.expect(T![:])?;
-                            param.type_ = Some(s.parse_type()?);
+                            param.pat = Some(s.parse_pattern_no_top_alt()?);
+                            let token = s.current();
+                            if !matches!(&token.code, T![:]) {
+                                return Err(s.panic(
+                                    token,
+                                    &format!("expected ':' but got {:?}", token),
+                                ));
+                            }
+                            s.plusplus();
+                            let type_ = s.parse_type()?;
+                            param.type_ = Some((Some(token.clone()), type_));
                         }
                         _ => {
                             return Err(s.panic(
@@ -4223,23 +4233,13 @@ impl Parse {
                     }
 
                     let token = s.current();
-                    s.plusplus();
-                    match &token.code {
-                        T![|] => {
-                            r.span_paren_close = token.span;
-                            r.params.push(param);
-                            break;
-                        }
-                        T![,] => {
-                            r.params.push(param);
-                        }
-                        _ => {
-                            return Err(s.panic(
-                                token,
-                                &format!("expected , or ) but got {:?}", token),
-                            ));
-                        }
-                    }
+                    let t_comma = if matches!(&token.code, T![,]) {
+                        s.plusplus();
+                        Some(token.clone())
+                    } else {
+                        None
+                    };
+                    r.params.push((param, t_comma));
                 }
             }
             T![||] => {}
@@ -4248,19 +4248,22 @@ impl Parse {
             }
         }
 
+        // return type
         let token = s.current();
         if matches!(&token.code, T![:]) {
             s.plusplus();
-            // return type
             let type_ = s.parse_type()?;
-            if let TypePayload::TypeNoBounds(a) = type_.payload {
-                r.return_type = Some(*a);
-            } else {
+            let TypePayload::TypeNoBounds(a) = type_.payload else {
                 return Err(s.panic(token, "expected TypeNoBounds"));
+            };
+            r.return_type = Some(*a);
+            // the expr after return type must be a block expr
+            let token = s.current();
+            if !matches!(token.code, T!["{"]) {
+                return Err(s.panic(token, "expected '{'"));
             }
-            s.expect(T!["{"])?;
-            s.minusminus();
         }
+        // body expr
         r.expr = s.parse_expr()?;
 
         Ok(r)
