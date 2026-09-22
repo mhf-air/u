@@ -5,7 +5,6 @@ use std::mem;
 
 pub struct LangFormatter<'a> {
     buf: String,
-    indent: u8,
 
     tokens: &'a [Token],
     end_tokens: &'a [Token],
@@ -44,7 +43,6 @@ impl<'a> LangFormatter<'a> {
     pub fn new(tokens: &'a [Token], end_tokens: &'a [Token]) -> LangFormatter<'a> {
         LangFormatter {
             buf: String::new(),
-            indent: 0,
 
             tokens,
             end_tokens,
@@ -80,11 +78,6 @@ impl<'a> LangFormatter<'a> {
             buf: s.buf,
             span_pairs: s.span_pairs,
         }
-    }
-
-    pub fn push_rust(&mut self, a: &impl ToLang) {
-        let s = self;
-        a.to_rust(s);
     }
 
     // push all tokens including whitespaces and comments as they are in .u file
@@ -135,32 +128,6 @@ impl<'a> LangFormatter<'a> {
         s.buf.push_str(rs);
     }
 
-    pub fn push_s(&mut self, a: &str, span: Span) {
-        let s = self;
-
-        s.span_pairs.push(SpanPair {
-            u: span,
-            rust: RustSpan {
-                byte_start: s.buf.len(),
-                width: a.len(),
-                line: s.line,
-                column: s.column,
-                #[cfg(debug_assertions)]
-                text: a.to_string(),
-            },
-        });
-
-        s.buf.push_str(a);
-        for c in a.chars() {
-            if c == '\n' {
-                s.line += 1;
-                s.column = 1;
-            } else {
-                s.column += 1;
-            }
-        }
-    }
-
     pub fn push_raw(&mut self, a: &str) {
         let s = self;
         s.buf.push_str(a);
@@ -176,24 +143,6 @@ impl<'a> LangFormatter<'a> {
                 s.column += 1;
             }
         }
-    }
-
-    pub fn indent(&mut self) {
-        let s = self;
-        let spaces = s.indent * 4;
-        for _ in 0..spaces {
-            // s.buf.push('\t');
-            s.buf.push(' ');
-        }
-        s.column += s.indent as usize;
-    }
-    pub fn inc_indent(&mut self) {
-        let s = self;
-        s.indent += 1;
-    }
-    pub fn dec_indent(&mut self) {
-        let s = self;
-        s.indent -= 1;
     }
 }
 
@@ -1988,7 +1937,7 @@ impl ToLang for PathExprSegment {
         }
         s.name.to_rust(p);
         if !s.generic_args.items.is_empty() {
-            p.push_rust(&s.generic_args);
+            s.generic_args.to_rust(p);
         }
     }
 }
@@ -2002,10 +1951,10 @@ impl ToLang for QualifiedPathInExpr {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_rust(&s.type_);
-        for item in &s.items {
+        s.type_.to_rust(p);
+        for it in &s.items {
             p.push_raw("::");
-            p.push_rust(item);
+            it.to_rust(p);
         }
     }
 }
@@ -2258,8 +2207,8 @@ impl ToLang for PatternNoTopAlt {
         let s = self;
 
         match s {
-            PatternNoTopAlt::WithoutRange(a) => p.push_rust(a),
-            PatternNoTopAlt::WithRange(a) => p.push_rust(a),
+            PatternNoTopAlt::WithoutRange(a) => a.to_rust(p),
+            PatternNoTopAlt::WithRange(a) => a.to_rust(p),
         }
     }
 }
@@ -2285,7 +2234,7 @@ impl ToLang for PatternWithoutRange {
         let s = self;
 
         match s {
-            PatternWithoutRange::Literal(a) => p.push_rust(a),
+            PatternWithoutRange::Literal(a) => a.to_rust(p),
             PatternWithoutRange::Identifier(a) => {
                 if let Some(t) = &a.t_ref {
                     t.to_rust(p);
@@ -2366,7 +2315,7 @@ impl ToLang for PatternWithoutRange {
                 PatternPath::Path(b) => b.to_rust(p),
                 PatternPath::QualifiedPath(b) => b.to_rust(p),
             },
-            PatternWithoutRange::MacroCall(a) => p.push_rust(a),
+            PatternWithoutRange::MacroCall(a) => a.to_rust(p),
         }
     }
 }
@@ -2686,11 +2635,11 @@ impl ToLang for TypeNoBounds {
                 a.type_.to_rust(p);
                 a.t_double_brace_close.to_rust(p);
             }
-            TypeNoBounds::TypePath(a) => p.push_rust(a),
-            TypeNoBounds::QualifiedPathInType(a) => p.push_rust(a),
+            TypeNoBounds::TypePath(a) => a.to_rust(p),
+            TypeNoBounds::QualifiedPathInType(a) => a.to_rust(p),
             TypeNoBounds::Never(t) => t.to_rust(p),
-            TypeNoBounds::BareFunction(a) => p.push_rust(a.as_ref()),
-            TypeNoBounds::MacroCall(a) => p.push_rust(a),
+            TypeNoBounds::BareFunction(a) => a.to_rust(p),
+            TypeNoBounds::MacroCall(a) => a.to_rust(p),
         }
     }
 }
@@ -3169,7 +3118,7 @@ impl ToLang for ConditionItem {
 
         match &s {
             ConditionItem::Expr(expr) => {
-                p.push_rust(expr);
+                expr.to_rust(p);
             }
             ConditionItem::LetChain(a) => {
                 a.outer_attrs.to_rust(p);
@@ -3369,8 +3318,8 @@ impl ToLang for ExprPath {
         let s = self;
 
         match s {
-            ExprPath::Path(a) => p.push_rust(a),
-            ExprPath::QualifiedPath(a) => p.push_rust(a),
+            ExprPath::Path(a) => a.to_rust(p),
+            ExprPath::QualifiedPath(a) => a.to_rust(p),
         }
     }
 }

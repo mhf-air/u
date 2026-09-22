@@ -1727,12 +1727,6 @@ impl LiteralString {
 
         p
     }
-
-    pub fn push_span(&self, p: &mut LangFormatter, span: Span) {
-        let s = self;
-        let a = s.to_rust_string();
-        p.push_s(&a, span);
-    }
 }
 impl fmt::Debug for LiteralString {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
