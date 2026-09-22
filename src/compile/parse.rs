@@ -469,8 +469,12 @@ impl Parse {
                 a.t_eq = special_token.clone();
                 a.t_eq.code = T![=];
                 a.outer_attrs = outer_attrs;
+
+                a.t_first_in_expr = Some(s.current().clone());
                 a.expr = Some(s.parse_expr()?);
+
                 s.expect(T![->])?;
+                a.t_first_in_pattern = Some(s.current().clone());
                 a.pattern = s.parse_pattern()?;
                 if matches!(&s.current().code, T![let]) {
                     s.plusplus();
@@ -2850,6 +2854,7 @@ impl Parse {
             let outer_attrs = s.parse_outer_attrs()?;
 
             s.stop_on_brace_open.set(true);
+            let t_first_in_expr = s.current().clone();
             let expr = s.parse_expr()?;
             s.stop_on_brace_open.set(false);
 
@@ -2860,12 +2865,15 @@ impl Parse {
                 s.plusplus();
                 let mut t_eq = token.clone();
                 t_eq.code = T![=];
+                let t_first_in_pattern = s.current().clone();
                 let pattern = s.parse_match_arm_patterns_stop()?;
                 let a = LetChainCondition {
                     outer_attrs,
                     pattern,
                     scrutinee: expr,
                     t_eq,
+                    t_first_in_expr,
+                    t_first_in_pattern,
                 };
                 ConditionItem::LetChain(a)
             };
@@ -5227,13 +5235,13 @@ impl Parse {
                             return Ok(PatternNoTopAlt::WithRange(PatternRange {
                                 start: Some(PatternRangeBound::Literal(pattern_literal)),
                                 end: Some(bound),
-                                t_seq: token.clone(),
+                                t_sep: token.clone(),
                             }));
                         }
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start: Some(PatternRangeBound::Literal(pattern_literal)),
                             end: None,
-                            t_seq: token.clone(),
+                            t_sep: token.clone(),
                         }));
                     }
                     T!["``="] => {
@@ -5242,7 +5250,7 @@ impl Parse {
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start: Some(PatternRangeBound::Literal(pattern_literal)),
                             end: Some(bound),
-                            t_seq: token.clone(),
+                            t_sep: token.clone(),
                         }));
                     }
                     T![...] => {
@@ -5252,7 +5260,7 @@ impl Parse {
                             PatternWithoutRange::Obsolete(PatternRange {
                                 start: Some(PatternRangeBound::Literal(pattern_literal)),
                                 end: Some(bound),
-                                t_seq: token.clone(),
+                                t_sep: token.clone(),
                             }),
                         ));
                     }
@@ -5270,7 +5278,7 @@ impl Parse {
                 return Ok(PatternNoTopAlt::WithRange(PatternRange {
                     start: None,
                     end: Some(bound),
-                    t_seq: token.clone(),
+                    t_sep: token.clone(),
                 }));
             }
 
@@ -5491,14 +5499,14 @@ impl Parse {
                             return Ok(PatternNoTopAlt::WithRange(PatternRange {
                                 start,
                                 end: None,
-                                t_seq: token.clone(),
+                                t_sep: token.clone(),
                             }));
                         }
                         let bound = parse_range_pattern_bound(s)?;
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start,
                             end: Some(bound),
-                            t_seq: token.clone(),
+                            t_sep: token.clone(),
                         }));
                     }
                     // RangePattern ``= RangePattern
@@ -5509,7 +5517,7 @@ impl Parse {
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start,
                             end: Some(bound),
-                            t_seq: token.clone(),
+                            t_sep: token.clone(),
                         }));
                     }
                     // RangePattern ... RangePattern
@@ -5521,7 +5529,7 @@ impl Parse {
                             PatternWithoutRange::Obsolete(PatternRange {
                                 start,
                                 end: Some(bound),
-                                t_seq: token.clone(),
+                                t_sep: token.clone(),
                             }),
                         ));
                     }

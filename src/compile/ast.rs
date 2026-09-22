@@ -14,6 +14,7 @@ pub struct LangFormatter<'a> {
     column: usize,
 
     in_impl_static: bool,
+    no_first_before: bool,
 }
 // Clone required by rust-analyzer
 #[derive(Debug, Clone)]
@@ -52,6 +53,7 @@ impl<'a> LangFormatter<'a> {
             column: 1,
 
             in_impl_static: false,
+            no_first_before: false,
         }
     }
 
@@ -1812,7 +1814,11 @@ impl ToLang for SimplePath {
             if s.items.len() == 1 {
                 first.to_rust(p);
             } else {
-                first.token.to_rs_before(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                } else {
+                    first.token.to_rs_before(p);
+                }
             }
         } else {
             first.to_rust(p);
@@ -1833,9 +1839,19 @@ impl ToLang for SimplePathSegment {
         let s = self;
 
         if let Some(t) = &s.t_sep {
-            t.to_rust(p);
+            if p.no_first_before {
+                p.no_first_before = false;
+                t.to_rs_one(p);
+            } else {
+                t.to_rust(p);
+            }
         }
-        s.token.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.token.to_rs_one(p);
+        } else {
+            s.token.to_rust(p);
+        }
     }
 }
 
@@ -1874,7 +1890,12 @@ impl ToLang for PathIdentSegment {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.token.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.token.to_rs_one(p);
+        } else {
+            s.token.to_rust(p);
+        }
     }
 }
 
@@ -1896,7 +1917,11 @@ impl ToLang for PathInExpr {
             if s.items.len() == 1 {
                 first.to_rust(p);
             } else {
-                first.name.token.to_rs_before(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                } else {
+                    first.name.token.to_rs_before(p);
+                }
             }
         } else {
             first.to_rust(p);
@@ -1933,7 +1958,12 @@ impl ToLang for PathExprSegment {
         let s = self;
 
         if let Some(t) = &s.t_sep {
-            t.to_rust(p);
+            if p.no_first_before {
+                p.no_first_before = false;
+                t.to_rs_one(p);
+            } else {
+                t.to_rust(p);
+            }
         }
         s.name.to_rust(p);
         if !s.generic_args.items.is_empty() {
@@ -1985,7 +2015,12 @@ impl ToLang for QualifiedPathType {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_square_open.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_square_open.to_rs_one(p);
+        } else {
+            s.t_square_open.to_rust(p);
+        }
         s.type_.to_rust(p);
         if let Some((t, type_path)) = &s.type_path {
             t.to_rust(p);
@@ -2237,31 +2272,50 @@ impl ToLang for PatternWithoutRange {
             PatternWithoutRange::Literal(a) => a.to_rust(p),
             PatternWithoutRange::Identifier(a) => {
                 if let Some(t) = &a.t_ref {
-                    t.to_rust(p);
+                    if p.no_first_before {
+                        p.no_first_before = false;
+                        t.to_rs_one(p);
+                    } else {
+                        t.to_rust(p);
+                    }
                 }
                 if let Some(t) = &a.t_mut {
-                    t.to_rust(p);
+                    if p.no_first_before {
+                        p.no_first_before = false;
+                        t.to_rs_one(p);
+                    } else {
+                        t.to_rust(p);
+                    }
                 }
-                a.name.to_rust(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.name.to_rs_one(p);
+                } else {
+                    a.name.to_rust(p);
+                }
                 if let Some((t, pat)) = &a.pattern {
                     t.to_rust(p);
                     pat.to_rust(p);
                 }
             }
             PatternWithoutRange::Rest(t) => {
-                t.to_rust(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    t.to_rs_one(p);
+                } else {
+                    t.to_rust(p);
+                }
             }
             PatternWithoutRange::Obsolete(a) => {
-                if let Some(start) = &a.start {
-                    start.to_rust(p);
-                }
-                a.t_seq.to_rust(p);
-                if let Some(end) = &a.end {
-                    end.to_rust(p);
-                }
+                a.to_rust(p);
             }
             PatternWithoutRange::Reference(a) => {
-                a.t_ref.to_rust(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_ref.to_rs_one(p);
+                } else {
+                    a.t_ref.to_rust(p);
+                }
                 if let Some(t) = &a.t_mut {
                     t.to_rust(p);
                 }
@@ -2287,7 +2341,12 @@ impl ToLang for PatternWithoutRange {
                 a.t_paren_close.to_rust(p);
             }
             PatternWithoutRange::Tuple(a) => {
-                a.t_paren_open.to_rust(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_paren_open.to_rs_one(p);
+                } else {
+                    a.t_paren_open.to_rust(p);
+                }
                 for (pat, t) in &a.items {
                     pat.to_rust(p);
                     if let Some(t) = t {
@@ -2297,12 +2356,22 @@ impl ToLang for PatternWithoutRange {
                 a.t_paren_close.to_rust(p);
             }
             PatternWithoutRange::Grouped(a) => {
-                a.t_paren_open.to_rust(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_paren_open.to_rs_one(p);
+                } else {
+                    a.t_paren_open.to_rust(p);
+                }
                 a.pattern.to_rust(p);
                 a.t_paren_close.to_rust(p);
             }
             PatternWithoutRange::Slice(a) => {
-                a.t_square_open.to_rust(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_square_open.to_rs_one(p);
+                } else {
+                    a.t_square_open.to_rust(p);
+                }
                 for (it, t) in &a.items {
                     it.to_rust(p);
                     if let Some(t) = t {
@@ -2330,9 +2399,19 @@ impl ToLang for PatternLiteral {
         let s = self;
 
         if let Some(t) = &s.t_minus {
-            t.to_rust(p);
+            if p.no_first_before {
+                p.no_first_before = false;
+                t.to_rs_one(p);
+            } else {
+                t.to_rust(p);
+            }
         }
-        s.name.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.name.to_rs_one(p);
+        } else {
+            s.name.to_rust(p);
+        }
     }
 }
 #[derive(Debug, Default)]
@@ -2485,7 +2564,7 @@ pub struct PatternRange {
     pub start: Option<PatternRangeBound>,
     pub end: Option<PatternRangeBound>,
 
-    pub t_seq: Token,
+    pub t_sep: Token,
 }
 impl ToLang for PatternRange {
     fn to_rust(&self, p: &mut LangFormatter) {
@@ -2494,7 +2573,12 @@ impl ToLang for PatternRange {
         if let Some(start) = &s.start {
             start.to_rust(p);
         }
-        s.t_seq.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_sep.to_rs_one(p);
+        } else {
+            s.t_sep.to_rust(p);
+        }
         if let Some(end) = &s.end {
             end.to_rust(p);
         }
@@ -2838,6 +2922,8 @@ pub struct StmtLet {
     pub else_: Option<(Token, BlockExpr)>,
 
     pub t_eq: Token,
+    pub t_first_in_pattern: Option<Token>,
+    pub t_first_in_expr: Option<Token>,
 }
 impl ToLang for StmtLet {
     fn to_rust(&self, p: &mut LangFormatter) {
@@ -2847,18 +2933,24 @@ impl ToLang for StmtLet {
 
         if let Some((name, _)) = &s.short {
             name.to_rs_before(p);
+        } else {
+            if let Some(t) = &s.t_first_in_expr {
+                t.to_rs_before(p);
+            }
         }
 
-        p.push_raw("let");
+        // NOTE not considering the case when "let" is followed by new line
+        p.push_raw("let ");
         if let Some((name, t_mut)) = &s.short {
-            p.push_raw(" ");
             if let Some(t) = t_mut {
                 t.to_rs_one(p);
                 t.to_rs_before(p);
             }
             name.to_rs_one(p);
         } else {
+            p.no_first_before = true;
             s.pattern.to_rust(p);
+            p.no_first_before = false;
         }
 
         if let Some(type_) = &s.type_ {
@@ -2867,7 +2959,19 @@ impl ToLang for StmtLet {
         }
         if let Some(expr) = &s.expr {
             s.t_eq.to_rust(p);
-            expr.to_rust(p);
+
+            if let Some(t) = &s.t_first_in_pattern {
+                t.to_rs_before(p);
+            }
+
+            if s.short.is_some() {
+                expr.to_rust(p);
+            } else {
+                p.no_first_before = true;
+                expr.to_rust(p);
+                p.no_first_before = false;
+            }
+
             if let Some((t, else_)) = &s.else_ {
                 t.to_rust(p);
                 else_.to_rust(p);
@@ -2889,7 +2993,10 @@ impl ToLang for StmtValue {
 
         s.outer_attrs.to_rust(p);
         s.t_sep.to_rs_before(p);
+
+        p.no_first_before = true;
         s.expr.to_rust(p);
+        p.no_first_before = false;
     }
 }
 
@@ -2937,7 +3044,12 @@ impl ToLang for BlockExpr {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_brace_open.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_brace_open.to_rs_one(p);
+        } else {
+            s.t_brace_open.to_rust(p);
+        }
         s.inner_attrs.to_rust(p);
         for it in &s.stmts {
             it.to_rust(p);
@@ -2982,7 +3094,12 @@ impl ToLang for ExprAsyncBlock {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_async.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_async.to_rs_one(p);
+        } else {
+            s.t_async.to_rust(p);
+        }
         if let Some(t) = &s.t_move {
             p.push_raw(" ");
             t.to_rust(p);
@@ -3000,7 +3117,12 @@ impl ToLang for ExprUnsafeBlock {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_unsafe.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_unsafe.to_rs_one(p);
+        } else {
+            s.t_unsafe.to_rust(p);
+        }
         s.block.to_rust(p);
     }
 }
@@ -3014,7 +3136,12 @@ impl ToLang for ExprConstBlock {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_const.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_const.to_rs_one(p);
+        } else {
+            s.t_const.to_rust(p);
+        }
         s.block.to_rust(p);
     }
 }
@@ -3031,7 +3158,12 @@ impl ToLang for ExprLoop {
         let s = self;
 
         if let Some((t_label, t_colon)) = &s.label {
-            t_label.to_rust(p);
+            if p.no_first_before {
+                p.no_first_before = false;
+                t_label.to_rs_one(p);
+            } else {
+                t_label.to_rust(p);
+            }
             t_colon.to_rust(p);
         }
         if matches!(&s.payload, ExprLoopPayload::Block) {
@@ -3039,7 +3171,12 @@ impl ToLang for ExprLoop {
             return;
         }
 
-        s.t_for.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_for.to_rs_one(p);
+        } else {
+            s.t_for.to_rust(p);
+        }
         match &s.payload {
             ExprLoopPayload::Loop => {
             }
@@ -3122,10 +3259,20 @@ impl ToLang for ConditionItem {
             }
             ConditionItem::LetChain(a) => {
                 a.outer_attrs.to_rust(p);
-                p.push_raw("let");
+
+                a.t_first_in_expr.to_rs_before(p);
+                p.push_raw("let ");
+
+                p.no_first_before = true;
                 a.pattern.to_rust(p);
+                p.no_first_before = false;
+
                 a.t_eq.to_rust(p);
+
+                a.t_first_in_pattern.to_rs_before(p);
+                p.no_first_before = true;
                 a.scrutinee.to_rust(p);
+                p.no_first_before = false;
             }
         }
     }
@@ -3136,6 +3283,8 @@ pub struct LetChainCondition {
     pub pattern: Pattern,
     pub scrutinee: Expr,
     pub t_eq: Token,
+    pub t_first_in_expr: Token,
+    pub t_first_in_pattern: Token,
 }
 
 #[derive(Debug, Default)]
@@ -3150,7 +3299,12 @@ impl ToLang for ExprIf {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_if.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_if.to_rs_one(p);
+        } else {
+            s.t_if.to_rust(p);
+        }
         s.conditions.to_rust(p);
         s.body.to_rust(p);
 
@@ -3188,7 +3342,12 @@ impl ToLang for ExprMatch {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_match.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_match.to_rs_one(p);
+        } else {
+            s.t_match.to_rust(p);
+        }
         s.expr.to_rust(p);
 
         s.t_brace_open.to_rust(p);
@@ -3304,7 +3463,12 @@ impl ToLang for ExprLiteral {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.0.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.0.to_rs_one(p);
+        } else {
+            s.0.to_rust(p);
+        }
     }
 }
 
@@ -3344,7 +3508,12 @@ impl ToLang for ExprOperator {
 
         match s {
             ExprOperator::Borrow(a) => {
-                a.t_ref.to_rust(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_ref.to_rs_one(p);
+                } else {
+                    a.t_ref.to_rust(p);
+                }
                 if let Some(t) = &a.t_raw {
                     t.to_rust(p);
                 }
@@ -3354,7 +3523,12 @@ impl ToLang for ExprOperator {
                 a.expr.to_rust(p);
             }
             ExprOperator::Dereference(a) => {
-                a.t_sep.to_rust(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_sep.to_rs_one(p);
+                } else {
+                    a.t_sep.to_rust(p);
+                }
                 a.expr.to_rust(p);
             }
             ExprOperator::ErrorPropagation(a) => {
@@ -3371,7 +3545,12 @@ impl ToLang for ExprOperator {
                 p.push_raw("= 1");
             }
             ExprOperator::Negation(a) => {
-                a.t_sep.to_rust(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_sep.to_rs_one(p);
+                } else {
+                    a.t_sep.to_rust(p);
+                }
                 a.expr.to_rust(p);
             }
             ExprOperator::ArithmeticOrLogical(a) => {
@@ -3489,7 +3668,12 @@ impl ToLang for ExprGrouped {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_paren_open.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_paren_open.to_rs_one(p);
+        } else {
+            s.t_paren_open.to_rust(p);
+        }
         s.expr.to_rust(p);
         s.t_paren_close.to_rust(p);
     }
@@ -3505,7 +3689,12 @@ impl ToLang for ExprArray {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_double_brace_open.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_double_brace_open.to_rs_one(p);
+        } else {
+            s.t_double_brace_open.to_rust(p);
+        }
         match &s.payload {
             ExprArrayPayload::One(a) => {
                 a.value.to_rust(p);
@@ -3585,7 +3774,12 @@ impl ToLang for ExprTuple {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_paren_open.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_paren_open.to_rs_one(p);
+        } else {
+            s.t_paren_open.to_rust(p);
+        }
         for (it, t) in &s.items {
             it.to_rust(p);
             if let Some(t) = t {
@@ -3744,7 +3938,11 @@ impl ToLang for ExprClosure {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_delim_open.to_rs_before(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+        } else {
+            s.t_delim_open.to_rs_before(p);
+        }
 
         let mut is_first = true;
         // qualifier
@@ -3833,7 +4031,12 @@ impl ToLang for ExprContinue {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_continue.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_continue.to_rs_one(p);
+        } else {
+            s.t_continue.to_rust(p);
+        }
         if let Some(a) = &s.label {
             a.to_rust(p);
         }
@@ -3850,7 +4053,12 @@ impl ToLang for ExprBreak {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_break.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_break.to_rs_one(p);
+        } else {
+            s.t_break.to_rust(p);
+        }
         if let Some(a) = &s.label {
             a.to_rust(p);
         }
@@ -3869,7 +4077,12 @@ impl ToLang for ExprReturn {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_return.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_return.to_rs_one(p);
+        } else {
+            s.t_return.to_rust(p);
+        }
         if let Some(expr) = &s.expr {
             expr.to_rust(p);
         }
@@ -3889,7 +4102,12 @@ impl ToLang for ExprRange {
         if let Some(t) = &s.start {
             t.to_rust(p);
         }
-        s.t_sep.to_rust(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_sep.to_rs_one(p);
+        } else {
+            s.t_sep.to_rust(p);
+        }
         if let Some(t) = &s.end {
             t.to_rust(p);
         }
