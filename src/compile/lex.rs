@@ -1650,6 +1650,11 @@ impl Literal {
     fn to_rust_string(&self) -> String {
         let s = self;
 
+        let a = s.special_to_rust_string();
+        if !a.is_empty() {
+            return a;
+        }
+
         let mut r = String::new();
         if let Some(prefix) = &s.prefix {
             let prefix = Identifier::to_rust_string_no_prefix(&prefix);
@@ -1673,6 +1678,40 @@ impl Literal {
             r.push_str(&suffix);
         }
         r
+    }
+    /// ""s to "".to_owned()
+    /// ""st to "".to_string()
+    fn special_to_rust_string(&self) -> String {
+        let s = self;
+
+        let LiteralPayload::String(txt) = &s.payload else {
+            return String::new();
+        };
+
+        if let Some(suffix) = &s.suffix {
+            if !matches!(suffix.as_ref(), "s" | "st") {
+                return String::new();
+            }
+            let prefix = if let Some(prefix) = &s.prefix {
+                Identifier::to_rust_string_no_prefix(&prefix)
+            } else {
+                "".to_owned()
+            };
+            let content = txt.to_rust_string();
+            match suffix.as_ref() {
+                "s" => {
+                    return format!("{}{}.to_owned()", prefix, content);
+                }
+                "st" => {
+                    return format!("{}{}.to_string()", prefix, content);
+                }
+                _ => {
+                    return String::new();
+                }
+            }
+        }
+
+        return String::new();
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -1760,16 +1799,6 @@ impl LiteralChar {
         p.push('\'');
 
         p
-    }
-}
-
-// TODO
-impl ToLang for Identifier {
-    fn to_rust(&self, _p: &mut LangFormatter) {
-    }
-}
-impl ToLang for Literal {
-    fn to_rust(&self, _p: &mut LangFormatter) {
     }
 }
 

@@ -115,6 +115,11 @@ f func() {
     r#func := a
     r#ret := a
     r#union := a
+
+    // ""s to "".to_owned()
+    ""s
+    // ""st to "".to_string()
+    ""st
 }
 
 call,,(1, 2, 3)
