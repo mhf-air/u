@@ -105,6 +105,8 @@ Param^ struct {
     default-page^ i32
     #[serde(default = "api::default_limit")]
     default-limit i32
+
+    tag ?String
 }
 
 f func(:mut a: i32, b i32) {}

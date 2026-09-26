@@ -2649,6 +2649,7 @@ pub enum TypeNoBounds {
     ImplTraitOneBound(TypeImplTraitOneBound),       // impl TraitBound
     TraitObjectOneBound(TypeTraitObjectOneBound),   // dyn TraitBound
     Tuple(TypeTuple),                               // () | ( (Type ,)+ Type? )
+    Optional(TypeOptional),                         // ?Type
     RawPointer(TypeRawPointer),                     // *(mut | const) TypeNoBounds
     Reference(TypeReference),                       // [&|&&] Lifetime? mut? TypeNoBounds
     Array(TypeArray),                               // {{ Type ; Expression }}
@@ -2691,6 +2692,12 @@ impl ToLang for TypeNoBounds {
                     }
                 }
                 a.t_paren_close.to_rust(p);
+            }
+            TypeNoBounds::Optional(a) => {
+                a.t_sep.to_rs_before(p);
+                p.push_raw("Option<");
+                a.type_.to_rust(p);
+                p.push_raw(">");
             }
             TypeNoBounds::RawPointer(a) => {
                 a.t_pointer.to_rust(p);
@@ -2770,6 +2777,13 @@ pub struct TypeTuple {
 
     pub t_paren_open: Token,
     pub t_paren_close: Token,
+}
+
+#[derive(Debug)]
+pub struct TypeOptional {
+    pub type_: Type,
+
+    pub t_sep: Token,
 }
 
 #[derive(Debug)]

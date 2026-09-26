@@ -425,6 +425,8 @@ example
 
 ```
 
+- **use ?Type for Option<Type>**
+
 - **augment struct init expression**
 
 ```

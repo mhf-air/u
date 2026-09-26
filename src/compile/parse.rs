@@ -4457,6 +4457,18 @@ impl Parse {
                 )));
                 return Ok(payload);
             }
+            // ?Type
+            T![?] => {
+                let t_sep = token.clone();
+                let type_ = s.parse_type()?;
+                let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Optional(
+                    TypeOptional {
+                        t_sep,
+                        type_,
+                    },
+                )));
+                return Ok(payload);
+            }
             // impl trait or impl trait one bound
             T![impl] => {
                 let next_token = s.current();
