@@ -5337,6 +5337,19 @@ impl Parse {
                 ));
             }
 
+            // ?Pat
+            T![?] => {
+                let t_sep = token.clone();
+                let pat = s.parse_pattern_no_top_alt()?;
+                let r = PatternSome {
+                    t_sep,
+                    pattern: Box::new(pat),
+                };
+                return Ok(PatternNoTopAlt::WithoutRange(
+                    PatternWithoutRange::PatSome(r),
+                ));
+            }
+
             // rest
             T![...] => {
                 return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Rest(token.clone())));

@@ -109,7 +109,11 @@ Param^ struct {
     tag ?String
 }
 
-f func(:mut a: i32, b i32) {}
+f func(:mut a: i32, tag ?String) {
+    if tag -> ?tag {
+        t.to-rust()
+    }
+}
 
 f func() {
     r#func := a

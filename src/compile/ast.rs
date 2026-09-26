@@ -2256,6 +2256,7 @@ pub enum PatternWithoutRange {
     Rest(Token),
     Obsolete(PatternRange), // must have end range
     Reference(PatternReference),
+    PatSome(PatternSome),
     Struct(PatternStruct),
     TupleStruct(PatternTupleStruct),
     Tuple(PatternTuple),
@@ -2320,6 +2321,16 @@ impl ToLang for PatternWithoutRange {
                     t.to_rust(p);
                 }
                 a.pattern_without_range.to_rust(p);
+            }
+            PatternWithoutRange::PatSome(a) => {
+                if p.no_first_before {
+                    p.no_first_before = false;
+                } else {
+                    a.t_sep.to_rs_before(p);
+                }
+                p.push_raw("Some(");
+                a.pattern.to_rust(p);
+                p.push_raw(")");
             }
             PatternWithoutRange::Struct(a) => {
                 a.path.to_rust(p);
@@ -2428,6 +2439,12 @@ pub struct PatternReference {
 
     pub t_ref: Token,
     pub t_mut: Option<Token>,
+}
+#[derive(Debug)]
+pub struct PatternSome {
+    pub pattern: Box<PatternNoTopAlt>,
+
+    pub t_sep: Token,
 }
 
 #[derive(Debug, Default)]

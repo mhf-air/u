@@ -427,6 +427,47 @@ example
 
 - **use ?Type for Option<Type>**
 
+    and use ?Pat for Some(Pat), because they are so frequently used.
+    It's both easier to read and write
+
+```
+example
+
+    Person struct {
+        name String
+        tag ?String
+    }
+    print-tag func(p &Person) {
+        if p.tag -> ?tag {
+            println,,("{}", tag)
+        }
+    }
+```
+
+- **use another syntax for creating String from string literal**
+
+```
+example
+
+    ""s  -> "".to_owned()
+    ""st -> "".to_string()
+```
+
+- **use another syntax for eprintln!()**
+
+    to facilitate fast debugging by print()
+
+```
+example
+
+    $a -> eprintln!("{:?}", a)
+    $a.b -> eprintln!("{:?}", a.b)
+
+    // if need tag
+    print,,("tag: ")
+    $a
+```
+
 - **augment struct init expression**
 
 ```
