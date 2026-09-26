@@ -4026,6 +4026,15 @@ impl Parse {
                             })),
                         ));
                     }
+                    Op::Dollar => {
+                        let expr = s.parse_expr()?;
+                        r.payload = ExprPayload::WithoutBlock(Box::new(
+                            ExprWithoutBlock::Debug(ExprDebug {
+                                expr,
+                                t_sep: token.clone(),
+                            }),
+                        ));
+                    }
 
                     Op::BitOr => {
                         s.minusminus();

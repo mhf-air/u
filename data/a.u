@@ -120,6 +120,13 @@ f func() {
     ""s
     // ""st to "".to_string()
     ""st
+
+    // fast eprintln!()
+    $a
+    $a.b
+
+    print,,("tag: ")
+    $tag
 }
 
 call,,(1, 2, 3)

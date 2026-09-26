@@ -3436,6 +3436,7 @@ pub enum ExprWithoutBlock {
     Break(ExprBreak),
     Range(ExprRange),
     Return(ExprReturn),
+    Debug(ExprDebug),
     MacroCall(MacroCall),
 }
 impl Default for ExprWithoutBlock {
@@ -3466,6 +3467,7 @@ impl ToLang for ExprWithoutBlock {
             ExprWithoutBlock::Break(a) => a.to_rust(p),
             ExprWithoutBlock::Range(a) => a.to_rust(p),
             ExprWithoutBlock::Return(a) => a.to_rust(p),
+            ExprWithoutBlock::Debug(a) => a.to_rust(p),
             ExprWithoutBlock::MacroCall(a) => a.to_rust(p),
         }
     }
@@ -4100,6 +4102,26 @@ impl ToLang for ExprReturn {
         if let Some(expr) = &s.expr {
             expr.to_rust(p);
         }
+    }
+}
+#[derive(Debug, Default)]
+pub struct ExprDebug {
+    pub expr: Expr,
+
+    pub t_sep: Token,
+}
+impl ToLang for ExprDebug {
+    fn to_rust(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        if p.no_first_before {
+            p.no_first_before = false;
+        } else {
+            s.t_sep.to_rs_before(p);
+        }
+        p.push_raw(r#"eprintln!("{:?}", "#);
+        s.expr.to_rust(p);
+        p.push_raw(")");
     }
 }
 #[derive(Debug, Default)]
