@@ -3724,10 +3724,9 @@ impl Parse {
 
                 let first_expr = s.parse_expr()?;
                 let token = s.current();
-                if matches!(&token.code, T![:]) {
-                    // {{ Expr: Expr }}
-                    let mut t_semicolon = token.clone();
-                    t_semicolon.code = T![;];
+                if matches!(&token.code, T![;]) && !token.is_added_semicolon() {
+                    // {{ Expr; Expr }}
+                    let t_semicolon = token.clone();
                     s.plusplus();
                     let len = s.parse_expr()?;
                     let t_double_brace_close = s.current().clone();
@@ -4366,9 +4365,8 @@ impl Parse {
                 let type_ = s.parse_type()?;
                 let token = s.current();
                 match &token.code {
-                    T![:] => {
-                        let mut t_semicolon = token.clone();
-                        t_semicolon.code = T![;];
+                    T![;] => {
+                        let t_semicolon = token.clone();
                         s.plusplus();
                         let expr = s.parse_expr()?;
                         let t_double_brace_close = s.current().clone();

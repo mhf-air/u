@@ -217,9 +217,9 @@ f func() {
         b
     )
 
-    f func(a {{i32: 1}}) {
+    f func(a {{i32; 1}}) {
     }
-    {{0: 1}}
+    {{0; 1}}
     {{0, 1}}
     {{
         0,
@@ -289,7 +289,7 @@ identifier func() {
 Point[T] type = fn(T, T): T
 Point+[T Copy + Default] type = (T, T)
 Point^[T Copy + Default] type = (T, T)
-Point[N const usize] type Copy + Clone = {{i32: N}}
+Point[N const usize] type Copy + Clone = {{i32; N}}
 Point[T] type = (T, T) where { T Copy }
 Point[T] type = fn(T) where { T Iterator }
 Point['a 'b + 'c, 'd 'e] type = &'a i32
@@ -479,7 +479,7 @@ impl[T] Point[T] where {
 } {
 }
 
-impl[unsafe][T, N const usize] My-trait for {{T: N}} {}
+impl[unsafe][T, N const usize] My-trait for {{T; N}} {}
 impl[I] ops..Index[I] for str {}
 impl fn(i32): i32 {}
 impl[T] fn(T): T {}

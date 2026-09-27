@@ -45,7 +45,8 @@ and minus becomes
     side effect: have to use {{ }} for array related places to avoid parsing ambiguity.
     It's worth it, because generics are used more often than arrays
 
-    so turbofish is unneccesary, since [ ] are solely used for generics, all the [ ] in expressions can be transformed to turbofish in Rust
+    so turbofish is unneccesary, since [ ] are solely used for generics,
+    all the [ ] in expressions can be transformed to turbofish in Rust
 
     possible future conflict: when {{ }} is used in Rust
 
@@ -53,24 +54,17 @@ and minus becomes
 example
 
     User struct {
-        desc       Option[String]
         tags       Vec[String]
-        an-array   {{i32: 10}}
+        an-array   {{i32; 10}}
     }
 
 and array becomes
     a{{0}} = 1
 
-    {{u32: 1}}
+    {{u32; 1}}
 
-    {{0: 10}}
+    {{0; 10}}
     {{0, 1}}
-
-vec usages
-    vec,,(0, 1, 2)
-
-    vec,,{0; 10}
-    // exception: not vec,,{0: 10}
 
 turbofish becomes
     list.iter().collect[Vec[-]]()
@@ -79,7 +73,8 @@ turbofish becomes
 
 - **for all declarations, put the symbol name first**
 
-    it fits my thought process. Whenever I think of something, the name is the first thing that pops up, and it's the most important,
+    it fits my thought process. Whenever I think of something,
+    the name is the first thing that pops up, and it's the most important,
     all other stuff are complimentary information
 
 ```
@@ -146,7 +141,13 @@ example
 
 - **drop trailling semicolon, colon and ->**
 
-    use Go's method, automatically insert semicolons where possible(if the last token in a line is identifiers, most operators, ...)
+    use Go's method, automatically insert semicolons where possible
+    (if the last token in a line is identifiers, most operators, ...)
+
+    - when to manually add semicolon
+        - a :=;
+        - a {{i32; 3}} := {{1; 3}}
+        - vec,,(1; 3)
 
     note: semicolons are also inserted after line-ending . or ..
 
@@ -707,9 +708,8 @@ allow - in identifier for .u files
 
 ## TODO
 
-- after writing "[Type] impl [Trait] {\n}", automatically query rust-analyzer to
+- after writing "impl [Trait] for [Type] {\n}", automatically query rust-analyzer to
   generate all associated items for the trait
-- at present, goto-definition goes to .rs file, maybe I can map it back to .u file if it exists
 
 - a new u-analyzer: a wrapper around rust-analyzer, being both a server and a client
 
