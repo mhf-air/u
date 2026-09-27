@@ -2501,67 +2501,66 @@ impl Parse {
         r.path = path;
         r.t_macro_call = token.clone();
 
+        let mut is_stmt = false;
+        let mut delim = None;
+
+        let token = s.current();
+        if matches!(&token.code, T!["["]) {
+            s.plusplus();
+            // [stmt] [p] [s] [b]
+            let token = s.current();
+            match token.u.as_ref() {
+                "stmt" => {
+                    is_stmt = true;
+                }
+                "p" => {
+                    delim = Some(MacroCallDelim::Paren);
+                }
+                "s" => {
+                    delim = Some(MacroCallDelim::Square);
+                }
+                "b" => {
+                    delim = Some(MacroCallDelim::Brace);
+                }
+                _ => {
+                    return Err(s.panic(
+                        token,
+                        &format!("expected stmt, p, s, or b, but got {:?}", token.u),
+                    ));
+                }
+            }
+            s.plusplus();
+            s.expect(T!["]"])?;
+        }
+
+        if is_stmt {
+            let block = s.parse_block_expr()?;
+            r.t_delim_close = block.t_brace_close;
+            r.body = MacroCallBody::Stmt(block.stmts);
+            return Ok(r);
+        }
+
         let token = s.current();
         s.plusplus();
-
         match &token.code {
             T!["("] => {
+                if let Some(d) = delim {
+                    r.delim = d;
+                } else {
+                    r.delim = MacroCallDelim::Paren;
+                }
                 r.t_delim_open = token.clone();
                 // (expr, expr, ...)
                 let (exprs, t_paren_close) = parse_exprs(s)?;
                 r.body = MacroCallBody::Expr(exprs);
                 r.t_delim_close = t_paren_close;
             }
-            T!["["] => {
-                // [stmt] [p] [s]
-                let mut delim = 0;
-                let mut is_stmt = false;
-                let token = s.current();
-                let TokenCode::Identifier(identifier) = &token.code else {
-                    return Err(s.panic(
-                        token,
-                        &format!("expected stmt, p, or s, but got {:?}", token),
-                    ));
-                };
-                match identifier.id.as_ref() {
-                    "stmt" => {
-                        is_stmt = true;
-                    }
-                    "p" => {
-                        delim = 1;
-                    }
-                    "s" => {
-                        delim = 2;
-                    }
-                    _ => {
-                        return Err(s.panic(
-                            token,
-                            &format!("expected stmt, p, or s, but got {:?}", identifier),
-                        ));
-                    }
-                }
-                s.plusplus();
-                s.expect(T!["]"])?;
-                let token = s.current();
-                s.expect(T!["{"])?;
-                r.t_delim_open = token.clone();
-
-                if is_stmt {
-                    s.minusminus();
-                    let block = s.parse_block_expr()?;
-                    r.t_delim_close = block.t_brace_close;
-                    r.body = MacroCallBody::Stmt(block.stmts);
-                } else {
-                    r.delim = delim;
-                    // { tokens }
-                    let tokens = parse_tokens(s)?;
-                    s.minusminus();
-                    r.t_delim_close = s.current().clone();
-                    s.plusplus();
-                    r.body = MacroCallBody::Token(tokens);
-                }
-            }
             T!["{"] => {
+                if let Some(d) = delim {
+                    r.delim = d;
+                } else {
+                    r.delim = MacroCallDelim::Brace;
+                }
                 r.t_delim_open = token.clone();
                 // { tokens }
                 let tokens = parse_tokens(s)?;
@@ -2573,7 +2572,7 @@ impl Parse {
             _ => {
                 return Err(s.panic(
                     token,
-                    &format!("expected ( or [ or {{, but got {:?}", token),
+                    &format!("expected ( or {{, but got {:?}", token),
                 ));
             }
         }

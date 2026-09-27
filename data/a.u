@@ -1,6 +1,5 @@
 #!/usr/bin/env rustx
-//! doc
-//! see the last line for the current Rust version
+//! current Rust version: 1.98.0
 //!
 //! rust reference
 //!     https://doc.rust-lang.org/reference/introduction.html
@@ -23,13 +22,11 @@
 // - open *.rs: read *.rs -> rust's ast -> write .*.u
 // - write .*.u: u u-compile .*.u
 //
-// - in rust-to-u, for all expressions(including ret) that doesn't end with ';',
-//      translate to "< ret EXPR" in u
-// - places that might affect token order
-//      - item declaration
-//      - pub
-//      - method receiver
-//      - let, ->
+// - in rust-to-u, when parsing macro_call!,
+//      - try parsing it into Vec[Expr], if ok, then it's macro-call,,() or [s]() or [b]()
+//      - try parsing it into Vec[Stmt], if ok, then it's macro-call,,{} or [s]{} or [p]{}
+//      - otherwise, it's macro-call,,[p]{} or macro-call,,[s]{}
+//
 // - goto-definition jump to the correct position in u
 
 extern crate std
@@ -134,6 +131,8 @@ f func() {
 }
 
 call,,(1, 2, 3)
+call,,[s](1, 2, 3)
+call,,[b](1, 2, 3)
 call,,[p]{ select a from b }
 call,,[s]{ select a from b }
 call,,{ select a from b }
@@ -790,5 +789,3 @@ vec macro {
         }
     };
 }
-
-// current Rust version: 1.98.0

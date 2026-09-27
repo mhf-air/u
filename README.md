@@ -436,6 +436,9 @@ example
     and use ?Pat for Some(Pat), because they are so frequently used.
     It's both easier to read and write
 
+    don't add ?Expr for Some(Expr), because it's confusing having something like ?a()?,
+    instead of Some(a()?)
+
 ```
 example
 

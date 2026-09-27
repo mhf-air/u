@@ -177,33 +177,21 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
                     type_char: 't',
                 });
 
-                let Some(mod_items) = &a.items else {
+                if a.t_braces.is_none() {
                     continue;
-                };
-                if mod_items.is_empty() {
+                }
+                if a.items.is_empty() {
                     continue;
                 }
 
                 let mut new_mod = mod_.clone();
                 new_mod.push(&a.name.u);
-                parse_items(p, pa, mod_items, filepath, &new_mod);
+                parse_items(p, pa, &a.items, filepath, &new_mod);
             }
             u::ItemPayload::Extern(a) => {
                 field.type_ = Some("extern");
-                let id = "extern".to_string();
                 ng = name_generics(&NameGenerics {
-                    name: &u::Identifier {
-                        id: id.clone(),
-                        u: id,
-                        span: u::Span {
-                            line: a.span_extern.line,
-                            column: 0,
-                            width: 6,
-                            end_line: a.span_extern.line,
-                            end_column: 0,
-                        },
-                        prefix: None,
-                    },
+                    name: &a.t_extern,
                     generics: &None,
                     filepath: &filepath,
                     type_char: 't',
@@ -232,8 +220,8 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
                 });
             }
             u::ItemPayload::TypeAlias(a) => {
-                if let Some(t) = &a.type_ {
-                    type_ = to_u(t, pa);
+                if let Some(t) = &a.rhs {
+                    type_ = to_u(&t.1, pa);
                     field.type_ = Some(&type_);
                 }
                 ng = name_generics(&NameGenerics {
@@ -345,7 +333,7 @@ fn to_u(t: &u::Type, pa: &u::Parse) -> String {
 }
 
 struct NameGenerics<'a, 'b> {
-    name: &'b u::Identifier,
+    name: &'b u::Token,
     generics: &'a Option<u::Generics>,
     filepath: &'a str,
     type_char: char,
@@ -401,28 +389,32 @@ fn func_sig_text(a: &u::Func, pa: &u::Parse) -> String {
         p.push_str(" (");
         match &b.payload {
             u::SelfParamPayload::Type(t) => {
-                if let Some(typ) = &t.typ {
-                    if t.span_mut.is_some() {
-                        p.push_str("mut");
-                    }
-                    p.push_str(&to_u(typ, pa));
-                } else {
-                    p.push_str("mut");
+                if t.t_mut.is_some() {
+                    p.push_str("mut ");
                 }
+                p.push_str(&to_u(&t.typ, pa));
             }
-            u::SelfParamPayload::Short(c) => {
-                if c.span_self.is_none() {
-                    p.push('&');
-                    if let Some(label) = &c.label {
-                        p.push_str(&label.u);
-                        if c.mut_ {
-                            p.push_str(" mut")
-                        }
+            u::SelfParamPayload::Short(a) => {
+                if a.t_ref.is_some() {
+                    p.push_str("&");
+                } else {
+                    if a.t_mut.is_some() {
+                        // (mut)
+                        p.push_str("mut");
                     } else {
-                        if c.mut_ {
-                            p.push_str("mut")
-                        }
+                        // ()
                     }
+                }
+                let mut space = false;
+                if let Some(label) = &a.label {
+                    p.push_str(&label.u);
+                    space = true;
+                }
+                if a.t_mut.is_some() {
+                    if space {
+                        p.push_str(" ");
+                    }
+                    p.push_str("mut");
                 }
             }
         }
@@ -611,8 +603,8 @@ fn interface_fields(a: &u::Trait, filepath: &str, mod_: &Vec<&str>, pa: &u::Pars
                     f.name.u, filepath, f.name.span.line
                 ));
                 field.line = f.name.span.line;
-                if let Some(t) = &f.type_ {
-                    type_ = to_u(t, pa);
+                if let Some(t) = &f.rhs {
+                    type_ = to_u(&t.1, pa);
                     field.type_ = Some(&type_);
                 }
             }
@@ -747,8 +739,8 @@ fn impl_items(p: &mut String, a: &u::Impl, filepath: &str, mod_: &Vec<&str>, pa:
                 });
             }
             u::AssociatedItemPayload::TypeAlias(a) => {
-                if let Some(t) = &a.type_ {
-                    type_ = to_u(t, pa);
+                if let Some(t) = &a.rhs {
+                    type_ = to_u(&t.1, pa);
                     field.type_ = Some(&type_);
                 }
                 ng = name_generics(&NameGenerics {

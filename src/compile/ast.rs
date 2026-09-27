@@ -1316,13 +1316,19 @@ impl ToLang for Macro {
 pub struct MacroCall {
     pub path: SimplePath,
     pub body: MacroCallBody,
-    // 1: (), 2: [], 0: {}
-    pub delim: i32,
+    pub delim: MacroCallDelim,
     pub is_stmt: bool,
 
     pub t_macro_call: Token,
     pub t_delim_open: Token,
     pub t_delim_close: Token,
+}
+#[derive(Debug, Default)]
+pub enum MacroCallDelim {
+    Paren,
+    Square,
+    #[default]
+    Brace,
 }
 impl ToLang for MacroCall {
     fn to_rust(&self, p: &mut LangFormatter) {
@@ -1331,16 +1337,16 @@ impl ToLang for MacroCall {
         s.path.to_rust(p);
         s.t_macro_call.to_rust(p);
 
+        let pairs = match s.delim {
+            MacroCallDelim::Paren => ("(", ")"),
+            MacroCallDelim::Square => ("[", "]"),
+            MacroCallDelim::Brace => ("{", "}"),
+        };
+        s.t_delim_open.to_rs_before(p);
+        p.push_raw(pairs.0);
+
         match &s.body {
             MacroCallBody::Token(list) => {
-                let pairs = match s.delim {
-                    1 => ("(", ")"),
-                    2 => ("[", "]"),
-                    _ => ("{", "}"),
-                };
-                s.t_delim_open.to_rs_before(p);
-                p.push_raw(pairs.0);
-
                 let new_list = transform_macro_tokens(&list);
                 for it in new_list {
                     it.to_rust(p);
@@ -1348,26 +1354,26 @@ impl ToLang for MacroCall {
 
                 s.t_delim_close.to_rs_before(p);
                 p.push_raw(pairs.1);
-                if s.is_stmt && s.delim > 0 {
+                if s.is_stmt && !matches!(s.delim, MacroCallDelim::Brace) {
                     p.push_raw(";");
                 }
             }
             MacroCallBody::Expr(list) => {
-                s.t_delim_open.to_rust(p);
                 for it in list {
                     it.to_rust(p);
                 }
-                s.t_delim_close.to_rust(p);
-                if s.is_stmt {
+                s.t_delim_close.to_rs_before(p);
+                p.push_raw(pairs.1);
+                if s.is_stmt && !matches!(s.delim, MacroCallDelim::Brace) {
                     p.push_raw(";");
                 }
             }
             MacroCallBody::Stmt(list) => {
-                s.t_delim_open.to_rust(p);
                 for it in list {
                     it.to_rust(p);
                 }
-                s.t_delim_close.to_rust(p);
+                s.t_delim_close.to_rs_before(p);
+                p.push_raw(pairs.1);
             }
         }
     }
