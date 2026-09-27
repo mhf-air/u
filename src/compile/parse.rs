@@ -414,27 +414,25 @@ impl Parse {
             return Err(s.panic(&s.current(), "expected Stmt"));
         }
 
-        // < Expr
-        // can end with }, i.e. if true { < 1 } else { < 0 }
-        let token = s.current();
-        if matches!(&token.code, T![<]) {
-            let t_sep = token.clone();
-            s.plusplus();
-            let expr = s.parse_expr()?;
-            return Ok(Stmt::Value(StmtValue {
-                outer_attrs,
-                expr,
-                t_sep,
-            }));
-        }
-
         // get_first_special_token
         let first_special_token = s.get_first_special_token()?;
 
         if first_special_token.is_none() {
             // parse expr
             let expr = s.parse_expr()?;
-            s.expect(T![;])?;
+            let token = s.current();
+            match &token.code {
+                T![;] => {
+                    s.plusplus();
+                }
+                T!["}"] => {
+                    return Ok(Stmt::Value(StmtValue {
+                        outer_attrs,
+                        expr,
+                    }));
+                }
+                _ => {}
+            }
 
             if let ExprPayload::WithoutBlock(b) = expr.payload {
                 if let ExprWithoutBlock::MacroCall(mut call) = *b {

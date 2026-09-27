@@ -353,10 +353,10 @@ Person['a] struct where {
 }
 impl Person {
     no-s (&) func[no-s]() String {
-        < self.desc
+        self.desc\
     }
     has-s (&) func() String {
-        < s.desc
+        s.desc\
     }
 }
 
@@ -523,8 +523,8 @@ f func() {
         dangerous()
     }
 
-    < unsafe {
-        dangerous()
+    unsafe {
+        dangerous()\
     }
 
     a = unsafe {
@@ -537,11 +537,11 @@ f func() {
     }
 
     const {
-        < 1
+        1\
     }
 
     a = const {
-        < 1
+        1\
     }
 }
 
@@ -576,14 +576,14 @@ f func() {
     }
 
     {
-        < (a, b)
+        (a, b)\
     } -> (a, mut b)
 
     a * b + c
 
-    a(|a i32|: i32 { < 1 })
-    a(|:mut a: i32|: i32 { < 1 })
-    a(|[move]| { < 1 })
+    a(|a i32|: i32 { 1 })
+    a(|:mut a: i32|: i32 { 1 })
+    a(|[move]| { 1 })
     a(|[move] a, b| 1)
     a(|-| { p -> (a, b); })
     a(|| {
@@ -615,21 +615,21 @@ f func() {
 
 f func() {
     if a < 2 {
-        < ~1
+        ~1\
     }
 
-    if a < 2 {
-        < ~1
+    b = if a < 2 {
+        ~1\
     } else {
-        < 1
+        1\
     }
 
     if a < 2 {
-        < ~1
+        ~1\
     } else if a > 10 {
-        < 0
+        0\
     } else {
-        < 1
+        1\
     }
 
     if b -> Err(err) {
@@ -644,7 +644,7 @@ f func() {
     if b -> a..Person{ name } {
     }
 
-    if if true { < true } else { < false } {
+    if if true { true } else { false } {
     }
 }
 
@@ -676,14 +676,6 @@ f func() {
 
     // for struct patterns, use for:
     for: Order { id } in list {}
-}
-
-f func() {
-    b = if a < 2 {
-        < ~1
-    } else {
-        < 1
-    }
 }
 
 f func() {
@@ -775,10 +767,10 @@ b
 /// a
 f func() {
     sum u32 := (0``)
-        .map(|n u32|: u32 { < n * n })
-        .take-while(|n &u32|: bool { < *n < 1000 })
-        .filter(|n &u32|: bool { < *n % 2 == 1 })
-        .fold(0, |acc u32, n u32| { < acc + n } )
+        .map(|n u32|: u32 { n * n })
+        .take-while(|n &u32|: bool { *n < 1000 })
+        .filter(|n &u32|: bool { *n % 2 == 1 })
+        .fold(0, |acc u32, n u32| { acc + n } )
 
     sum u32 := (0``)
         .map(|n| n * n)

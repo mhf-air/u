@@ -122,11 +122,11 @@ example
 
     User impl {
         get-age+ (&) func[no-s]() i32 {
-            < self.age
+            self.age\
         }
 
         get-age+ (&'a) func() i32 {
-            < s.age
+            s.age\
         }
 
         set-age (&mut) func(new-age i32) {
@@ -153,13 +153,18 @@ example
 
     note: write semicolons in macro definitions, as in regular Rust code
 
-    side effect: use < Expr as the result expression
+    side effect: use Expr\ as the result expression. the backslash is added to prevent auto
+    inserting semicolon
 
 ```
 example
 
-    a++
-    a := if b > 0 { < b } else { < -b }
+    a := if b > 0 { b } else { -b }
+    a := if b > 0 {
+        b\
+    } else {
+        ~b\
+    }
 
     a := some-func()
         .some-method()
@@ -499,7 +504,7 @@ example
 
     a(|:mut n: i32|: i32 {
         n++
-        < n
+        n\
     })
 ```
 
@@ -528,6 +533,34 @@ f func(:Pattern: Type) {}
 example
 
     f func(:mut a: i32, b i32) {}
+```
+
+- **add \ at line end to prevent auto adding semicolon**
+
+```
+example
+    a = b\
+        && c
+
+    if a {
+        b\
+    } else {
+        c\
+    }
+```
+
+- **add ++ and ~~**
+
+```
+example
+
+    a++
+translates to
+    a += 1;
+
+    a~~
+translates to
+    a -= 1;
 ```
 
 ### caveats
