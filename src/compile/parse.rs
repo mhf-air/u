@@ -100,8 +100,8 @@ impl Parse {
             m.insert(T![||], p);
 
             p -= 1;
-            m.insert(T!["``"], p);
-            m.insert(T!["``="], p);
+            m.insert(T![,,], p);
+            m.insert(T![,,=], p);
 
             m
         }
@@ -215,7 +215,7 @@ impl Parse {
         }
     }
 
-    // when encounters ( [ or {{, fast-forward to ) ] or }}
+    // when encounters ( [ or @[, fast-forward to ) ] or ]
     fn skip_pair(&self, start_index: usize, token: &Token) -> ParseResult<usize> {
         let s = self;
 
@@ -234,9 +234,9 @@ impl Parse {
                 delim_open = Pair::BraceOpen;
                 delim_close = Pair::BraceClose;
             }
-            T!["{{"] => {
-                delim_open = Pair::DoubleBraceOpen;
-                delim_close = Pair::DoubleBraceClose;
+            T!["@["] => {
+                delim_open = Pair::ArrayOpen;
+                delim_close = Pair::SquareClose;
             }
             T!["#["] => {
                 delim_open = Pair::OuterAttr;
@@ -257,7 +257,11 @@ impl Parse {
                 let token = &s.tokens[start];
                 start += 1;
                 if let TokenCode::Pair(pair) = &token.code {
-                    if matches!(*pair, Pair::SquareOpen | Pair::OuterAttr | Pair::InnerAttr) {
+                    if matches!(*pair,
+                            Pair::SquareOpen |
+                            Pair::OuterAttr |
+                            Pair::InnerAttr |
+                            Pair::ArrayOpen) {
                         delimiter_count += 1;
                         continue;
                     }
@@ -3089,8 +3093,8 @@ impl Parse {
                 | T![<=]
                 | T![&&]
                 | T![||]
-                | T!["``"]
-                | T!["``="] => {
+                | T![,,]
+                | T![,,=] => {
                     s.plusplus();
                     list.push(ExprOp::Op(token.clone()));
                     let expr = s.parse_binary_expr()?;
@@ -3282,7 +3286,7 @@ impl Parse {
                             r_list[index] = ExprOp::Expr(expr);
                         }
 
-                        T!["``"] => {
+                        T![,,] => {
                             let expr = Expr {
                                 outer_attrs: Attrs::default(),
                                 payload: ExprPayload::WithoutBlock(Box::new(
@@ -3295,7 +3299,7 @@ impl Parse {
                             };
                             r_list[index] = ExprOp::Expr(expr);
                         }
-                        T!["``="] => {
+                        T![,,=] => {
                             let expr = Expr {
                                 outer_attrs: Attrs::default(),
                                 payload: ExprPayload::WithoutBlock(Box::new(
@@ -3407,8 +3411,8 @@ impl Parse {
                     }
                 }
 
-                // Expr ``
-                T!["``"] => {
+                // Expr ,,
+                T![,,] => {
                     if s.at_range_end(&s.current().code) {
                         expr = Expr {
                             outer_attrs: Attrs::default(),
@@ -3427,20 +3431,21 @@ impl Parse {
                     }
                 }
 
-                // Expr{{Expr}}
-                T!["{{"] => {
-                    let t_double_brace_open = token.clone();
+                // Expr@[Expr]
+                T!["@["] => {
+                    let t_delim_open = token.clone();
                     let right = s.parse_expr()?;
-                    let t_double_brace_close = s.current().clone();
-                    s.expect(T!["}}"])?;
+                    let mut t_delim_close = s.current().clone();
+                    t_delim_close.code = T!["rs:]"];
+                    s.expect(T!["]"])?;
                     expr = Expr {
                         outer_attrs: Attrs::default(),
                         payload: ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Index(
                             ExprIndex {
                                 left: expr,
                                 right,
-                                t_double_brace_open,
-                                t_double_brace_close,
+                                t_delim_open,
+                                t_delim_close,
                             },
                         ))),
                     };
@@ -3704,17 +3709,19 @@ impl Parse {
                 }
             }
             // array
-            T!["{{"] => {
-                let t_double_brace_open = token.clone();
-                // {{}}
+            T!["@["] => {
+                let t_delim_open = token.clone();
+                // @[]
                 let token = s.current();
-                if matches!(&token.code, T!["}}"]) {
+                if matches!(&token.code, T!["]"]) {
+                    let mut t_delim_close = token.clone();
+                    t_delim_close.code = T!["rs:]"];
                     s.plusplus();
                     r.payload =
                         ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Array(ExprArray {
                             payload: ExprArrayPayload::Many(ExprArrayMany(Vec::new())),
-                            t_double_brace_open,
-                            t_double_brace_close: token.clone(),
+                            t_delim_open,
+                            t_delim_close,
                         })));
                     return Ok(r);
                 }
@@ -3722,12 +3729,13 @@ impl Parse {
                 let first_expr = s.parse_expr()?;
                 let token = s.current();
                 if matches!(&token.code, T![;]) && !token.is_added_semicolon() {
-                    // {{ Expr; Expr }}
+                    // @[ Expr; Expr ]
                     let t_semicolon = token.clone();
                     s.plusplus();
                     let len = s.parse_expr()?;
-                    let t_double_brace_close = s.current().clone();
-                    s.expect(T!["}}"])?;
+                    let mut t_delim_close = s.current().clone();
+                    t_delim_close.code = T!["rs:]"];
+                    s.expect(T!["]"])?;
                     r.payload =
                         ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Array(ExprArray {
                             payload: ExprArrayPayload::One(ExprArrayOne {
@@ -3735,8 +3743,8 @@ impl Parse {
                                 len,
                                 t_semicolon,
                             }),
-                            t_double_brace_open,
-                            t_double_brace_close,
+                            t_delim_open,
+                            t_delim_close,
                         })));
                     return Ok(r);
                 }
@@ -3750,18 +3758,20 @@ impl Parse {
                     None
                 };
 
-                // {{ Expr([,;] Expr)* }}
+                // @[ Expr([,;] Expr)* ]
                 let mut items: Vec<(Expr, Option<Token>)> = vec![(first_expr, t_comma)];
                 while s.has_more() {
                     let token = s.current();
 
-                    if matches!(&token.code, T!["}}"]) {
+                    if matches!(&token.code, T!["]"]) {
+                        let mut t_delim_close = token.clone();
+                        t_delim_close.code = T!["rs:]"];
                         s.plusplus();
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Array(ExprArray {
                                 payload: ExprArrayPayload::Many(ExprArrayMany(items)),
-                                t_double_brace_open,
-                                t_double_brace_close: token.clone(),
+                                t_delim_open,
+                                t_delim_close,
                             }),
                         ));
                         return Ok(r);
@@ -3962,8 +3972,8 @@ impl Parse {
 
             TokenCode::Op(op) => {
                 match op {
-                    // ``, `` Expr
-                    Op::TickTick => {
+                    // ,, and ,, Expr
+                    Op::CommaComma => {
                         let mut range = ExprRange::default();
                         range.t_sep = token.clone();
                         if !s.at_range_end(&s.current().code) {
@@ -3972,8 +3982,8 @@ impl Parse {
                         r.payload =
                             ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Range(range)));
                     }
-                    // ``= Expr
-                    Op::TickTickEq => {
+                    // ,,= Expr
+                    Op::CommaCommaEq => {
                         let mut range = ExprRange::default();
                         range.t_sep = token.clone();
                         range.end = Some(s.parse_expr()?);
@@ -4130,7 +4140,7 @@ impl Parse {
 
     fn at_range_end(&self, code: &TokenCode) -> bool {
         matches!(code,
-            T![")"] | T!["}}"] | T!["{"] | T![;] | T![,] |
+            T![")"] | T!["]"] | T!["{"] | T![;] | T![,] |
             T![==] | T![!=] | T![>] | T![>=] | T![<=] |
             T![=] | T![+=] | T![~=] | T![*=] | T![/=] | T![%=] |
             T![&=] | T![|=] | T![^=] | T![<<=] | T![>>=]
@@ -4197,6 +4207,7 @@ impl Parse {
                     let token = s.current();
                     if matches!(&token.code, T![|]) {
                         r.t_delim_close = token.clone();
+                        r.t_delim_close.code = T!["rs:]"];
                         s.plusplus();
                         break;
                     }
@@ -4357,8 +4368,8 @@ impl Parse {
                 return Ok(payload);
             }
             // array or slice
-            T!["{{"] => {
-                let t_double_brace_open = token.clone();
+            T!["@["] => {
+                let t_delim_open = token.clone();
                 let type_ = s.parse_type()?;
                 let token = s.current();
                 match &token.code {
@@ -4366,26 +4377,29 @@ impl Parse {
                         let t_semicolon = token.clone();
                         s.plusplus();
                         let expr = s.parse_expr()?;
-                        let t_double_brace_close = s.current().clone();
-                        s.expect(T!["}}"])?;
+                        let mut t_delim_close = s.current().clone();
+                        t_delim_close.code = T!["rs:]"];
+                        s.expect(T!["]"])?;
                         let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Array(
                             TypeArray {
                                 type_,
                                 expr,
-                                t_double_brace_open,
-                                t_double_brace_close,
+                                t_delim_open,
+                                t_delim_close,
                                 t_semicolon,
                             },
                         )));
                         return Ok(payload);
                     }
-                    T!["}}"] => {
+                    T!["]"] => {
+                        let mut t_delim_close = s.current().clone();
+                        t_delim_close.code = T!["rs:]"];
                         s.plusplus();
                         let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Slice(
                             TypeSlice {
                                 type_,
-                                t_double_brace_open,
-                                t_double_brace_close: token.clone(),
+                                t_delim_open,
+                                t_delim_close,
                             },
                         )));
                         return Ok(payload);
@@ -4703,7 +4717,7 @@ impl Parse {
                     TokenCode::Identifier(_)
                         | TokenCode::Keyword(_)
                         | T!["("]
-                        | T!["{{"]
+                        | T!["@["]
                         | T![*]
                         | T![!]
                         | T![&&]
@@ -5140,9 +5154,9 @@ impl Parse {
                     delim_open = Pair::BraceOpen;
                     delim_close = Pair::BraceClose;
                 }
-                T!["{{"] => {
-                    delim_open = Pair::DoubleBraceOpen;
-                    delim_close = Pair::DoubleBraceClose;
+                T!["@["] => {
+                    delim_open = Pair::ArrayOpen;
+                    delim_close = Pair::SquareClose;
                 }
                 T!["#["] => {
                     delim_open = Pair::OuterAttr;
@@ -5237,7 +5251,7 @@ impl Parse {
 
                 let token = s.current();
                 match &token.code {
-                    T!["``"] => {
+                    T![,,] => {
                         s.plusplus();
                         let next_token = s.current();
                         if matches!(next_token.code,
@@ -5260,7 +5274,7 @@ impl Parse {
                             t_sep: token.clone(),
                         }));
                     }
-                    T!["``="] => {
+                    T![,,=] => {
                         s.plusplus();
                         let bound = parse_range_pattern_bound(s)?;
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
@@ -5287,9 +5301,9 @@ impl Parse {
                     }
                 }
             }
-            // `` RangePattern
-            // ``= RangePattern
-            T!["``"] | T!["``="] => {
+            // ,, RangePattern
+            // ,,= RangePattern
+            T![,,] | T![,,=] => {
                 let bound = parse_range_pattern_bound(s)?;
                 return Ok(PatternNoTopAlt::WithRange(PatternRange {
                     start: None,
@@ -5402,9 +5416,9 @@ impl Parse {
                 }
             }
             // slice
-            T!["{{"] => {
+            T!["@["] => {
                 let next_token = s.current();
-                if matches!(&next_token.code, T!["}}"]) {
+                if matches!(&next_token.code, T!["]"]) {
                     return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Slice(
                         PatternSlice {
                             items: Vec::new(),
@@ -5426,7 +5440,7 @@ impl Parse {
                     s.plusplus();
                 }
                 let next_token = s.current();
-                s.expect(T!["}}"])?;
+                s.expect(T!["]"])?;
                 return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Slice(
                     PatternSlice {
                         items,
@@ -5519,8 +5533,8 @@ impl Parse {
                             PatternWithoutRange::MacroCall(call),
                         ));
                     }
-                    // RangePattern ``
-                    T!["``"] => {
+                    // RangePattern ,,
+                    T![,,] => {
                         s.plusplus();
                         let start = Some(PatternRangeBound::Path(PathInExpr { items }));
                         let next_token = s.current();
@@ -5538,8 +5552,8 @@ impl Parse {
                             t_sep: token.clone(),
                         }));
                     }
-                    // RangePattern ``= RangePattern
-                    T!["``="] => {
+                    // RangePattern ,,= RangePattern
+                    T![,,=] => {
                         s.plusplus();
                         let start = Some(PatternRangeBound::Path(PathInExpr { items }));
                         let bound = parse_range_pattern_bound(s)?;

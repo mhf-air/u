@@ -1390,7 +1390,7 @@ impl Default for MacroCallBody {
     }
 }
 
-// transform all '[' and ']' into 'rs[' and 'rs]'
+// transform all tokens in U that are different in Rust to their Rust form
 fn transform_macro_tokens(tokens: &[Token]) -> Vec<Token> {
     let mut r = Vec::new();
     for it in tokens {
@@ -2738,16 +2738,16 @@ impl ToLang for TypeNoBounds {
                 a.type_no_bounds.to_rust(p);
             }
             TypeNoBounds::Array(a) => {
-                a.t_double_brace_open.to_rust(p);
+                a.t_delim_open.to_rust(p);
                 a.type_.to_rust(p);
                 a.t_semicolon.to_rust(p);
                 a.expr.to_rust(p);
-                a.t_double_brace_close.to_rust(p);
+                a.t_delim_close.to_rust(p);
             }
             TypeNoBounds::Slice(a) => {
-                a.t_double_brace_open.to_rust(p);
+                a.t_delim_open.to_rust(p);
                 a.type_.to_rust(p);
-                a.t_double_brace_close.to_rust(p);
+                a.t_delim_close.to_rust(p);
             }
             TypeNoBounds::TypePath(a) => a.to_rust(p),
             TypeNoBounds::QualifiedPathInType(a) => a.to_rust(p),
@@ -2831,8 +2831,8 @@ pub struct TypeArray {
     pub type_: Type,
     pub expr: Expr,
 
-    pub t_double_brace_open: Token,
-    pub t_double_brace_close: Token,
+    pub t_delim_open: Token,
+    pub t_delim_close: Token,
     pub t_semicolon: Token,
 }
 
@@ -2840,8 +2840,8 @@ pub struct TypeArray {
 pub struct TypeSlice {
     pub type_: Type,
 
-    pub t_double_brace_open: Token,
-    pub t_double_brace_close: Token,
+    pub t_delim_open: Token,
+    pub t_delim_close: Token,
 }
 
 #[derive(Debug, Default)]
@@ -3716,8 +3716,8 @@ impl ToLang for ExprGrouped {
 pub struct ExprArray {
     pub payload: ExprArrayPayload,
 
-    pub t_double_brace_open: Token,
-    pub t_double_brace_close: Token,
+    pub t_delim_open: Token,
+    pub t_delim_close: Token,
 }
 impl ToLang for ExprArray {
     fn to_rust(&self, p: &mut LangFormatter) {
@@ -3725,9 +3725,9 @@ impl ToLang for ExprArray {
 
         if p.no_first_before {
             p.no_first_before = false;
-            s.t_double_brace_open.to_rs_one(p);
+            s.t_delim_open.to_rs_one(p);
         } else {
-            s.t_double_brace_open.to_rust(p);
+            s.t_delim_open.to_rust(p);
         }
         match &s.payload {
             ExprArrayPayload::One(a) => {
@@ -3744,7 +3744,7 @@ impl ToLang for ExprArray {
                 }
             }
         }
-        s.t_double_brace_close.to_rust(p);
+        s.t_delim_close.to_rust(p);
     }
 }
 #[derive(Debug)]
@@ -3784,17 +3784,17 @@ pub struct ExprIndex {
     pub left: Expr,
     pub right: Expr,
 
-    pub t_double_brace_open: Token,
-    pub t_double_brace_close: Token,
+    pub t_delim_open: Token,
+    pub t_delim_close: Token,
 }
 impl ToLang for ExprIndex {
     fn to_rust(&self, p: &mut LangFormatter) {
         let s = self;
 
         s.left.to_rust(p);
-        s.t_double_brace_open.to_rust(p);
+        s.t_delim_open.to_rust(p);
         s.right.to_rust(p);
-        s.t_double_brace_close.to_rust(p);
+        s.t_delim_close.to_rust(p);
     }
 }
 #[derive(Debug)]

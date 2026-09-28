@@ -42,29 +42,29 @@ and minus becomes
 
     use [T] because [ ] are easier to type(no Shift)
 
-    side effect: have to use {{ }} for array related places to avoid parsing ambiguity.
+    side effect: have to use @[ ] for array related places to avoid parsing ambiguity.
     It's worth it, because generics are used more often than arrays
 
     so turbofish is unneccesary, since [ ] are solely used for generics,
     all the [ ] in expressions can be transformed to turbofish in Rust
 
-    possible future conflict: when {{ }} is used in Rust
+    possible future conflict: when @[ is used in Rust
 
 ```
 example
 
     User struct {
         tags       Vec[String]
-        an-array   {{i32; 10}}
+        an-array   @[i32; 10]
     }
 
 and array becomes
-    a{{0}} = 1
+    a@[0] = 1
 
-    {{u32; 1}}
+    @[u32; 1]
 
-    {{0; 10}}
-    {{0, 1}}
+    @[0; 10]
+    @[0, 1]
 
 turbofish becomes
     list.iter().collect[Vec[-]]()
@@ -146,7 +146,7 @@ example
 
     - when to manually add semicolon
         - a :=;
-        - a {{i32; 3}} := {{1; 3}}
+        - a @[i32; 3] := @[1; 3]
         - vec_(1; 3)
 
     note: semicolons are also inserted after line-ending . or ..
@@ -176,9 +176,9 @@ example
 
     because it's easier to type and distinguishes path segments better
 
-    side effect: have to use `` for Rust's .. operator, etc.
+    side effect: have to use ,, for Rust's .. operator, etc.
 
-    possible future conflict: when `` is used in Rust
+    possible future conflict: when ,, is used in Rust
 
     note: use new syntax for leading :: of a path
 
@@ -195,7 +195,7 @@ example
         compile-string(data)
     }
 
-    for i in 0``10 {
+    for i in 0,,10 {
     }
 ```
 
@@ -354,10 +354,10 @@ example
         a
         b
     )
-    array := {{
+    array := @[
         a
         b
-    }}
+    ]
     vec_(
         a
         b
@@ -412,7 +412,7 @@ example
 
     custom_{}
         anything in {} are U tokens. like
-            clap..arg_{ {{name}} "Optional name" }
+            clap..arg_{ [name] "Optional name" }
             clap..arg_{ ~ c ~ ~ config [file--c] "Sets a file" }
         they become
             clap::arg!{ [name] "Optional name" }

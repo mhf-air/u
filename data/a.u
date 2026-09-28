@@ -216,21 +216,30 @@ f func() {
         b
     )
 
-    f func(a {{i32; 1}}) {
+    a &@[i32; 1] := todo_()
+    &@[1,,2]
+    a &'a @[i32] := todo_()
+    a @[i32; 1] := todo_()
+    @[0, 1]
+    list@[0]
+    list@[1,,2]
+    list@[,,]
+
+    f func(a @[i32; 1]) {
     }
-    {{0; 1}}
-    {{0, 1}}
-    {{
+    @[0; 1]
+    @[0, 1]
+    @[
         0,
         1,
-    }}
-    {{
+    ]
+    @[
         0
         1
-    }}
-    {{
+    ]
+    @[
         a,
-    }}
+    ]
 
     f(a, b)
     a.b(
@@ -288,7 +297,7 @@ identifier func() {
 Point[T] type = fn(T, T): T
 Point+[T Copy + Default] type = (T, T)
 Point^[T Copy + Default] type = (T, T)
-Point[N const usize] type Copy + Clone = {{i32; N}}
+Point[N const usize] type Copy + Clone = @[i32; N]
 Point[T] type = (T, T) where { T Copy }
 Point[T] type = fn(T) where { T Iterator }
 Point['a 'b + 'c, 'd 'e] type = &'a i32
@@ -478,7 +487,7 @@ impl[T] Point[T] where {
 } {
 }
 
-impl[unsafe][T, N const usize] My-trait for {{T; N}} {}
+impl[unsafe][T, N const usize] My-trait for @[T; N] {}
 impl[I] ops..Index[I] for str {}
 impl fn(i32): i32 {}
 impl[T] fn(T): T {}
@@ -546,22 +555,22 @@ f func() {
 
 f func() {
     a = match c {
-        ``5: "a"
-        5``6: "b"
-        6``=7: "c"
+        ,,5: "a"
+        5,,6: "b"
+        6,,=7: "c"
         8: "d"
-        9``: "e"
+        9,,: "e"
     }
     a = match c {
-        ``=6: "a"
+        ,,=6: "a"
         -: "b"
     }
     a = match c {
-        ``a: "a"
-        b``c: "b"
-        d``=e: "c"
+        ,,a: "a"
+        b,,c: "b"
+        d,,=e: "c"
         f: "d"
-        g``: "e"
+        g,,: "e"
     }
 }
 
@@ -732,7 +741,7 @@ f func() {
 
     for (i, item) in list.enumerate() {}
 
-    for n in 0`` {}
+    for n in 0,, {}
 
 }
 
@@ -765,13 +774,13 @@ b
 */
 /// a
 f func() {
-    sum u32 := (0``)
+    sum u32 := (0,,)
         .map(|n u32|: u32 { n * n })
         .take-while(|n &u32|: bool { *n < 1000 })
         .filter(|n &u32|: bool { *n % 2 == 1 })
         .fold(0, |acc u32, n u32| { acc + n } )
 
-    sum u32 := (0``)
+    sum u32 := (0,,)
         .map(|n| n * n)
         .take-while(|n| *n < 1000)
         .filter(|n| *n % 2 == 1)

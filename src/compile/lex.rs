@@ -156,8 +156,7 @@ impl Lex {
                 _ => false,
             },
             TokenCode::Op(op) => match op {
-                Op::PlusPlus | Op::MinusMinus | Op::Question | Op::TickTick |
-                    Op::Dot | Op::DotDot => true,
+                Op::PlusPlus | Op::MinusMinus | Op::Question | Op::Dot | Op::DotDot => true,
                 _ => false,
             },
             TokenCode::Pair(pair) => match pair {
@@ -1026,44 +1025,28 @@ impl Lex {
                     match next_ch {
                         // ,,
                         ',' => {
-                            s.add_token(TokenCode::Op(Op::CommaComma), ",,".to_owned());
-                            i += 1;
-                        }
-                        // ,
-                        _ => {
-                            s.add_token(TokenCode::Op(Op::Comma), ",".to_owned());
-                        }
-                    }
-                },
-
-                '`' => {
-                    if i + 1 == total_len {
-                        return s.panic("expected ` after `");
-                    }
-                    let next_ch = s.chars[i + 1];
-                    match next_ch {
-                        '`' => {
                             if i + 2 >= total_len {
-                                // ``
-                                s.add_token(TokenCode::Op(Op::TickTick), "``".to_owned());
+                                // ,,
+                                s.add_token(TokenCode::Op(Op::CommaComma), ",,".to_owned());
                                 i += 1;
                             } else {
                                 match s.chars[i + 2] {
                                     '=' => {
-                                        // ``=
-                                        s.add_token(TokenCode::Op(Op::TickTickEq), "``=".to_owned());
+                                        // ,,=
+                                        s.add_token(TokenCode::Op(Op::CommaCommaEq), ",,=".to_owned());
                                         i += 2;
                                     }
                                     _ => {
-                                        // ``
-                                        s.add_token(TokenCode::Op(Op::TickTick), "``".to_owned());
+                                        // ,,
+                                        s.add_token(TokenCode::Op(Op::CommaComma), ",,".to_owned());
                                         i += 1;
                                     }
                                 }
                             }
                         }
+                        // ,
                         _ => {
-                            return s.panic("expected ` after `");
+                            s.add_token(TokenCode::Op(Op::Comma), ",".to_owned());
                         }
                     }
                 },
@@ -1197,6 +1180,25 @@ impl Lex {
                         // &
                         _ => {
                             s.add_token(TokenCode::Op(Op::BitAnd), "&".to_owned());
+                        }
+                    }
+                },
+
+                '@' => {
+                    if i + 1 == total_len {
+                        s.add_token(TokenCode::Op(Op::At), "@".to_owned());
+                        return Ok(());
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // @[
+                        '[' => {
+                            s.add_token(TokenCode::Pair(Pair::ArrayOpen), "@[".to_owned());
+                            i += 1;
+                        }
+                        // @
+                        _ => {
+                            s.add_token(TokenCode::Op(Op::At), "@".to_owned());
                         }
                     }
                 },
@@ -1340,7 +1342,6 @@ impl Lex {
                 ']' => s.add_token(TokenCode::Pair(Pair::SquareClose), "]".to_owned()),
                 ';' => s.add_token(TokenCode::Op(Op::Semicolon), ";".to_owned()),
                 '?' => s.add_token(TokenCode::Op(Op::Question), "?".to_owned()),
-                '@' => s.add_token(TokenCode::Op(Op::At), "@".to_owned()),
                 '$' => s.add_token(TokenCode::Op(Op::Dollar), "$".to_owned()),
                 '_' => s.add_token(TokenCode::Op(Op::Underscore), "_".to_owned()),
 
@@ -1558,14 +1559,12 @@ impl Token {
                     Op::Dot => ".",
                     Op::DotDot => "::",
                     Op::DotDotDot => "..",
-                    Op::Tick => "`",
-                    Op::TickTick => "..",
-                    Op::TickTickEq => "..=",
                     Op::Pound => "#",
                     Op::Question => "?",
                     Op::At => "@",
                     Op::Comma => ",",
-                    Op::CommaComma => "!",
+                    Op::CommaComma => "..",
+                    Op::CommaCommaEq => "..=",
                     Op::Underscore => "!",
                     Op::Colon => ":",
                     Op::Semicolon => ";",
@@ -1591,6 +1590,7 @@ impl Token {
                     Pair::BraceClose => "}",
                     Pair::DoubleBraceOpen => "[",
                     Pair::DoubleBraceClose => "]",
+                    Pair::ArrayOpen => "[",
                     Pair::OuterAttr => "#[",
                     Pair::InnerAttr => "#![",
                     Pair::EndAttr => "]",
@@ -2172,14 +2172,12 @@ pub enum Op {
     Dot,
     DotDot,
     DotDotDot,
-    Tick,
-    TickTick,
-    TickTickEq,
     Pound,
     Question,
     At,
     Comma,
     CommaComma,
+    CommaCommaEq,
     Underscore,
     Colon,
     Semicolon,
@@ -2222,14 +2220,12 @@ impl fmt::Debug for Op {
             Self::Dot => write!(f, "."),
             Self::DotDot => write!(f, ".."),
             Self::DotDotDot => write!(f, "..."),
-            Self::Tick => write!(f, "`"),
-            Self::TickTick => write!(f, "``"),
-            Self::TickTickEq => write!(f, "``="),
             Self::Pound => write!(f, "#"),
             Self::Question => write!(f, "?"),
             Self::At => write!(f, "@"),
             Self::Comma => write!(f, ","),
             Self::CommaComma => write!(f, ",,"),
+            Self::CommaCommaEq => write!(f, ",,="),
             Self::Underscore => write!(f, "_"),
             Self::Colon => write!(f, ":"),
             Self::Semicolon => write!(f, ";"),
@@ -2257,6 +2253,7 @@ pub enum Pair {
     BraceClose,
     DoubleBraceOpen,
     DoubleBraceClose,
+    ArrayOpen,
     OuterAttr,
     InnerAttr,
     EndAttr,
@@ -2275,6 +2272,7 @@ impl fmt::Debug for Pair {
             Self::BraceClose => write!(f, "}}"),
             Self::DoubleBraceOpen => write!(f, "{{{{"),
             Self::DoubleBraceClose => write!(f, "}}}}"),
+            Self::ArrayOpen => write!(f, "@["),
             Self::OuterAttr => write!(f, "#["),
             Self::InnerAttr => write!(f, "#!["),
             Self::EndAttr => write!(f, "]"),
@@ -2384,6 +2382,7 @@ macro_rules! T {
 	[ @ ] => { TokenCode::Op(Op::At) };
 	[ , ] => { TokenCode::Op(Op::Comma) };
 	[ ,, ] => { TokenCode::Op(Op::CommaComma) };
+	[ ,,= ] => { TokenCode::Op(Op::CommaCommaEq) };
 	[ _ ] => { TokenCode::Op(Op::Underscore) };
 	[ : ] => { TokenCode::Op(Op::Colon) };
 	[ ; ] => { TokenCode::Op(Op::Semicolon) };
@@ -2418,6 +2417,7 @@ macro_rules! T {
 	[ "}" ] => { TokenCode::Pair(Pair::BraceClose) };
 	[ "{{" ] => { TokenCode::Pair(Pair::DoubleBraceOpen) };
 	[ "}}" ] => { TokenCode::Pair(Pair::DoubleBraceClose) };
+	[ "@[" ] => { TokenCode::Pair(Pair::ArrayOpen) };
 	[ "#[" ] => { TokenCode::Pair(Pair::OuterAttr) };
 	[ "#![" ] => { TokenCode::Pair(Pair::InnerAttr) };
 
