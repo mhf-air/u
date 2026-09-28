@@ -216,30 +216,30 @@ f func() {
         b
     )
 
-    a &@[i32; 1] := todo_()
-    &@[1,,2]
-    a &'a @[i32] := todo_()
-    a @[i32; 1] := todo_()
-    @[0, 1]
-    list@[0]
-    list@[1,,2]
-    list@[,,]
+    a &[`i32; 1`] := todo_()
+    &[`1,,2`]
+    a &'a [`i32`] := todo_()
+    a [`i32; 1`] := todo_()
+    [`0, 1`]
+    list[`0`]
+    list[`1,,2`]
+    list[`,,`]
 
-    f func(a @[i32; 1]) {
+    f func(a [`i32; 1`]) {
     }
-    @[0; 1]
-    @[0, 1]
-    @[
+    [`0; 1`]
+    [`0, 1`]
+    [`
         0,
         1,
-    ]
-    @[
+    `]
+    [`
         0
         1
-    ]
-    @[
+    `]
+    [`
         a,
-    ]
+    `]
 
     f(a, b)
     a.b(
@@ -297,7 +297,7 @@ identifier func() {
 Point[T] type = fn(T, T): T
 Point+[T Copy + Default] type = (T, T)
 Point^[T Copy + Default] type = (T, T)
-Point[N const usize] type Copy + Clone = @[i32; N]
+Point[N const usize] type Copy + Clone = [`i32; N`]
 Point[T] type = (T, T) where { T Copy }
 Point[T] type = fn(T) where { T Iterator }
 Point['a 'b + 'c, 'd 'e] type = &'a i32
@@ -487,7 +487,7 @@ impl[T] Point[T] where {
 } {
 }
 
-impl[unsafe][T, N const usize] My-trait for @[T; N] {}
+impl[unsafe][T, N const usize] My-trait for [`T; N`] {}
 impl[I] ops..Index[I] for str {}
 impl fn(i32): i32 {}
 impl[T] fn(T): T {}

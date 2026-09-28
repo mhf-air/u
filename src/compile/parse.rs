@@ -215,7 +215,7 @@ impl Parse {
         }
     }
 
-    // when encounters ( [ or @[, fast-forward to ) ] or ]
+    // when encounters ( [ or [`, fast-forward to ) ] or `]
     fn skip_pair(&self, start_index: usize, token: &Token) -> ParseResult<usize> {
         let s = self;
 
@@ -234,9 +234,9 @@ impl Parse {
                 delim_open = Pair::BraceOpen;
                 delim_close = Pair::BraceClose;
             }
-            T!["@["] => {
+            T!["[`"] => {
                 delim_open = Pair::ArrayOpen;
-                delim_close = Pair::SquareClose;
+                delim_close = Pair::ArrayClose;
             }
             T!["#["] => {
                 delim_open = Pair::OuterAttr;
@@ -260,8 +260,7 @@ impl Parse {
                     if matches!(*pair,
                             Pair::SquareOpen |
                             Pair::OuterAttr |
-                            Pair::InnerAttr |
-                            Pair::ArrayOpen) {
+                            Pair::InnerAttr) {
                         delimiter_count += 1;
                         continue;
                     }
@@ -3431,13 +3430,12 @@ impl Parse {
                     }
                 }
 
-                // Expr@[Expr]
-                T!["@["] => {
+                // Expr[`Expr`]
+                T!["[`"] => {
                     let t_delim_open = token.clone();
                     let right = s.parse_expr()?;
-                    let mut t_delim_close = s.current().clone();
-                    t_delim_close.code = T!["rs:]"];
-                    s.expect(T!["]"])?;
+                    let t_delim_close = s.current().clone();
+                    s.expect(T!["`]"])?;
                     expr = Expr {
                         outer_attrs: Attrs::default(),
                         payload: ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Index(
@@ -3709,13 +3707,12 @@ impl Parse {
                 }
             }
             // array
-            T!["@["] => {
+            T!["[`"] => {
                 let t_delim_open = token.clone();
-                // @[]
+                // [``]
                 let token = s.current();
-                if matches!(&token.code, T!["]"]) {
-                    let mut t_delim_close = token.clone();
-                    t_delim_close.code = T!["rs:]"];
+                if matches!(&token.code, T!["`]"]) {
+                    let t_delim_close = token.clone();
                     s.plusplus();
                     r.payload =
                         ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Array(ExprArray {
@@ -3729,13 +3726,12 @@ impl Parse {
                 let first_expr = s.parse_expr()?;
                 let token = s.current();
                 if matches!(&token.code, T![;]) && !token.is_added_semicolon() {
-                    // @[ Expr; Expr ]
+                    // [` Expr; Expr `]
                     let t_semicolon = token.clone();
                     s.plusplus();
                     let len = s.parse_expr()?;
-                    let mut t_delim_close = s.current().clone();
-                    t_delim_close.code = T!["rs:]"];
-                    s.expect(T!["]"])?;
+                    let t_delim_close = s.current().clone();
+                    s.expect(T!["`]"])?;
                     r.payload =
                         ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Array(ExprArray {
                             payload: ExprArrayPayload::One(ExprArrayOne {
@@ -3758,14 +3754,13 @@ impl Parse {
                     None
                 };
 
-                // @[ Expr([,;] Expr)* ]
+                // [` Expr([,;] Expr)* `]
                 let mut items: Vec<(Expr, Option<Token>)> = vec![(first_expr, t_comma)];
                 while s.has_more() {
                     let token = s.current();
 
-                    if matches!(&token.code, T!["]"]) {
-                        let mut t_delim_close = token.clone();
-                        t_delim_close.code = T!["rs:]"];
+                    if matches!(&token.code, T!["`]"]) {
+                        let t_delim_close = token.clone();
                         s.plusplus();
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Array(ExprArray {
@@ -4140,7 +4135,7 @@ impl Parse {
 
     fn at_range_end(&self, code: &TokenCode) -> bool {
         matches!(code,
-            T![")"] | T!["]"] | T!["{"] | T![;] | T![,] |
+            T![")"] | T!["`]"] | T!["{"] | T![;] | T![,] |
             T![==] | T![!=] | T![>] | T![>=] | T![<=] |
             T![=] | T![+=] | T![~=] | T![*=] | T![/=] | T![%=] |
             T![&=] | T![|=] | T![^=] | T![<<=] | T![>>=]
@@ -4368,7 +4363,7 @@ impl Parse {
                 return Ok(payload);
             }
             // array or slice
-            T!["@["] => {
+            T!["[`"] => {
                 let t_delim_open = token.clone();
                 let type_ = s.parse_type()?;
                 let token = s.current();
@@ -4377,9 +4372,8 @@ impl Parse {
                         let t_semicolon = token.clone();
                         s.plusplus();
                         let expr = s.parse_expr()?;
-                        let mut t_delim_close = s.current().clone();
-                        t_delim_close.code = T!["rs:]"];
-                        s.expect(T!["]"])?;
+                        let t_delim_close = s.current().clone();
+                        s.expect(T!["`]"])?;
                         let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Array(
                             TypeArray {
                                 type_,
@@ -4391,9 +4385,8 @@ impl Parse {
                         )));
                         return Ok(payload);
                     }
-                    T!["]"] => {
-                        let mut t_delim_close = s.current().clone();
-                        t_delim_close.code = T!["rs:]"];
+                    T!["`]"] => {
+                        let t_delim_close = s.current().clone();
                         s.plusplus();
                         let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::Slice(
                             TypeSlice {
@@ -4717,7 +4710,7 @@ impl Parse {
                     TokenCode::Identifier(_)
                         | TokenCode::Keyword(_)
                         | T!["("]
-                        | T!["@["]
+                        | T!["[`"]
                         | T![*]
                         | T![!]
                         | T![&&]
@@ -5154,9 +5147,9 @@ impl Parse {
                     delim_open = Pair::BraceOpen;
                     delim_close = Pair::BraceClose;
                 }
-                T!["@["] => {
+                T!["[`"] => {
                     delim_open = Pair::ArrayOpen;
-                    delim_close = Pair::SquareClose;
+                    delim_close = Pair::ArrayClose;
                 }
                 T!["#["] => {
                     delim_open = Pair::OuterAttr;
@@ -5416,9 +5409,9 @@ impl Parse {
                 }
             }
             // slice
-            T!["@["] => {
+            T!["[`"] => {
                 let next_token = s.current();
-                if matches!(&next_token.code, T!["]"]) {
+                if matches!(&next_token.code, T!["`]"]) {
                     return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Slice(
                         PatternSlice {
                             items: Vec::new(),
@@ -5440,7 +5433,7 @@ impl Parse {
                     s.plusplus();
                 }
                 let next_token = s.current();
-                s.expect(T!["]"])?;
+                s.expect(T!["`]"])?;
                 return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Slice(
                     PatternSlice {
                         items,

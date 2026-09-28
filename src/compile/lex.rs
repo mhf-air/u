@@ -163,6 +163,7 @@ impl Lex {
                 Pair::ParenClose
                 | Pair::SquareClose
                 | Pair::BraceClose
+                | Pair::ArrayClose
                 | Pair::DoubleBraceClose => true,
                 _ => false,
             },
@@ -1033,7 +1034,8 @@ impl Lex {
                                 match s.chars[i + 2] {
                                     '=' => {
                                         // ,,=
-                                        s.add_token(TokenCode::Op(Op::CommaCommaEq), ",,=".to_owned());
+                                        s.add_token(TokenCode::Op(Op::CommaCommaEq),
+                                            ",,=".to_owned());
                                         i += 2;
                                     }
                                     _ => {
@@ -1184,21 +1186,38 @@ impl Lex {
                     }
                 },
 
-                '@' => {
+                '[' => {
                     if i + 1 == total_len {
-                        s.add_token(TokenCode::Op(Op::At), "@".to_owned());
+                        s.add_token(TokenCode::Pair(Pair::SquareOpen), "[".to_owned());
                         return Ok(());
                     }
                     let next_ch = s.chars[i + 1];
                     match next_ch {
-                        // @[
-                        '[' => {
-                            s.add_token(TokenCode::Pair(Pair::ArrayOpen), "@[".to_owned());
+                        // [`
+                        '`' => {
+                            s.add_token(TokenCode::Pair(Pair::ArrayOpen), "[`".to_owned());
                             i += 1;
                         }
-                        // @
+                        // [
                         _ => {
-                            s.add_token(TokenCode::Op(Op::At), "@".to_owned());
+                            s.add_token(TokenCode::Pair(Pair::SquareOpen), "[".to_owned());
+                        }
+                    }
+                },
+
+                '`' => {
+                    if i + 1 == total_len {
+                        return s.panic("expected ']' after '`'");
+                    }
+                    let next_ch = s.chars[i + 1];
+                    match next_ch {
+                        // `]
+                        ']' => {
+                            s.add_token(TokenCode::Pair(Pair::ArrayClose), "`]".to_owned());
+                            i += 1;
+                        }
+                        _ => {
+                            return s.panic("expected ']' after '`'");
                         }
                     }
                 },
@@ -1338,10 +1357,10 @@ impl Lex {
 
                 '(' => s.add_token(TokenCode::Pair(Pair::ParenOpen), "(".to_owned()),
                 ')' => s.add_token(TokenCode::Pair(Pair::ParenClose), ")".to_owned()),
-                '[' => s.add_token(TokenCode::Pair(Pair::SquareOpen), "[".to_owned()),
                 ']' => s.add_token(TokenCode::Pair(Pair::SquareClose), "]".to_owned()),
                 ';' => s.add_token(TokenCode::Op(Op::Semicolon), ";".to_owned()),
                 '?' => s.add_token(TokenCode::Op(Op::Question), "?".to_owned()),
+                '@' => s.add_token(TokenCode::Op(Op::At), "@".to_owned()),
                 '$' => s.add_token(TokenCode::Op(Op::Dollar), "$".to_owned()),
                 '_' => s.add_token(TokenCode::Op(Op::Underscore), "_".to_owned()),
 
@@ -1591,6 +1610,7 @@ impl Token {
                     Pair::DoubleBraceOpen => "[",
                     Pair::DoubleBraceClose => "]",
                     Pair::ArrayOpen => "[",
+                    Pair::ArrayClose => "]",
                     Pair::OuterAttr => "#[",
                     Pair::InnerAttr => "#![",
                     Pair::EndAttr => "]",
@@ -2254,6 +2274,7 @@ pub enum Pair {
     DoubleBraceOpen,
     DoubleBraceClose,
     ArrayOpen,
+    ArrayClose,
     OuterAttr,
     InnerAttr,
     EndAttr,
@@ -2272,7 +2293,8 @@ impl fmt::Debug for Pair {
             Self::BraceClose => write!(f, "}}"),
             Self::DoubleBraceOpen => write!(f, "{{{{"),
             Self::DoubleBraceClose => write!(f, "}}}}"),
-            Self::ArrayOpen => write!(f, "@["),
+            Self::ArrayOpen => write!(f, "[`"),
+            Self::ArrayClose => write!(f, "`]"),
             Self::OuterAttr => write!(f, "#["),
             Self::InnerAttr => write!(f, "#!["),
             Self::EndAttr => write!(f, "]"),
@@ -2417,7 +2439,8 @@ macro_rules! T {
 	[ "}" ] => { TokenCode::Pair(Pair::BraceClose) };
 	[ "{{" ] => { TokenCode::Pair(Pair::DoubleBraceOpen) };
 	[ "}}" ] => { TokenCode::Pair(Pair::DoubleBraceClose) };
-	[ "@[" ] => { TokenCode::Pair(Pair::ArrayOpen) };
+	[ "[`" ] => { TokenCode::Pair(Pair::ArrayOpen) };
+	[ "`]" ] => { TokenCode::Pair(Pair::ArrayClose) };
 	[ "#[" ] => { TokenCode::Pair(Pair::OuterAttr) };
 	[ "#![" ] => { TokenCode::Pair(Pair::InnerAttr) };
 
