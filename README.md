@@ -147,7 +147,7 @@ example
     - when to manually add semicolon
         - a :=;
         - a {{i32; 3}} := {{1; 3}}
-        - vec,,(1; 3)
+        - vec_(1; 3)
 
     note: semicolons are also inserted after line-ending . or ..
 
@@ -249,11 +249,11 @@ example
     get-point() -> (a, b) let (i32, i32)
 
     if &token.code -> Token-code..Identifier(identifier) {
-        println,,("{:?}", identifier)
+        println_("{:?}", identifier)
     }
 
     for &token.code -> Token-code..Identifier(identifier) {
-        println,,("{:?}", identifier)
+        println_("{:?}", identifier)
     }
 
     // if Expr is too long, you can use
@@ -328,7 +328,7 @@ example
     }
 
     for item in list {
-        println,,("{}", item.name)
+        println_("{}", item.name)
     }
 
     // for struct patterns, use for:
@@ -358,7 +358,7 @@ example
         a
         b
     }}
-    vec,,(
+    vec_(
         a
         b
     )
@@ -387,14 +387,12 @@ example
         ) {}
 ```
 
-- **use ,, for macro invocations**
+- **use _ for macro invocations**
 
     because it's easier to type
     (at least in my keyboard layout, where ! is located in "-" in QUERTY keyboard)
 
     and easier to read(I find ! very disturbing if not used for exclamation)
-
-    possible future conflict: when ,, is used in Rust
 
     write pure Rust in macro definitions and macro invocations that are random tokens.
     except identifiers and "~" and "~=".
@@ -402,26 +400,26 @@ example
 ```
 example
 
-    custom,,()
+    custom_()
         anything in () are treated as expressions. like
-            vec,,(1, 2, 3)
+            vec_(1, 2, 3)
 
-    custom,,[stmt]{}
+    custom_[stmt]{}
         anything in {} are treated as declarations or statements. like
-            thread-local,,[stmt]{
+            thread-local_[stmt]{
                 foo--g+ static Ref-cell[u32] = Ref-cell..new()
             }
 
-    custom,,{}
+    custom_{}
         anything in {} are U tokens. like
-            clap..arg,,{ {{name}} "Optional name" }
-            clap..arg,,{ ~ c ~ ~ config [file--c] "Sets a file" }
+            clap..arg_{ {{name}} "Optional name" }
+            clap..arg_{ ~ c ~ ~ config [file--c] "Sets a file" }
         they become
             clap::arg!{ [name] "Optional name" }
             clap::arg!{ - c - - config < FILE > "Sets a file" }
 
         dev note(for myself)
-            custom,,{} always translates to custom!{}, so there's no need to add a trailling semicolon
+            custom_{} always translates to custom!{}, so there's no need to add a trailling semicolon
             even if it stands alone as a stmt. (as the Rust spec states,
                 MacroInvocationSemi:
                     SimplePath ! ( TokenTree* ) ;
@@ -448,7 +446,7 @@ example
     }
     print-tag func(p &Person) {
         if p.tag -> ?tag {
-            println,,("{}", tag)
+            println_("{}", tag)
         }
     }
 ```
@@ -473,7 +471,7 @@ example
     $a.b -> eprintln!("{:?}", a.b)
 
     // if need tag
-    print,,("tag: ")
+    print_("tag: ")
     $a
 ```
 

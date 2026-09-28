@@ -1380,9 +1380,9 @@ impl ToLang for MacroCall {
 }
 #[derive(Debug)]
 pub enum MacroCallBody {
-    Token(Vec<Token>), // ,,{} ,,[p]{} ,,[s]{}
-    Expr(Vec<Expr>),   // ,,()
-    Stmt(Vec<Stmt>),   // ,,[stmt]{}
+    Token(Vec<Token>), // _{} _[p]{} _[s]{}
+    Expr(Vec<Expr>),   // _() _[b]() _[s]()
+    Stmt(Vec<Stmt>),   // _[stmt]{}
 }
 impl Default for MacroCallBody {
     fn default() -> Self {
@@ -2681,7 +2681,7 @@ pub enum TypeNoBounds {
     QualifiedPathInType(QualifiedPathInType),       // [ Type.(TypePath)? ]..(TypePathSegment)+
     Never(Token),                                   // !
     BareFunction(Box<TypeBareFunction>),            // ForLifetimes? Qualifers func(Param?) ReturnType
-    MacroCall(MacroCall),                           // SimplePath,, DelimTokenTree
+    MacroCall(MacroCall),                           // SimplePath_ DelimTokenTree
 }
 impl Default for TypeNoBounds {
     fn default() -> Self {

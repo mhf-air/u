@@ -1342,6 +1342,7 @@ impl Lex {
                 '?' => s.add_token(TokenCode::Op(Op::Question), "?".to_owned()),
                 '@' => s.add_token(TokenCode::Op(Op::At), "@".to_owned()),
                 '$' => s.add_token(TokenCode::Op(Op::Dollar), "$".to_owned()),
+                '_' => s.add_token(TokenCode::Op(Op::Underscore), "_".to_owned()),
 
                 _ => return s.panic(&format!("illegal char: {}", ch)),
             }
@@ -1565,6 +1566,7 @@ impl Token {
                     Op::At => "@",
                     Op::Comma => ",",
                     Op::CommaComma => "!",
+                    Op::Underscore => "!",
                     Op::Colon => ":",
                     Op::Semicolon => ";",
 
@@ -2178,6 +2180,7 @@ pub enum Op {
     At,
     Comma,
     CommaComma,
+    Underscore,
     Colon,
     Semicolon,
 
@@ -2227,6 +2230,7 @@ impl fmt::Debug for Op {
             Self::At => write!(f, "@"),
             Self::Comma => write!(f, ","),
             Self::CommaComma => write!(f, ",,"),
+            Self::Underscore => write!(f, "_"),
             Self::Colon => write!(f, ":"),
             Self::Semicolon => write!(f, ";"),
 
@@ -2380,6 +2384,7 @@ macro_rules! T {
 	[ @ ] => { TokenCode::Op(Op::At) };
 	[ , ] => { TokenCode::Op(Op::Comma) };
 	[ ,, ] => { TokenCode::Op(Op::CommaComma) };
+	[ _ ] => { TokenCode::Op(Op::Underscore) };
 	[ : ] => { TokenCode::Op(Op::Colon) };
 	[ ; ] => { TokenCode::Op(Op::Semicolon) };
 

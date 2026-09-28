@@ -703,7 +703,7 @@ impl Parse {
                     break;
                 }
 
-                T![,,]
+                T![_]
                 | T![=]
                 | T![+=]
                 | T![~=]
@@ -2493,7 +2493,7 @@ impl Parse {
         Ok(r)
     }
 
-    // after ,,
+    // after _
     fn parse_macro_call(&self, path: SimplePath, token: &Token) -> ParseResult<MacroCall> {
         let s = self;
 
@@ -3791,12 +3791,12 @@ impl Parse {
                 )));
             }
 
-            // path in expression or macro call(simple path followed by ,,)
+            // path in expression or macro call(simple path followed by _)
             T![super] | T![self] | T![Self] | T![crate] | TokenCode::Identifier(_) => {
                 s.minusminus();
                 let items = s.parse_path_expr_segments()?;
                 let token = s.current();
-                if !matches!(&token.code, T![,,]) {
+                if !matches!(&token.code, T![_]) {
                     let path = PathInExpr { items };
                     match &token.code {
                         // struct expr
@@ -4575,12 +4575,12 @@ impl Parse {
                 return Ok(payload);
             }
 
-            // type path or macro call(simple path followed by ,,)
+            // type path or macro call(simple path followed by _)
             T![super] | T![self] | T![crate] | TokenCode::Identifier(_) => {
                 s.minusminus();
                 let tp = s.parse_type_path()?;
                 let token = s.current();
-                if !matches!(token.code, T![,,]) {
+                if !matches!(token.code, T![_]) {
                     let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::TypePath(tp)));
                     return Ok(payload);
                 }
@@ -5472,7 +5472,7 @@ impl Parse {
                 )));
             }
 
-            // path in expression or macro call(simple path followed by ,,)
+            // path in expression or macro call(simple path followed by _)
             T![super] | T![self] | T![Self] | T![crate] | TokenCode::Identifier(_) => {
                 let next_token = s.current();
                 if matches!(&next_token.code, T![@]) {
@@ -5498,7 +5498,7 @@ impl Parse {
                 let token = s.current();
                 match &token.code {
                     // macro call
-                    T![,,] => {
+                    T![_] => {
                         let mut path = SimplePath::default();
                         for item in items {
                             if !item.generic_args.items.is_empty() {

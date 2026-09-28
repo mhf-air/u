@@ -23,9 +23,9 @@
 // - write .*.u: u u-compile .*.u
 //
 // - in rust-to-u, when parsing macro_call!,
-//      - try parsing it into Vec[Expr], if ok, then it's macro-call,,() or [s]() or [b]()
-//      - try parsing it into Vec[Stmt], if ok, then it's macro-call,,{} or [s]{} or [p]{}
-//      - otherwise, it's macro-call,,[p]{} or macro-call,,[s]{}
+//      - try parsing it into Vec[Expr], if ok, then it's macro-call_() or [s]() or [b]()
+//      - try parsing it into Vec[Stmt], if ok, then it's macro-call_{} or [s]{} or [p]{}
+//      - otherwise, it's macro-call_[p]{} or macro-call_[s]{}
 //
 // - goto-definition jump to the correct position in u
 
@@ -126,17 +126,17 @@ f func() {
     $a
     $a.b
 
-    print,,("tag: ")
+    print_("tag: ")
     $tag
 }
 
-call,,(1, 2, 3)
-call,,[s](1, 2, 3)
-call,,[b](1, 2, 3)
-call,,[p]{ select a from b }
-call,,[s]{ select a from b }
-call,,{ select a from b }
-call,,{
+call_(1, 2, 3)
+call_[s](1, 2, 3)
+call_[b](1, 2, 3)
+call_[p]{ select a from b }
+call_[s]{ select a from b }
+call_{ select a from b }
+call_{
     let a = 1.1;
     if a > 0 {
         return;
@@ -163,7 +163,7 @@ call,,{
 
     fn abc(count: i32, ...);
 }
-call,,[stmt]{
+call_[stmt]{
     name--c+ const &str = "hello"
     ~1
 
@@ -299,13 +299,13 @@ Point type = [S]..f
 Point type = [S as Copy]..f
 
 foo['a, 'b, T] func[async, unsafe](a i32, b i32) i32 where {
-    T   Iterator
-    T..Item   Copy
-    String   Partial-eq[T]
-    T   Iterator[Item Copy]
-    fn(T)   Iterator
-    f   Box[dyn Fn-mut(&mut T) + 'a]
-    'a   'b
+    T Iterator
+    T..Item Copy
+    String Partial-eq[T]
+    T Iterator[Item Copy]
+    fn(T) Iterator
+    f Box[dyn Fn-mut(&mut T) + 'a]
+    'a 'b
 } {}
 
 f func(
@@ -316,7 +316,7 @@ f func(
         a
         b
     )
-    vec,,(
+    vec_(
         a
         b
     )
@@ -429,7 +429,7 @@ Seq[T] trait[unsafe] Display + Debug where { T Copy } {
     elt-at (&) func(n u32) T
     iter[F] (&mut) func(f F) where { F Iterator }
 
-    call,,()
+    call_()
 }
 
 Foo trait {
@@ -503,11 +503,11 @@ extern[unsafe] "C" {
     abs func[safe](input i32, ...) i32
     name--c static mut i32
     name--c static[safe] mut i32
-    call,,(1)
-    call,,{1}
-    call,,[p]{1}
-    call,,[s]{1}
-    call,,[stmt]{}
+    call_(1)
+    call_{1}
+    call_[p]{1}
+    call_[s]{1}
+    call_[stmt]{}
 }
 
 #[no-mangle]
@@ -595,7 +595,7 @@ f func() {
 
     (0, 1) -> (mut a, mut b)
     (b, a) = (a, b)
-    Struct { x: a, y: b } = Struct { x: 3, y: 4 }
+    Point { x: a, y: b } = Point { x: 3, y: 4 }
 }
 
 f func() {
@@ -710,12 +710,12 @@ f func() {
 
 f func() {
     match message {
-        Message..Quit: dbg,,("Quit")
-        Message..Write-string(write): dbg,,(&write)
-        Message..Move{ x, y: 0 }: dbg,,("move {} horizontally", x)
-        Message..Move{ ... }: dbg,,("other move")
+        Message..Quit: dbg_("Quit")
+        Message..Write-string(write): dbg_(&write)
+        Message..Move{ x, y: 0 }: dbg_("move {} horizontally", x)
+        Message..Move{ ... }: dbg_("other move")
         Message..Change-color{ 0: red, 1: green, 2: - }:
-            dbg,,("color change, red: {}, green: {}", red, green)
+            dbg_("color change, red: {}, green: {}", red, green)
         -: {}
     }
 }
