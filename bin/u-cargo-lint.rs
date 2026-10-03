@@ -4,6 +4,10 @@ use std::env;
 use std::io;
 use std::process;
 
+use u::cmd::a::U_LOCAL_ROOT;
+use u::compile::ast::SpanPair;
+use u::compile::parse::compile_file;
+
 /**
 usage: u-cargo-lint [options]
 
@@ -48,7 +52,7 @@ fn u_cargo_lint(args: Vec<String>) -> io::Result<()> {
         .unwrap()
         .parent()
         .unwrap()
-        .join(u::U_LOCAL_ROOT)
+        .join(U_LOCAL_ROOT)
         .join(b)
         .join(a);
     env::set_current_dir(&new_pwd)?;
@@ -57,7 +61,7 @@ fn u_cargo_lint(args: Vec<String>) -> io::Result<()> {
     let out = String::from_utf8(output.stdout).unwrap();
 
     let pwd_str = pwd.to_str().unwrap();
-    let mut file_map = HashMap::<String, Vec<u::SpanPair>>::new();
+    let mut file_map = HashMap::<String, Vec<SpanPair>>::new();
     for line in out.lines() {
         if !line.contains(r#""reason":"compiler-message""#) {
             continue;
@@ -143,8 +147,8 @@ fn u_cargo_lint(args: Vec<String>) -> io::Result<()> {
     }
 }
 
-fn compile_to_rust_lint(filepath: &str) -> io::Result<Vec<u::SpanPair>> {
-    let p = u::compile_file(filepath)?;
+fn compile_to_rust_lint(filepath: &str) -> io::Result<Vec<SpanPair>> {
+    let p = compile_file(filepath)?;
     match p.to_rust() {
         Err(_) => Err(io::Error::new(io::ErrorKind::Other, "parse error")),
         Ok(f) => Ok(f.span_pairs),
@@ -159,7 +163,7 @@ struct NewSpan {
     line_start: usize,
 }
 impl NewSpan {
-    fn new(span: &ManifestMessageSpan, pairs: &[u::SpanPair]) -> NewSpan {
+    fn new(span: &ManifestMessageSpan, pairs: &[SpanPair]) -> NewSpan {
         let mut r = NewSpan::default();
 
         let ManifestMessageSpan {

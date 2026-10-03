@@ -1,4 +1,3 @@
-use super::*;
 use crate::compile as cc;
 use std::collections::HashSet;
 use std::env;
@@ -890,12 +889,12 @@ fn check_status(status: process::ExitStatus) -> io::Result<()> {
 fn compile_to_rust(filepath: &str) -> Result<String, String> {
     let data = fs::read_to_string(&filepath).unwrap();
 
-    let mut l = cc::Lex::new();
+    let mut l = cc::lex::Lex::new();
     if let Err(err) = l.lex(data) {
         return Err(serde_json::to_string(&vec![err]).unwrap());
     }
 
-    let mut p = cc::Parse::new(l);
+    let mut p = cc::parse::Parse::new(l);
     if let Err(err) = p.parse() {
         return Err(serde_json::to_string(&err).unwrap());
     }

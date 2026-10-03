@@ -1,5 +1,5 @@
-use super::ast::*;
-use super::parse::*;
+use crate::compile::ast::{ LangFormatter, ToLang };
+use crate::compile::parse::{ ParseResult, ParseError };
 use std::fmt;
 use std::str::FromStr;
 
@@ -287,7 +287,7 @@ impl Lex {
         s.may_add_semicolon();
         r
     }
-    pub fn lex_inner(&mut self, data: String) -> Result<(), ParseError> {
+    fn lex_inner(&mut self, data: String) -> Result<(), ParseError> {
         let s = self;
 
         if data.is_empty() {

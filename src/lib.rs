@@ -1,5 +1,2 @@
-mod cmd;
-mod compile;
-
-pub use self::cmd::*;
-pub use self::compile::*;
+pub mod cmd;
+pub mod compile;

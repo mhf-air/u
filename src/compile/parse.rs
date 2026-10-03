@@ -1,4 +1,7 @@
-use super::*;
+use crate::compile::ast::*;
+use crate::compile::lex::{
+    Token, TokenCode, Span, Keyword, Pair, Op, Assign, Lex, Identifier, Literal, LiteralPayload,
+};
 use crate::T;
 use serde::Serialize;
 use std::cell::Cell;

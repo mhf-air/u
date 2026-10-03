@@ -1,6 +1,10 @@
 use std::env;
 use std::io;
 
+use u::compile::ast as ua;
+use u::compile::lex::{Lex, Token};
+use u::compile::parse::Parse;
+
 /**
 usage: utags [options] file
 
@@ -88,19 +92,19 @@ impl<'a> TagField<'a> {
         p
     }
 
-    fn set_access(&mut self, vis: &u::VisibilityPayload) {
+    fn set_access(&mut self, vis: &ua::VisibilityPayload) {
         let s = self;
         match vis {
-            u::VisibilityPayload::Pub => {
+            ua::VisibilityPayload::Pub => {
                 s.access = Some("public");
             }
-            u::VisibilityPayload::Crate => {
+            ua::VisibilityPayload::Crate => {
                 s.access = Some("protected");
             }
-            u::VisibilityPayload::Private(_) => {
+            ua::VisibilityPayload::Private(_) => {
                 s.access = Some("");
             }
-            u::VisibilityPayload::Super | u::VisibilityPayload::SimplePath(_) => {
+            ua::VisibilityPayload::Super | ua::VisibilityPayload::SimplePath(_) => {
                 s.access = Some("private");
             }
         }
@@ -121,12 +125,12 @@ fn utags(args: Vec<String>) -> std::io::Result<()> {
     let filepath = filepath.unwrap();
 
     let data = std::fs::read_to_string(&filepath)?;
-    let mut l = u::Lex::new();
+    let mut l = Lex::new();
     if l.lex(data).is_err() {
         return Err(io::Error::new(io::ErrorKind::Other, "lex error"));
     }
 
-    let mut pa = u::Parse::new(l);
+    let mut pa = Parse::new(l);
     if pa.parse().is_err() {
         return Err(io::Error::new(io::ErrorKind::Other, "parse error"));
     }
@@ -150,7 +154,7 @@ fn utags(args: Vec<String>) -> std::io::Result<()> {
     Ok(())
 }
 
-fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str, mod_: &Vec<&str>) {
+fn parse_items(p: &mut String, pa: &Parse, items: &[ua::Item], filepath: &str, mod_: &Vec<&str>) {
     let t;
     let ctype = if !mod_.is_empty() {
         t = mod_.join("..");
@@ -168,7 +172,7 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
         field.ctype = ctype;
 
         match &item.payload {
-            u::ItemPayload::Mod(a) => {
+            ua::ItemPayload::Mod(a) => {
                 field.type_ = Some("mod");
                 ng = name_generics(&NameGenerics {
                     name: &a.name,
@@ -188,7 +192,7 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
                 new_mod.push(&a.name.u);
                 parse_items(p, pa, &a.items, filepath, &new_mod);
             }
-            u::ItemPayload::Extern(a) => {
+            ua::ItemPayload::Extern(a) => {
                 field.type_ = Some("extern");
                 ng = name_generics(&NameGenerics {
                     name: &a.t_extern,
@@ -201,10 +205,10 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
                 new_mod.push("extern");
                 extern_items(p, &a, filepath, &new_mod, pa);
             }
-            u::ItemPayload::Crate(_) | u::ItemPayload::Use(_) | u::ItemPayload::MacroCall(_) => {
+            ua::ItemPayload::Crate(_) | ua::ItemPayload::Use(_) | ua::ItemPayload::MacroCall(_) => {
                 continue;
             }
-            u::ItemPayload::Func(a) => {
+            ua::ItemPayload::Func(a) => {
                 let generics = generics_text(&a.generics);
                 if let Some(g) = generics {
                     sig.push_str(&g);
@@ -219,7 +223,7 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
                     type_char: 'f',
                 });
             }
-            u::ItemPayload::TypeAlias(a) => {
+            ua::ItemPayload::TypeAlias(a) => {
                 if let Some(t) = &a.rhs {
                     type_ = to_u(&t.1, pa);
                     field.type_ = Some(&type_);
@@ -231,7 +235,7 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
                     type_char: 'a',
                 });
             }
-            u::ItemPayload::Struct(a) => {
+            ua::ItemPayload::Struct(a) => {
                 field.type_ = Some("struct");
                 ng = name_generics(&NameGenerics {
                     name: &a.name,
@@ -242,7 +246,7 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
 
                 fields = Some(struct_fields(&a, &filepath, &mod_, pa));
             }
-            u::ItemPayload::Enum(a) => {
+            ua::ItemPayload::Enum(a) => {
                 field.type_ = Some("enum");
                 ng = name_generics(&NameGenerics {
                     name: &a.name,
@@ -253,7 +257,7 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
 
                 fields = Some(enum_fields(&a, &filepath, &mod_, pa));
             }
-            u::ItemPayload::Union(a) => {
+            ua::ItemPayload::Union(a) => {
                 field.type_ = Some("union");
                 ng = name_generics(&NameGenerics {
                     name: &a.name,
@@ -264,7 +268,7 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
 
                 fields = Some(union_fields(&a, &filepath, &mod_, pa));
             }
-            u::ItemPayload::Const(a) => {
+            ua::ItemPayload::Const(a) => {
                 type_ = to_u(&a.type_, pa);
                 field.type_ = Some(&type_);
                 ng = name_generics(&NameGenerics {
@@ -274,7 +278,7 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
                     type_char: 'c',
                 });
             }
-            u::ItemPayload::Static(a) => {
+            ua::ItemPayload::Static(a) => {
                 type_ = to_u(&a.type_, pa);
                 field.type_ = Some(&type_);
                 ng = name_generics(&NameGenerics {
@@ -284,7 +288,7 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
                     type_char: 'v',
                 });
             }
-            u::ItemPayload::Trait(a) => {
+            ua::ItemPayload::Trait(a) => {
                 field.type_ = Some("trait");
                 ng = name_generics(&NameGenerics {
                     name: &a.name,
@@ -295,11 +299,11 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
 
                 fields = Some(interface_fields(&a, &filepath, &mod_, pa));
             }
-            u::ItemPayload::Impl(a) => {
+            ua::ItemPayload::Impl(a) => {
                 impl_items(p, &a, filepath, &mod_, pa);
                 continue;
             }
-            u::ItemPayload::Macro(a) => {
+            ua::ItemPayload::Macro(a) => {
                 ng = name_generics(&NameGenerics {
                     name: &a.name,
                     generics: &None,
@@ -326,15 +330,15 @@ fn parse_items(p: &mut String, pa: &u::Parse, items: &[u::Item], filepath: &str,
     }
 }
 
-fn to_u(t: &u::Type, pa: &u::Parse) -> String {
+fn to_u(t: &ua::Type, pa: &Parse) -> String {
     let f = &mut pa.get_lang_formatter();
     f.push_u_pair_space(&t.u_pair);
     f.buf_ref().clone()
 }
 
 struct NameGenerics<'a, 'b> {
-    name: &'b u::Token,
-    generics: &'a Option<u::Generics>,
+    name: &'b Token,
+    generics: &'a Option<ua::Generics>,
     filepath: &'a str,
     type_char: char,
 }
@@ -357,7 +361,7 @@ fn name_generics(a: &NameGenerics) -> NameGenericsReturn {
     }
 }
 
-fn generics_text(a: &Option<u::Generics>) -> Option<String> {
+fn generics_text(a: &Option<ua::Generics>) -> Option<String> {
     let mut generics = None;
     if let Some(g) = &a {
         let mut p = String::from("[");
@@ -366,13 +370,13 @@ fn generics_text(a: &Option<u::Generics>) -> Option<String> {
                 p.push_str(", ");
             }
             match &item.payload {
-                u::GenericParamPayload::Lifetime(a) => {
+                ua::GenericParamPayload::Lifetime(a) => {
                     p.push_str(&a.lifetime.u);
                 }
-                u::GenericParamPayload::Type(a) => {
+                ua::GenericParamPayload::Type(a) => {
                     p.push_str(&a.name.u);
                 }
-                u::GenericParamPayload::Const(a) => {
+                ua::GenericParamPayload::Const(a) => {
                     p.push_str(&a.name.u);
                 }
             }
@@ -382,19 +386,19 @@ fn generics_text(a: &Option<u::Generics>) -> Option<String> {
     }
     generics
 }
-fn func_sig_text(a: &u::Func, pa: &u::Parse) -> String {
+fn func_sig_text(a: &ua::Func, pa: &Parse) -> String {
     let mut p = String::new();
 
     if let Some(b) = &a.self_param {
         p.push_str(" (");
         match &b.payload {
-            u::SelfParamPayload::Type(t) => {
+            ua::SelfParamPayload::Type(t) => {
                 if t.t_mut.is_some() {
                     p.push_str("mut ");
                 }
                 p.push_str(&to_u(&t.typ, pa));
             }
-            u::SelfParamPayload::Short(a) => {
+            ua::SelfParamPayload::Short(a) => {
                 if a.t_ref.is_some() {
                     p.push_str("&");
                 } else {
@@ -443,14 +447,14 @@ fn func_sig_text(a: &u::Func, pa: &u::Parse) -> String {
     p
 }
 
-fn struct_fields(a: &u::Struct, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse) -> String {
+fn struct_fields(a: &ua::Struct, filepath: &str, mod_: &Vec<&str>, pa: &Parse) -> String {
     if a.payload.is_none() {
         return String::new();
     }
 
     let mut p = String::new();
     match a.payload.as_ref().unwrap() {
-        u::StructPayload::Struct(f) => {
+        ua::StructPayload::Struct(f) => {
             for item in f {
                 p.push_str(&format!(
                     "{}\t{}\t{};\"\tw",
@@ -470,7 +474,7 @@ fn struct_fields(a: &u::Struct, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse)
                 p.push('\n');
             }
         }
-        u::StructPayload::Tuple(f) => {
+        ua::StructPayload::Tuple(f) => {
             for (i, item) in f.iter().enumerate() {
                 p.push_str(&format!("{}\t{}\t{};\"\tw", i, filepath, a.name.span.line));
 
@@ -492,7 +496,7 @@ fn struct_fields(a: &u::Struct, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse)
     p
 }
 
-fn enum_fields(a: &u::Enum, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse) -> String {
+fn enum_fields(a: &ua::Enum, filepath: &str, mod_: &Vec<&str>, pa: &Parse) -> String {
     let mut p = String::new();
     for item in &a.items {
         p.push_str(&format!(
@@ -508,7 +512,7 @@ fn enum_fields(a: &u::Enum, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse) -> 
 
         let mut a = String::new();
         match &item.payload {
-            u::EnumItemPayload::Struct(f) => {
+            ua::EnumItemPayload::Struct(f) => {
                 a.push('(');
                 for (i, item) in f.iter().enumerate() {
                     if i != 0 {
@@ -519,7 +523,7 @@ fn enum_fields(a: &u::Enum, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse) -> 
                 }
                 a.push(')');
             }
-            u::EnumItemPayload::Tuple(f) => {
+            ua::EnumItemPayload::Tuple(f) => {
                 a.push('(');
                 for (i, item) in f.iter().enumerate() {
                     if i != 0 {
@@ -542,7 +546,7 @@ fn enum_fields(a: &u::Enum, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse) -> 
     p
 }
 
-fn union_fields(a: &u::Union, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse) -> String {
+fn union_fields(a: &ua::Union, filepath: &str, mod_: &Vec<&str>, pa: &Parse) -> String {
     let mut p = String::new();
     for item in &a.fields {
         p.push_str(&format!(
@@ -566,7 +570,7 @@ fn union_fields(a: &u::Union, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse) -
     p
 }
 
-fn interface_fields(a: &u::Trait, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse) -> String {
+fn interface_fields(a: &ua::Trait, filepath: &str, mod_: &Vec<&str>, pa: &Parse) -> String {
     let mut p = String::new();
     for item in &a.items {
         let mut field = TagField::default();
@@ -578,7 +582,7 @@ fn interface_fields(a: &u::Trait, filepath: &str, mod_: &Vec<&str>, pa: &u::Pars
         let type_;
 
         match &item.payload {
-            u::AssociatedItemPayload::Func(f) => {
+            ua::AssociatedItemPayload::Func(f) => {
                 let tag = if f.self_param.is_some() { 'm' } else { 'f' };
                 p.push_str(&format!(
                     "{}\t{}\t{};\"\t{}",
@@ -588,7 +592,7 @@ fn interface_fields(a: &u::Trait, filepath: &str, mod_: &Vec<&str>, pa: &u::Pars
                 sig = func_sig_text(f, pa);
                 field.signature = Some(&sig);
             }
-            u::AssociatedItemPayload::Const(f) => {
+            ua::AssociatedItemPayload::Const(f) => {
                 p.push_str(&format!(
                     "{}\t{}\t{};\"\tc",
                     f.name.u, filepath, f.name.span.line
@@ -597,7 +601,7 @@ fn interface_fields(a: &u::Trait, filepath: &str, mod_: &Vec<&str>, pa: &u::Pars
                 type_ = to_u(&f.type_, pa);
                 field.type_ = Some(&type_);
             }
-            u::AssociatedItemPayload::TypeAlias(f) => {
+            ua::AssociatedItemPayload::TypeAlias(f) => {
                 p.push_str(&format!(
                     "{}\t{}\t{};\"\ta",
                     f.name.u, filepath, f.name.span.line
@@ -608,7 +612,7 @@ fn interface_fields(a: &u::Trait, filepath: &str, mod_: &Vec<&str>, pa: &u::Pars
                     field.type_ = Some(&type_);
                 }
             }
-            u::AssociatedItemPayload::MacroCall(_) => {}
+            ua::AssociatedItemPayload::MacroCall(_) => {}
         }
 
         field.set_access(&item.vis.payload);
@@ -621,10 +625,10 @@ fn interface_fields(a: &u::Trait, filepath: &str, mod_: &Vec<&str>, pa: &u::Pars
 
 fn extern_items(
     p: &mut String,
-    a: &u::ExternalBlock,
+    a: &ua::ExternalBlock,
     filepath: &str,
     mod_: &Vec<&str>,
-    pa: &u::Parse,
+    pa: &Parse,
 ) {
     let t;
     let ctype = if !mod_.is_empty() {
@@ -642,7 +646,7 @@ fn extern_items(
         field.ctype = ctype;
 
         match &item.payload {
-            u::ExternalBlockItemPayload::Func(a) => {
+            ua::ExternalBlockItemPayload::Func(a) => {
                 let generics = generics_text(&a.generics);
                 if let Some(g) = generics {
                     sig.push_str(&g);
@@ -658,7 +662,7 @@ fn extern_items(
                     type_char,
                 });
             }
-            u::ExternalBlockItemPayload::Static(a) => {
+            ua::ExternalBlockItemPayload::Static(a) => {
                 type_ = to_u(&a.type_, pa);
                 field.type_ = Some(&type_);
                 ng = name_generics(&NameGenerics {
@@ -668,7 +672,7 @@ fn extern_items(
                     type_char: 'v',
                 });
             }
-            u::ExternalBlockItemPayload::MacroCall(_) => {
+            ua::ExternalBlockItemPayload::MacroCall(_) => {
                 continue;
             }
         }
@@ -691,7 +695,7 @@ fn extern_items(
     }
 }
 
-fn impl_items(p: &mut String, a: &u::Impl, filepath: &str, mod_: &Vec<&str>, pa: &u::Parse) {
+fn impl_items(p: &mut String, a: &ua::Impl, filepath: &str, mod_: &Vec<&str>, pa: &Parse) {
     let mut new_mod = mod_.clone();
     let type_ = to_u(&a.type_, pa);
     new_mod.push(&type_);
@@ -712,7 +716,7 @@ fn impl_items(p: &mut String, a: &u::Impl, filepath: &str, mod_: &Vec<&str>, pa:
         field.ctype = ctype;
 
         match &item.payload {
-            u::AssociatedItemPayload::Func(a) => {
+            ua::AssociatedItemPayload::Func(a) => {
                 let generics = generics_text(&a.generics);
                 if let Some(g) = generics {
                     sig.push_str(&g);
@@ -728,7 +732,7 @@ fn impl_items(p: &mut String, a: &u::Impl, filepath: &str, mod_: &Vec<&str>, pa:
                     type_char,
                 });
             }
-            u::AssociatedItemPayload::Const(a) => {
+            ua::AssociatedItemPayload::Const(a) => {
                 type_ = to_u(&a.type_, pa);
                 field.type_ = Some(&type_);
                 ng = name_generics(&NameGenerics {
@@ -738,7 +742,7 @@ fn impl_items(p: &mut String, a: &u::Impl, filepath: &str, mod_: &Vec<&str>, pa:
                     type_char: 'v',
                 });
             }
-            u::AssociatedItemPayload::TypeAlias(a) => {
+            ua::AssociatedItemPayload::TypeAlias(a) => {
                 if let Some(t) = &a.rhs {
                     type_ = to_u(&t.1, pa);
                     field.type_ = Some(&type_);
@@ -750,7 +754,7 @@ fn impl_items(p: &mut String, a: &u::Impl, filepath: &str, mod_: &Vec<&str>, pa:
                     type_char: 'a',
                 });
             }
-            u::AssociatedItemPayload::MacroCall(_) => {
+            ua::AssociatedItemPayload::MacroCall(_) => {
                 continue;
             }
         }
@@ -773,7 +777,7 @@ fn impl_items(p: &mut String, a: &u::Impl, filepath: &str, mod_: &Vec<&str>, pa:
     }
 }
 
-fn nested_ctype(mod_: &Vec<&str>, a: &str, g: &Option<u::Generics>) -> String {
+fn nested_ctype(mod_: &Vec<&str>, a: &str, g: &Option<ua::Generics>) -> String {
     let mut new_mod = mod_.clone();
     new_mod.push(a);
     let mut r = new_mod.join("..");

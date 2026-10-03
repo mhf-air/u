@@ -1,9 +1,3 @@
-#![allow(unused_imports)]
-
-mod ast;
-mod lex;
-mod parse;
-
-pub use self::ast::*;
-pub use self::lex::*;
-pub use self::parse::*;
+pub mod ast;
+pub mod lex;
+pub mod parse;

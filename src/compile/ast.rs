@@ -1,4 +1,4 @@
-use super::lex::*;
+use crate::compile::lex::{ Token, TokenCode, Span, Keyword, Pair, Op };
 use crate::T;
 use std::convert::TryFrom;
 use std::mem;
