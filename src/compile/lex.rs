@@ -2310,7 +2310,6 @@ pub struct Comment {
 }
 
 // --------------------------------------------------------------------------------
-#[macro_export]
 macro_rules! T {
 	// keyword
 	[ async ] => { TokenCode::Keyword(Keyword::Async) };
@@ -2449,3 +2448,4 @@ macro_rules! T {
 	[ "rs:[" ] => { TokenCode::Pair(Pair::RsSquareOpen) };
 	[ "rs:]" ] => { TokenCode::Pair(Pair::RsSquareClose) };
 }
+pub(crate) use T;

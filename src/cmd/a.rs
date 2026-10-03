@@ -1,4 +1,5 @@
 use crate::compile as cc;
+use crate::rs as cr;
 use std::collections::HashSet;
 use std::env;
 use std::ffi::OsStr;
@@ -99,8 +100,12 @@ impl CmdNone {
 
             // CmdFmt::new(vec!["data/f.u".to_string()]).run()?;
 
-            let filepath = "data/a.u";
-            let buf = compile_to_rust(filepath).unwrap();
+            let filepath = "data/r.rs";
+            let buf = compile_from_rust(filepath).unwrap();
+
+            // let filepath = "data/a.u";
+            // let buf = compile_to_rust(filepath).unwrap();
+
             println!("{}", buf);
             Ok(())
         } else {
@@ -895,6 +900,32 @@ fn compile_to_rust(filepath: &str) -> Result<String, String> {
     }
 
     let mut p = cc::parse::Parse::new(l);
+    if let Err(err) = p.parse() {
+        return Err(serde_json::to_string(&err).unwrap());
+    }
+
+    match p.to_rust() {
+        Err(err) => Err(serde_json::to_string(&err).unwrap()),
+        Ok(f) => {
+            Ok(f.buf)
+            // Ok(String::new())
+            /* for item in f.span_pairs() {
+                println!("{:?}", item);
+            }
+            Ok(String::new()) */
+        }
+    }
+}
+
+fn compile_from_rust(filepath: &str) -> Result<String, String> {
+    let data = fs::read_to_string(&filepath).unwrap();
+
+    let mut l = cr::rl::Lex::new();
+    if let Err(err) = l.lex(data) {
+        return Err(serde_json::to_string(&vec![err]).unwrap());
+    }
+
+    let mut p = cr::rp::Parse::new(l);
     if let Err(err) = p.parse() {
         return Err(serde_json::to_string(&err).unwrap());
     }

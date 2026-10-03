@@ -1,8 +1,8 @@
 use crate::compile::ast::*;
 use crate::compile::lex::{
-    Token, TokenCode, Span, Keyword, Pair, Op, Assign, Lex, Identifier, Literal, LiteralPayload,
+    Token, TokenCode, Span, Keyword, Pair, Op, Assign,
+    Lex, Identifier, Literal, LiteralPayload, T,
 };
-use crate::T;
 use serde::Serialize;
 use std::cell::Cell;
 use std::collections::HashMap;
