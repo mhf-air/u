@@ -112,81 +112,6 @@ impl Lex {
         s.column = end_column + 1;
     }
 
-    // find the last real token(blank, comment)
-    fn last_real_token(&self) -> Result<&Token, ParseError> {
-        let s = self;
-        if !s.tokens.is_empty() {
-            return Ok(s.tokens.last().unwrap());
-        }
-
-        let e = ParseError {
-            line: s.line,
-            column: s.column,
-            width: 1,
-            text: "cannot find the last non-comment token".to_string(),
-        };
-        Err(e)
-    }
-
-    // add semicolon at line end where neccessary
-    // after '\n' or before EOF
-    fn may_add_semicolon(&mut self) {
-        let s = self;
-        let Ok(last_token) = s.last_real_token() else {
-            return;
-        };
-        let need = match &last_token.code {
-            TokenCode::Identifier(_)
-            | TokenCode::Lifetime(_)
-            | TokenCode::Literal(_) => true,
-            TokenCode::Keyword(k) => match k {
-                Keyword::Await
-                | Keyword::Break
-                | Keyword::Continue
-                | Keyword::Crate
-                | Keyword::Mod
-                | Keyword::Ret
-                | Keyword::Super
-                | Keyword::Struct
-                | Keyword::SelfType
-                | Keyword::SelfValue
-                | Keyword::Type
-                | Keyword::Unsafe
-                | Keyword::Unsized => true,
-                _ => false,
-            },
-            TokenCode::Op(op) => match op {
-                Op::PlusPlus | Op::MinusMinus | Op::Question | Op::Dot | Op::DotDot => true,
-                _ => false,
-            },
-            TokenCode::Pair(pair) => match pair {
-                Pair::ParenClose
-                | Pair::SquareClose
-                | Pair::BraceClose
-                | Pair::ArrayClose
-                | Pair::DoubleBraceClose => true,
-                _ => false,
-            },
-            _ => false,
-        };
-        if need {
-            // auto added semicolon has colomn which is std::usize::MAX
-            let new_token = Token {
-                code: TokenCode::Op(Op::Semicolon),
-                span: Span {
-                    line: s.line,
-                    column: std::usize::MAX,
-                    width: 1,
-                    end_line: s.line,
-                    end_column: std::usize::MAX,
-                },
-                tokens_before: Vec::new(),
-                u: String::new(),
-            };
-            s.tokens.push(new_token);
-        }
-    }
-
     fn add_comment(&mut self, u: String) {
         let s = self;
 
@@ -265,14 +190,14 @@ impl Lex {
             return (None, 0);
         }
         let c_first = s.chars[new_i];
-        if !(c_first.is_alphabetic() || c_first != '-') {
+        if !(c_first.is_alphabetic() || c_first != '_') {
             return (None, 0);
         }
         let mut end = new_i;
         for k in new_i..total_len {
             end = k;
             let c = s.chars[k];
-            if !(c.is_alphanumeric() || c == '-') {
+            if !(c.is_alphanumeric() || c == '_') {
                 break;
             }
         }
@@ -283,8 +208,6 @@ impl Lex {
     pub fn lex(&mut self, data: String) -> Result<(), ParseError> {
         let s = self;
         let r = s.lex_inner(data);
-        // if the last char is not '\n', add semicolon where neccessary
-        s.may_add_semicolon();
         r
     }
     fn lex_inner(&mut self, data: String) -> Result<(), ParseError> {
@@ -318,16 +241,8 @@ impl Lex {
         }
 
         // main loop
-        let mut is_backslash = false;
         'outer: while i < total_len {
             let ch = s.chars[i];
-
-            if ch == '\\' {
-                is_backslash = true;
-                s.add_token_to_before(TokenCode::Op(Op::Backslash), "\\".to_owned());
-                i += 1;
-                continue;
-            }
 
             // whitespace
             if ch.is_whitespace() {
@@ -337,19 +252,11 @@ impl Lex {
                     if !ch.is_whitespace() {
                         break;
                     }
-                    // newline
-                    if ch == '\n' {
-                        if !is_backslash {
-                            s.may_add_semicolon();
-                        }
-                    }
                     i += 1;
                 }
                 let u = s.sub_str(start, i);
                 s.add_token_to_before_nl(TokenCode::Blank, u);
                 continue;
-            } else {
-                is_backslash = false;
             }
 
             // ->
@@ -361,11 +268,11 @@ impl Lex {
             }
 
             // identifier
-            if ch.is_alphabetic() || ch == '-' {
+            if ch.is_alphabetic() || ch == '_' {
                 let start = i;
                 for delta in start + 1..total_len {
                     let c = s.chars[delta];
-                    if c.is_alphanumeric() || c == '-' {
+                    if c.is_alphanumeric() || c == '_' {
                         continue;
                     }
 
@@ -390,7 +297,7 @@ impl Lex {
 
                         // prefix for identifier
                         // id#id, id#123
-                        if !(ch.is_alphanumeric() || ch == '-') {
+                        if !(ch.is_alphanumeric() || ch == '_') {
                             return s.panic("expected identifier or digit after #");
                         }
 
@@ -589,8 +496,8 @@ impl Lex {
                         return s.panic(&format!("expected stuff after float literal {:?}",
                             s.chars[i - 1]));
                     }
-                    // possible + | ~
-                    if s.chars[i] == '+' || s.chars[i] == '~' {
+                    // possible + | -
+                    if s.chars[i] == '+' || s.chars[i] == '-' {
                         i += 1;
                     }
                     if i == total_len {
@@ -761,7 +668,7 @@ impl Lex {
                         return s.panic("expected char in ''");
                     }
 
-                    if next_ch.is_alphabetic() || next_ch == '-' {
+                    if next_ch.is_alphabetic() || next_ch == '_' {
                         let mut is_lifetime = true;
                         let start = i;
                         let mut end = start + 2;
@@ -772,7 +679,7 @@ impl Lex {
                                 is_lifetime = false;
                                 break;
                             }
-                            if !(c.is_alphanumeric() || c == '-' || c == '#') {
+                            if !(c.is_alphanumeric() || c == '_' || c == '#') {
                                 break;
                             }
                         }
@@ -845,26 +752,21 @@ impl Lex {
                     }
                 },
 
-                '~' => {
+                '-' => {
                     if i + 1 == total_len {
-                        s.add_token(TokenCode::Op(Op::Sub), "~".to_owned());
+                        s.add_token(TokenCode::Op(Op::Sub), "-".to_owned());
                         return Ok(());
                     }
                     let next_ch = s.chars[i + 1];
                     match next_ch {
-                        // ~~
-                        '~' => {
-                            s.add_token(TokenCode::Op(Op::MinusMinus), "~~".to_owned());
-                            i += 1;
-                        }
-                        // ~=
+                        // -=
                         '=' => {
-                            s.add_token(TokenCode::Assign(Assign::Sub), "~=".to_owned());
+                            s.add_token(TokenCode::Assign(Assign::Sub), "-=".to_owned());
                             i += 1;
                         }
-                        // ~
+                        // -
                         _ => {
-                            s.add_token(TokenCode::Op(Op::Sub), "~".to_owned());
+                            s.add_token(TokenCode::Op(Op::Sub), "-".to_owned());
                         }
                     }
                 },
@@ -1000,11 +902,6 @@ impl Lex {
                     }
                     let next_ch = s.chars[i + 1];
                     match next_ch {
-                        // :=
-                        '=' => {
-                            s.add_token(TokenCode::Assign(Assign::Declare), ":=".to_owned());
-                            i += 1;
-                        }
                         // ::
                         ':' => {
                             s.add_token(TokenCode::Op(Op::ColonColon), "::".to_owned());
@@ -1013,42 +910,6 @@ impl Lex {
                         // :
                         _ => {
                             s.add_token(TokenCode::Op(Op::Colon), ":".to_owned());
-                        }
-                    }
-                },
-
-                ',' => {
-                    if i + 1 == total_len {
-                        s.add_token(TokenCode::Op(Op::Comma), ",".to_owned());
-                        return Ok(());
-                    }
-                    let next_ch = s.chars[i + 1];
-                    match next_ch {
-                        // ,,
-                        ',' => {
-                            if i + 2 >= total_len {
-                                // ,,
-                                s.add_token(TokenCode::Op(Op::CommaComma), ",,".to_owned());
-                                i += 1;
-                            } else {
-                                match s.chars[i + 2] {
-                                    '=' => {
-                                        // ,,=
-                                        s.add_token(TokenCode::Op(Op::CommaCommaEq),
-                                            ",,=".to_owned());
-                                        i += 2;
-                                    }
-                                    _ => {
-                                        // ,,
-                                        s.add_token(TokenCode::Op(Op::CommaComma), ",,".to_owned());
-                                        i += 1;
-                                    }
-                                }
-                            }
-                        }
-                        // ,
-                        _ => {
-                            s.add_token(TokenCode::Op(Op::Comma), ",".to_owned());
                         }
                     }
                 },
@@ -1072,11 +933,6 @@ impl Lex {
                                         s.add_token(TokenCode::Op(Op::DotDotDot), "...".to_owned());
                                         i += 2;
                                     }
-                                    '=' => {
-                                        // ..=
-                                        s.add_token(TokenCode::Op(Op::DotDotEq), "..=".to_owned());
-                                        i += 2;
-                                    }
                                     _ => {
                                         // ..
                                         s.add_token(TokenCode::Op(Op::DotDot), "..".to_owned());
@@ -1085,18 +941,7 @@ impl Lex {
                                 }
                             }
                         }
-                        /* .
-                        if the last non-comment token is an added semicolon, drop the semicolon.
-                        for cases like:
-                            list
-                                .filter()
-                                .map()
-                        */
                         _ => {
-                            let last_token = s.last_real_token()?;
-                            if last_token.is_added_semicolon() {
-                                s.tokens.pop();
-                            }
                             s.add_token(TokenCode::Op(Op::Dot), ".".to_owned());
                         }
                     }
@@ -1182,79 +1027,6 @@ impl Lex {
                         // &
                         _ => {
                             s.add_token(TokenCode::Op(Op::BitAnd), "&".to_owned());
-                        }
-                    }
-                },
-
-                '[' => {
-                    if i + 1 == total_len {
-                        s.add_token(TokenCode::Pair(Pair::SquareOpen), "[".to_owned());
-                        return Ok(());
-                    }
-                    let next_ch = s.chars[i + 1];
-                    match next_ch {
-                        // [`
-                        '`' => {
-                            s.add_token(TokenCode::Pair(Pair::ArrayOpen), "[`".to_owned());
-                            i += 1;
-                        }
-                        // [
-                        _ => {
-                            s.add_token(TokenCode::Pair(Pair::SquareOpen), "[".to_owned());
-                        }
-                    }
-                },
-
-                '`' => {
-                    if i + 1 == total_len {
-                        return s.panic("expected ']' after '`'");
-                    }
-                    let next_ch = s.chars[i + 1];
-                    match next_ch {
-                        // `]
-                        ']' => {
-                            s.add_token(TokenCode::Pair(Pair::ArrayClose), "`]".to_owned());
-                            i += 1;
-                        }
-                        _ => {
-                            return s.panic("expected ']' after '`'");
-                        }
-                    }
-                },
-
-                '{' => {
-                    if i + 1 == total_len {
-                        s.add_token(TokenCode::Pair(Pair::BraceOpen), "{".to_owned());
-                        return Ok(());
-                    }
-                    let next_ch = s.chars[i + 1];
-                    match next_ch {
-                        // {{
-                        '{' => {
-                            s.add_token(TokenCode::Pair(Pair::DoubleBraceOpen), "{{".to_owned());
-                            i += 1;
-                        }
-                        // {
-                        _ => {
-                            s.add_token(TokenCode::Pair(Pair::BraceOpen), "{".to_owned());
-                        }
-                    }
-                },
-                '}' => {
-                    if i + 1 == total_len {
-                        s.add_token(TokenCode::Pair(Pair::BraceClose), "}".to_owned());
-                        return Ok(());
-                    }
-                    let next_ch = s.chars[i + 1];
-                    match next_ch {
-                        // }}
-                        '}' => {
-                            s.add_token(TokenCode::Pair(Pair::DoubleBraceClose), "}}".to_owned());
-                            i += 1;
-                        }
-                        // }
-                        _ => {
-                            s.add_token(TokenCode::Pair(Pair::BraceClose), "}".to_owned());
                         }
                     }
                 },
@@ -1357,12 +1129,15 @@ impl Lex {
 
                 '(' => s.add_token(TokenCode::Pair(Pair::ParenOpen), "(".to_owned()),
                 ')' => s.add_token(TokenCode::Pair(Pair::ParenClose), ")".to_owned()),
+                '[' => s.add_token(TokenCode::Pair(Pair::SquareOpen), "[".to_owned()),
                 ']' => s.add_token(TokenCode::Pair(Pair::SquareClose), "]".to_owned()),
+                '{' => s.add_token(TokenCode::Pair(Pair::BraceOpen), "{".to_owned()),
+                '}' => s.add_token(TokenCode::Pair(Pair::BraceClose), "}".to_owned()),
+                ',' => s.add_token(TokenCode::Op(Op::Comma), ",".to_owned()),
                 ';' => s.add_token(TokenCode::Op(Op::Semicolon), ";".to_owned()),
                 '?' => s.add_token(TokenCode::Op(Op::Question), "?".to_owned()),
                 '@' => s.add_token(TokenCode::Op(Op::At), "@".to_owned()),
                 '$' => s.add_token(TokenCode::Op(Op::Dollar), "$".to_owned()),
-                '_' => s.add_token(TokenCode::Op(Op::Underscore), "_".to_owned()),
 
                 _ => return s.panic(&format!("illegal char: {}", ch)),
             }
@@ -1541,7 +1316,7 @@ impl Token {
                     Assign::Assign => "=",
                     Assign::Declare => "=",
                     Assign::Add => "+=",
-                    Assign::Sub => "-=",
+                    Assign::Sub => "~=",
                     Assign::Star => "*=",
                     Assign::Div => "/=",
                     Assign::Rem => "%=",
@@ -1555,7 +1330,7 @@ impl Token {
             TokenCode::Op(op) => {
                 match op {
                     Op::Add => "+",
-                    Op::Sub => "-",
+                    Op::Sub => "~",
                     Op::Star => "*",
                     Op::Div => "/",
                     Op::Rem => "%",
@@ -1576,7 +1351,7 @@ impl Token {
                     Op::BitOr => "|",
                     Op::BitXor => "^",
                     Op::Dot => ".",
-                    Op::DotDot => "::",
+                    Op::DotDot => ",,",
                     Op::DotDotDot => "...",
                     Op::Pound => "#",
                     Op::Question => "?",
@@ -1588,7 +1363,7 @@ impl Token {
                     Op::Colon => ":",
                     Op::Semicolon => ";",
 
-                    Op::ColonColon => "::",
+                    Op::ColonColon => "..",
                     Op::DotDotEq => "..=",
                     Op::RArrow => "->",
                     Op::FatArrow => "=>",
@@ -1602,14 +1377,14 @@ impl Token {
                 match pair {
                     Pair::ParenOpen => "(",
                     Pair::ParenClose => ")",
-                    Pair::SquareOpen => "<",
-                    Pair::SquareClose => ">",
+                    Pair::SquareOpen => "[",
+                    Pair::SquareClose => "]",
                     Pair::BraceOpen => "{",
                     Pair::BraceClose => "}",
                     Pair::DoubleBraceOpen => "[",
                     Pair::DoubleBraceClose => "]",
-                    Pair::ArrayOpen => "[",
-                    Pair::ArrayClose => "]",
+                    Pair::ArrayOpen => "[`",
+                    Pair::ArrayClose => "`]",
                     Pair::OuterAttr => "#[",
                     Pair::InnerAttr => "#![",
                     Pair::EndAttr => "]",
@@ -1671,11 +1446,6 @@ impl Literal {
     fn to_rust_string(&self) -> String {
         let s = self;
 
-        let a = s.special_to_rust_string();
-        if !a.is_empty() {
-            return a;
-        }
-
         let mut r = String::new();
         if let Some(prefix) = &s.prefix {
             let prefix = Identifier::to_rust_string_no_prefix(&prefix);
@@ -1689,7 +1459,7 @@ impl Literal {
             LiteralPayload::String(a) => &a.to_rust_string(),
             LiteralPayload::Char(a) => &a.to_rust_string(),
             LiteralPayload::Int(a) => a,
-            LiteralPayload::Float(a) => &a.replace("~", "-"),
+            LiteralPayload::Float(a) => a,
             LiteralPayload::Bool(a) => a,
         };
         r.push_str(a);
@@ -1699,40 +1469,6 @@ impl Literal {
             r.push_str(&suffix);
         }
         r
-    }
-    /// ""s to "".to_owned()
-    /// ""st to "".to_string()
-    fn special_to_rust_string(&self) -> String {
-        let s = self;
-
-        let LiteralPayload::String(txt) = &s.payload else {
-            return String::new();
-        };
-
-        if let Some(suffix) = &s.suffix {
-            if !matches!(suffix.as_ref(), "s" | "st") {
-                return String::new();
-            }
-            let prefix = if let Some(prefix) = &s.prefix {
-                Identifier::to_rust_string_no_prefix(&prefix)
-            } else {
-                "".to_owned()
-            };
-            let content = txt.to_rust_string();
-            match suffix.as_ref() {
-                "s" => {
-                    return format!("{}{}.to_owned()", prefix, content);
-                }
-                "st" => {
-                    return format!("{}{}.to_string()", prefix, content);
-                }
-                _ => {
-                    return String::new();
-                }
-            }
-        }
-
-        return String::new();
     }
 }
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -1846,7 +1582,9 @@ impl Identifier {
         let s = self;
 
         let mut r = String::new();
-        if let Some(prefix) = &s.prefix && !ALLOWED_KEYWORD_NAMES.contains(&s.id.as_str()) {
+        if ALLOWED_KEYWORD_NAMES.contains(&s.id.as_str()) {
+            r.push_str("r#");
+        } else if let Some(prefix) = &s.prefix {
             r.push_str(&Identifier::to_rust_string_no_prefix(prefix));
             r.push('#');
         }
@@ -1861,72 +1599,50 @@ impl Identifier {
         }
 
         let chars: Vec<char> = id.chars().collect();
-        let len = chars.len();
 
-        if len > 2 {
-            if chars[len - 3] == '-' && chars[len - 2] == '-' {
-                match chars[len - 1] {
-                    'c' => {
-                        if len == 3 {
-                            p.push_str("__c");
-                            return p;
-                        }
-                        let r = &chars[..len - 3];
-                        for c in r {
-                            if *c == '-' {
-                                p.push('_');
-                            } else {
-                                let a = c.to_uppercase().to_string();
-                                p.push_str(&a);
-                            }
-                        }
-                        return p;
-                    }
-                    'r' => {
-                        if len == 3 {
-                            return "__r".to_string();
-                        }
-                        let r = &chars[..len - 3];
-                        for c in r {
-                            if *c == '-' {
-                                p.push('_');
-                            } else {
-                                let a = c.to_string();
-                                p.push_str(&a);
-                            }
-                        }
-                        return p;
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        if chars[0].is_uppercase() {
-            let list = chars.split(|c| *c == '-');
-            for word in list {
-                for (i, c) in word.iter().enumerate() {
-                    if i == 0 {
-                        p.push_str(&c.to_uppercase().to_string());
+        if chars[0].is_lowercase() {
+            let all_small = chars.iter().all(|it| it.is_lowercase());
+            if all_small {
+                for c in &chars {
+                    if *c == '_' {
+                        p.push('-');
                     } else {
-                        p.push_str(&c.to_string());
+                        let a = c.to_string();
+                        p.push_str(&a);
                     }
                 }
-                if word.is_empty() {
-                    p.push('_');
-                }
+            } else {
+                p.push_str(id);
+                p.push_str("--r");
             }
             return p;
         }
 
-        for c in &chars {
-            if *c == '-' {
-                p.push('_');
+        let all_caps = chars.iter().all(|it| it.is_uppercase());
+        if all_caps {
+            for c in &chars {
+                if *c == '_' {
+                    p.push('-');
+                } else {
+                    let a = c.to_string();
+                    p.push_str(&a);
+                }
+            }
+            p.push_str("--c");
+            return p;
+        }
+
+        // SnakeCase to Snake-case
+        p.push(chars[0]);
+        for c in &chars[1..] {
+            if c.is_uppercase() {
+                p.push('-');
+                p.push_str(&c.to_lowercase().to_string());
             } else {
-                let a = c.to_string();
-                p.push_str(&a);
+                p.push(*c);
             }
         }
+
         return p;
     }
 }
@@ -2082,16 +1798,16 @@ impl FromStr for Keyword {
             "enum" => Ok(Self::Enum),
             "extern" => Ok(Self::Extern),
             "for" => Ok(Self::For),
-            "func" => Ok(Self::Func),
+            // "func" => Ok(Self::Func),
             "if" => Ok(Self::If),
             "impl" => Ok(Self::Impl),
             "in" => Ok(Self::In),
             "let" => Ok(Self::Let),
-            "macro" => Ok(Self::Macro),
+            // "macro" => Ok(Self::Macro),
             "mod" => Ok(Self::Mod),
             "mut" => Ok(Self::Mut),
             "ref" => Ok(Self::Ref),
-            "ret" => Ok(Self::Ret),
+            // "ret" => Ok(Self::Ret),
             "Self" => Ok(Self::SelfType),
             "static" => Ok(Self::Static),
             "struct" => Ok(Self::Struct),
