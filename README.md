@@ -369,7 +369,7 @@ example
     match a {
         Person {
             name
-            ...
+            ,,
         }: {}
     }
 
@@ -481,8 +481,8 @@ example
 example
 
 the following two expressions are the same
-    a{ name: "", ...Default..default() }
-    a{ name: "", ... }
+    a{ name: "", ,,Default..default() }
+    a{ name: "", ,, }
 ```
 
 ## Other Changes
@@ -524,7 +524,7 @@ example
     }
 ```
 
-- **use ... instead of .. as rest pattern**
+- **use ,, instead of .. as rest pattern**
 
 - **patterns in function parameters**
 

@@ -1400,7 +1400,6 @@ fn transform_macro_tokens(tokens: &[Token]) -> Vec<Token> {
             T![macro] => T!["rs:macro"],
             T![ret] => T!["rs:ret"],
             T![..] => T!["rs:.."],
-            T![...] => T!["rs:..."],
             T!["["] => T!["rs:["],
             T!["]"] => T!["rs:]"],
             _ => t.code,

@@ -1577,7 +1577,7 @@ impl Token {
                     Op::BitXor => "^",
                     Op::Dot => ".",
                     Op::DotDot => "::",
-                    Op::DotDotDot => "..",
+                    Op::DotDotDot => "...",
                     Op::Pound => "#",
                     Op::Question => "?",
                     Op::At => "@",
@@ -1596,7 +1596,6 @@ impl Token {
                     Op::Backslash => "",
 
                     Op::RsDotDot => "..",
-                    Op::RsDotDotDot => "...",
                 }
             }
             TokenCode::Pair(pair) => {
@@ -2210,7 +2209,6 @@ pub enum Op {
     Backslash,
 
     RsDotDot,
-    RsDotDotDot,
 }
 
 impl fmt::Debug for Op {
@@ -2258,7 +2256,6 @@ impl fmt::Debug for Op {
             Self::Backslash => write!(f, "\\"),
 
             Self::RsDotDot => write!(f, ".."),
-            Self::RsDotDotDot => write!(f, "..."),
         }
     }
 }
@@ -2449,7 +2446,6 @@ macro_rules! T {
 	[ "rs:macro" ] => { TokenCode::Keyword(Keyword::RsMacro) };
 	[ "rs:ret" ] => { TokenCode::Keyword(Keyword::RsRet) };
 	[ "rs:.." ] => { TokenCode::Op(Op::RsDotDot) };
-	[ "rs:..." ] => { TokenCode::Op(Op::RsDotDotDot) };
 	[ "rs:[" ] => { TokenCode::Pair(Pair::RsSquareOpen) };
 	[ "rs:]" ] => { TokenCode::Pair(Pair::RsSquareClose) };
 }

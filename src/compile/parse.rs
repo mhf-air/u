@@ -3828,7 +3828,7 @@ impl Parse {
                                     break;
                                 }
 
-                                if matches!(&token.code, T![...]) {
+                                if matches!(&token.code, T![,,]) {
                                     let t_sep = token.clone();
                                     s.plusplus();
                                     let e = if !matches!(s.current().code, T!["}"]) {
@@ -5296,8 +5296,19 @@ impl Parse {
             }
             // ,, RangePattern
             // ,,= RangePattern
+            // ,,
             T![,,] | T![,,=] => {
-                let bound = parse_range_pattern_bound(s)?;
+                let i_cur = s.index.get();
+                let bound = match parse_range_pattern_bound(s) {
+                    Ok(bound) => bound,
+                    Err(_) => {
+                        // rest
+                        s.index.set(i_cur);
+                        return Ok(PatternNoTopAlt::WithoutRange(
+                            PatternWithoutRange::Rest(token.clone())
+                        ));
+                    }
+                };
                 return Ok(PatternNoTopAlt::WithRange(PatternRange {
                     start: None,
                     end: Some(bound),
@@ -5352,11 +5363,6 @@ impl Parse {
                 ));
             }
 
-            // rest
-            T![...] => {
-                return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Rest(token.clone())));
-            }
-
             // grouped or tuple
             T!["("] => {
                 let t_paren_open = token.clone();
@@ -5379,12 +5385,6 @@ impl Parse {
                                     t_paren_close: token.clone(),
                                 }),
                             ));
-                        }
-
-                        let last = list.last().unwrap();
-                        if last.1.is_some() && matches!(last.0.items[0].0,
-                                PatternNoTopAlt::WithoutRange(PatternWithoutRange::Rest(_))) {
-                            return Err(s.panic(token, "can't have ... followed by ,"));
                         }
 
                         return Ok(PatternNoTopAlt::WithoutRange(
@@ -5655,7 +5655,7 @@ impl Parse {
                 let token = s.current();
                 s.plusplus();
 
-                if matches!(&token.code, T![...]) {
+                if matches!(&token.code, T![,,]) {
                     return Ok(PatternStructItem::Etc(token.clone()));
                 }
 

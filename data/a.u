@@ -200,10 +200,10 @@ name = "foo"
 }
 
 f func() {
-    Person { name: "", ...b }
+    Person { name: "", ,,b }
     Person {
         name: ""
-        ...b
+        ,,b
     }
     Person {
         name: ""
@@ -253,14 +253,14 @@ f func() {
 }
 
 f func() {
-    Person { name: "", ...Default..default() }
-    Person { name: "", ... }
+    Person { name: "", ,,Default..default() }
+    Person { name: "", ,, }
     Person {
         name: ""
-        ...
+        ,,
     }
 
-    Person { name: "", ...b }
+    Person { name: "", ,,b }
 }
 
 identifier func() {
@@ -572,6 +572,11 @@ f func() {
         f: "d"
         g,,: "e"
     }
+    match tuple {
+        (1, ,,, y, z): {}
+        (,,, 5): {}
+        (,,): {}
+    }
 }
 
 f func() {
@@ -691,7 +696,7 @@ f func() {
         Message..Quit: a
         Message..Write-string(write): a
         Message..Move{ x, y: 0 }: a
-        Message..Move{ ... }: a
+        Message..Move{ ,, }: a
         Message..Change-color{
             0: red
             1: green
@@ -722,7 +727,7 @@ f func() {
         Message..Quit: dbg_("Quit")
         Message..Write-string(write): dbg_(&write)
         Message..Move{ x, y: 0 }: dbg_("move {} horizontally", x)
-        Message..Move{ ... }: dbg_("other move")
+        Message..Move{ ,, }: dbg_("other move")
         Message..Change-color{ 0: red, 1: green, 2: - }:
             dbg_("color change, red: {}, green: {}", red, green)
         -: {}
