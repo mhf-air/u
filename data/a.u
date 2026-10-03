@@ -526,6 +526,11 @@ call-from-c func[extern "C"]() {
 dangerous func[unsafe]() {
 }
 
+sum func[unsafe, extern "C"](:mut args: ...) i32 {
+}
+sum func[unsafe, extern "C"](args ...) i32 {
+}
+
 f func() {
     unsafe {
         dangerous()

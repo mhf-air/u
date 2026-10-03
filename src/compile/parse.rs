@@ -1653,7 +1653,15 @@ impl Parse {
                     ));
                 }
             }
-            param.type_ = s.parse_type()?;
+
+            let token = s.current();
+            if matches!(&token.code, T![...]) {
+                s.plusplus();
+                param.t_var = Some(token.clone());
+            } else {
+                param.type_ = s.parse_type()?;
+            }
+
             let token = s.current();
             s.plusplus();
             match &token.code {

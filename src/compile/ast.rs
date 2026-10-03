@@ -574,7 +574,11 @@ impl ToLang for Func {
                 param.name.to_rust(p);
             }
             p.push_raw(":");
-            param.type_.to_rust(p);
+            if let Some(t) = &param.t_var {
+                t.to_rust(p);
+            } else {
+                param.type_.to_rust(p);
+            }
             if let Some(t) = &param.t_comma {
                 t.to_rust(p);
             }
@@ -721,6 +725,7 @@ pub struct FuncParam {
     pub name: Token,
     pub pat: Option<Pattern>,
     pub type_: Type,
+    pub t_var: Option<Token>,
     pub t_comma: Option<Token>,
 }
 #[derive(Debug)]
