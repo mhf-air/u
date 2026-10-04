@@ -17,9 +17,10 @@ I like Rust's semantics, but dislike some of its syntax
     - set-name for set_name
     - name--c for NAME(which is a const or static)
     - anYThInGcUsTom--r for anYThInGcUsTom
+    - leading '-' are preserved, so -Order-item will be _OrderItem
+    - forbid aA and AA, use aA--r and aa--c instead, but A is allowed
 
-    as for identifiers containing digit, forbid '-' followed by a digit,
-    and consider digits as lower-case letters.
+    as for identifiers containing digit, consider digits as lower-case letters.
 
     for example, Point2d, Mat4x4 are fine, but Point-2d is not.
 
