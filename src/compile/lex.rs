@@ -409,7 +409,8 @@ impl Lex {
                             span: Span::default(),
                             u: u.clone(),
                         };
-                        s.add_token(TokenCode::Identifier(id), u);
+                        let code = Identifier::new_token_code(id, s)?;
+                        s.add_token(code, u);
                         id_prefix = None;
                     } else {
                         // no prefix
@@ -423,7 +424,8 @@ impl Lex {
                                 s.add_token(TokenCode::Keyword(key), a);
                             } else {
                                 let id = Identifier::new(a.clone(), a.clone());
-                                s.add_token(TokenCode::Identifier(id), a);
+                                let code = Identifier::new_token_code(id, s)?;
+                                s.add_token(code, a);
                             }
                         }
                     }
@@ -433,7 +435,8 @@ impl Lex {
                 // reached EOF here
                 let u = s.sub_str(start, total_len);
                 let id = Identifier::new(u.clone(), u.clone());
-                s.add_token(TokenCode::Identifier(id), u);
+                let code = Identifier::new_token_code(id, s)?;
+                s.add_token(code, u);
                 return Ok(());
             }
 
@@ -1417,7 +1420,7 @@ impl fmt::Debug for Token {
 }
 
 impl ToLang for Token {
-    fn to_rust(&self, p: &mut LangFormatter) {
+    fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
         s.to_rs_before(p);
         s.to_rs_one(p);
@@ -1465,11 +1468,11 @@ impl Token {
             }
             TokenCode::Literal(literal) => {
                 delta_line = s.span.end_line - s.span.line;
-                &literal.to_rust_string()
+                &literal.to_rs_string()
             }
-            TokenCode::Identifier(identifier) => &identifier.to_rust_string_with_prefix(),
+            TokenCode::Identifier(identifier) => &identifier.to_rs_string_with_prefix(),
             TokenCode::Lifetime(identifier) => &{
-                let mut a = identifier.to_rust_string_with_prefix();
+                let mut a = identifier.to_rs_string_with_prefix();
                 a.insert_str(0, "'");
                 a
             },
@@ -1668,17 +1671,17 @@ impl Literal {
             span: Span::default(),
         }
     }
-    fn to_rust_string(&self) -> String {
+    fn to_rs_string(&self) -> String {
         let s = self;
 
-        let a = s.special_to_rust_string();
+        let a = s.special_to_rs_string();
         if !a.is_empty() {
             return a;
         }
 
         let mut r = String::new();
         if let Some(prefix) = &s.prefix {
-            let prefix = Identifier::to_rust_string_no_prefix(&prefix);
+            let prefix = Identifier::to_rs_string_no_prefix(&prefix);
             r.push_str(&prefix);
             if matches!(s.payload, LiteralPayload::Int(_) | LiteralPayload::Float(_)) {
                 r.push('#');
@@ -1686,8 +1689,8 @@ impl Literal {
         }
 
         let a = match &s.payload {
-            LiteralPayload::String(a) => &a.to_rust_string(),
-            LiteralPayload::Char(a) => &a.to_rust_string(),
+            LiteralPayload::String(a) => &a.to_rs_string(),
+            LiteralPayload::Char(a) => &a.to_rs_string(),
             LiteralPayload::Int(a) => a,
             LiteralPayload::Float(a) => &a.replace("~", "-"),
             LiteralPayload::Bool(a) => a,
@@ -1695,14 +1698,14 @@ impl Literal {
         r.push_str(a);
 
         if let Some(suffix) = &s.suffix {
-            let suffix = Identifier::to_rust_string_no_prefix(&suffix);
+            let suffix = Identifier::to_rs_string_no_prefix(&suffix);
             r.push_str(&suffix);
         }
         r
     }
     /// ""s to "".to_owned()
     /// ""st to "".to_string()
-    fn special_to_rust_string(&self) -> String {
+    fn special_to_rs_string(&self) -> String {
         let s = self;
 
         let LiteralPayload::String(txt) = &s.payload else {
@@ -1714,11 +1717,11 @@ impl Literal {
                 return String::new();
             }
             let prefix = if let Some(prefix) = &s.prefix {
-                Identifier::to_rust_string_no_prefix(&prefix)
+                Identifier::to_rs_string_no_prefix(&prefix)
             } else {
                 "".to_owned()
             };
-            let content = txt.to_rust_string();
+            let content = txt.to_rs_string();
             match suffix.as_ref() {
                 "s" => {
                     return format!("{}{}.to_owned()", prefix, content);
@@ -1768,7 +1771,7 @@ pub struct LiteralString {
     text: String,
 }
 impl LiteralString {
-    fn to_rust_string(&self) -> String {
+    fn to_rs_string(&self) -> String {
         let s = self;
 
         let mut p = String::new();
@@ -1810,7 +1813,7 @@ pub struct LiteralChar {
     text: String,
 }
 impl LiteralChar {
-    fn to_rust_string(&self) -> String {
+    fn to_rs_string(&self) -> String {
         let s = self;
 
         let mut p = String::new();
@@ -1842,23 +1845,82 @@ impl Identifier {
         }
     }
 
-    pub fn to_rust_string_with_prefix(&self) -> String {
+    fn new_token_code(id: Identifier, lex: &Lex) -> Result<TokenCode, ParseError> {
+        if let Some(prefix) = &id.prefix {
+            Self::is_legit(prefix, lex)?;
+        }
+        Self::is_legit(&id.id, lex)?;
+        Ok(TokenCode::Identifier(id))
+    }
+
+    fn is_legit(id: &str, lex: &Lex) -> Result<(), ParseError> {
+        if id.is_empty() {
+            return lex.panic("empty identifier");
+        }
+        let chars: Vec<char> = id.chars().collect();
+        let len = chars.len();
+        if len > 2 {
+            if chars[len - 3] == '-' && chars[len - 2] == '-' {
+                match chars[len - 1] {
+                    // --c
+                    'c' | 'r' => return Ok(()),
+                    _ => {}
+                }
+            }
+        }
+
+        // skip leading '-'
+        let mut i = 0;
+        for c in &chars {
+            if *c != '-' {
+                break;
+            }
+            i += 1;
+        }
+        let chars = &chars[i..];
+        if chars.is_empty() {
+            return Ok(());
+        }
+        // only 1 letter after leading '-' is allowed, whatever it is
+        if chars.len() == 1 {
+            return Ok(());
+        }
+
+        if !chars[0].is_uppercase() {
+            let all_small = chars.iter().all(|it| !it.is_uppercase());
+            if !all_small {
+                return lex.panic("leading lowercase letter followed by uppercase letter");
+            }
+        } else {
+            let all_caps = chars.iter().all(|it|
+                it.is_uppercase() || it.is_numeric() || *it == '-'
+            );
+            if all_caps {
+                return lex.panic("all uppercase letters with length more than 1 except leading '-'");
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn to_rs_string_with_prefix(&self) -> String {
         let s = self;
 
         let mut r = String::new();
         if let Some(prefix) = &s.prefix && !ALLOWED_KEYWORD_NAMES.contains(&s.id.as_str()) {
-            r.push_str(&Identifier::to_rust_string_no_prefix(prefix));
+            r.push_str(&Identifier::to_rs_string_no_prefix(prefix));
             r.push('#');
         }
-        r.push_str(&Identifier::to_rust_string_no_prefix(&s.id));
+        r.push_str(&Identifier::to_rs_string_no_prefix(&s.id));
         r
     }
 
-    pub fn to_rust_string_no_prefix(id: &str) -> String {
-        let mut p = String::new();
+    pub fn to_rs_string_no_prefix(id: &str) -> String {
         if id.is_empty() {
-            return "".to_string();
+            return String::new();
         }
+
+        let mut p = String::new();
 
         let chars: Vec<char> = id.chars().collect();
         let len = chars.len();
@@ -1866,6 +1928,7 @@ impl Identifier {
         if len > 2 {
             if chars[len - 3] == '-' && chars[len - 2] == '-' {
                 match chars[len - 1] {
+                    // --c
                     'c' => {
                         if len == 3 {
                             p.push_str("__c");
@@ -1882,6 +1945,7 @@ impl Identifier {
                         }
                         return p;
                     }
+                    // --r
                     'r' => {
                         if len == 3 {
                             return "__r".to_string();
@@ -1902,6 +1966,27 @@ impl Identifier {
             }
         }
 
+        // skip leading '-'
+        let mut i = 0;
+        for c in &chars {
+            if *c != '-' {
+                break;
+            }
+            p.push('_');
+            i += 1;
+        }
+        let chars = &chars[i..];
+        if chars.is_empty() {
+            return p;
+        }
+
+        // if there's only 1 letter after leading '-', it is returned as is
+        if chars.len() == 1 {
+            p.push(chars[0]);
+            return p;
+        }
+
+        // Snake-case to SnakeCase
         if chars[0].is_uppercase() {
             let list = chars.split(|c| *c == '-');
             for word in list {
@@ -1909,7 +1994,7 @@ impl Identifier {
                     if i == 0 {
                         p.push_str(&c.to_uppercase().to_string());
                     } else {
-                        p.push_str(&c.to_string());
+                        p.push(*c);
                     }
                 }
                 if word.is_empty() {
@@ -1919,12 +2004,11 @@ impl Identifier {
             return p;
         }
 
-        for c in &chars {
+        for c in chars {
             if *c == '-' {
                 p.push('_');
             } else {
-                let a = c.to_string();
-                p.push_str(&a);
+                p.push(*c);
             }
         }
         return p;

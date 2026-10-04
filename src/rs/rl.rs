@@ -1192,10 +1192,10 @@ impl fmt::Debug for Token {
 }
 
 impl ToLang for Token {
-    fn to_rust(&self, p: &mut LangFormatter) {
+    fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
-        s.to_rs_before(p);
-        s.to_rs_one(p);
+        s.to_u_before(p);
+        s.to_u_one(p);
     }
 }
 
@@ -1215,15 +1215,15 @@ impl Token {
         false
     }
 
-    pub fn to_rs_before(&self, p: &mut LangFormatter) {
+    pub fn to_u_before(&self, p: &mut LangFormatter) {
         let s = self;
 
         for it in &s.tokens_before {
-            it.to_rs_one(p);
+            it.to_u_one(p);
         }
     }
 
-    pub fn to_rs_one(&self, p: &mut LangFormatter) {
+    pub fn to_u_one(&self, p: &mut LangFormatter) {
         let s = self;
 
         let mut delta_line = 0;
@@ -1240,11 +1240,11 @@ impl Token {
             }
             TokenCode::Literal(literal) => {
                 delta_line = s.span.end_line - s.span.line;
-                &literal.to_rust_string()
+                &literal.to_u_string()
             }
-            TokenCode::Identifier(identifier) => &identifier.to_rust_string_with_prefix(),
+            TokenCode::Identifier(identifier) => &identifier.to_u_string_with_prefix(),
             TokenCode::Lifetime(identifier) => &{
-                let mut a = identifier.to_rust_string_with_prefix();
+                let mut a = identifier.to_u_string_with_prefix();
                 a.insert_str(0, "'");
                 a
             },
@@ -1369,8 +1369,6 @@ impl Token {
                     Op::FatArrow => "=>",
                     Op::Dollar => "$",
                     Op::Backslash => "",
-
-                    Op::RsDotDot => "..",
                 }
             }
             TokenCode::Pair(pair) => {
@@ -1388,8 +1386,6 @@ impl Token {
                     Pair::OuterAttr => "#[",
                     Pair::InnerAttr => "#![",
                     Pair::EndAttr => "]",
-                    Pair::RsSquareOpen => "[",
-                    Pair::RsSquareClose => "]",
                 }
             }
         };
@@ -1443,12 +1439,12 @@ impl Literal {
             span: Span::default(),
         }
     }
-    fn to_rust_string(&self) -> String {
+    fn to_u_string(&self) -> String {
         let s = self;
 
         let mut r = String::new();
         if let Some(prefix) = &s.prefix {
-            let prefix = Identifier::to_rust_string_no_prefix(&prefix);
+            let prefix = Identifier::to_u_string_no_prefix(&prefix);
             r.push_str(&prefix);
             if matches!(s.payload, LiteralPayload::Int(_) | LiteralPayload::Float(_)) {
                 r.push('#');
@@ -1456,8 +1452,8 @@ impl Literal {
         }
 
         let a = match &s.payload {
-            LiteralPayload::String(a) => &a.to_rust_string(),
-            LiteralPayload::Char(a) => &a.to_rust_string(),
+            LiteralPayload::String(a) => &a.to_u_string(),
+            LiteralPayload::Char(a) => &a.to_u_string(),
             LiteralPayload::Int(a) => a,
             LiteralPayload::Float(a) => a,
             LiteralPayload::Bool(a) => a,
@@ -1465,7 +1461,7 @@ impl Literal {
         r.push_str(a);
 
         if let Some(suffix) = &s.suffix {
-            let suffix = Identifier::to_rust_string_no_prefix(&suffix);
+            let suffix = Identifier::to_u_string_no_prefix(&suffix);
             r.push_str(&suffix);
         }
         r
@@ -1504,7 +1500,7 @@ pub struct LiteralString {
     text: String,
 }
 impl LiteralString {
-    fn to_rust_string(&self) -> String {
+    fn to_u_string(&self) -> String {
         let s = self;
 
         let mut p = String::new();
@@ -1546,7 +1542,7 @@ pub struct LiteralChar {
     text: String,
 }
 impl LiteralChar {
-    fn to_rust_string(&self) -> String {
+    fn to_u_string(&self) -> String {
         let s = self;
 
         let mut p = String::new();
@@ -1578,32 +1574,48 @@ impl Identifier {
         }
     }
 
-    pub fn to_rust_string_with_prefix(&self) -> String {
+    pub fn to_u_string_with_prefix(&self) -> String {
         let s = self;
 
         let mut r = String::new();
         if ALLOWED_KEYWORD_NAMES.contains(&s.id.as_str()) {
             r.push_str("r#");
         } else if let Some(prefix) = &s.prefix {
-            r.push_str(&Identifier::to_rust_string_no_prefix(prefix));
+            r.push_str(&Identifier::to_u_string_no_prefix(prefix));
             r.push('#');
         }
-        r.push_str(&Identifier::to_rust_string_no_prefix(&s.id));
+        r.push_str(&Identifier::to_u_string_no_prefix(&s.id));
         r
     }
 
-    pub fn to_rust_string_no_prefix(id: &str) -> String {
-        let mut p = String::new();
+    pub fn to_u_string_no_prefix(id: &str) -> String {
         if id.is_empty() {
-            return "".to_string();
+            return String::new();
         }
+
+        let mut p = String::new();
 
         let chars: Vec<char> = id.chars().collect();
 
-        if chars[0].is_lowercase() {
-            let all_small = chars.iter().all(|it| it.is_lowercase());
+        // skip leading '_'
+        let mut i = 0;
+        for c in &chars {
+            if *c != '_' {
+                break;
+            }
+            p.push('_');
+            i += 1;
+        }
+        let chars = &chars[i..];
+        if chars.is_empty() {
+            return p;
+        }
+
+        if !chars[0].is_uppercase() {
+            let all_small = chars.iter().all(|it| !it.is_uppercase());
             if all_small {
-                for c in &chars {
+                // set_name to set_name
+                for c in chars {
                     if *c == '_' {
                         p.push('-');
                     } else {
@@ -1612,19 +1624,23 @@ impl Identifier {
                     }
                 }
             } else {
+                // aA to aA--r
                 p.push_str(id);
                 p.push_str("--r");
             }
             return p;
         }
 
-        let all_caps = chars.iter().all(|it| it.is_uppercase());
+        // MAX_COUNT to max-count--c
+        let all_caps = chars.iter().all(|it|
+            it.is_uppercase() || it.is_numeric() || *it == '_'
+        );
         if all_caps {
-            for c in &chars {
+            for c in chars {
                 if *c == '_' {
                     p.push('-');
                 } else {
-                    let a = c.to_string();
+                    let a = c.to_lowercase().to_string();
                     p.push_str(&a);
                 }
             }
@@ -1798,16 +1814,13 @@ impl FromStr for Keyword {
             "enum" => Ok(Self::Enum),
             "extern" => Ok(Self::Extern),
             "for" => Ok(Self::For),
-            // "func" => Ok(Self::Func),
             "if" => Ok(Self::If),
             "impl" => Ok(Self::Impl),
             "in" => Ok(Self::In),
             "let" => Ok(Self::Let),
-            // "macro" => Ok(Self::Macro),
             "mod" => Ok(Self::Mod),
             "mut" => Ok(Self::Mut),
             "ref" => Ok(Self::Ref),
-            // "ret" => Ok(Self::Ret),
             "Self" => Ok(Self::SelfType),
             "static" => Ok(Self::Static),
             "struct" => Ok(Self::Struct),
@@ -1923,8 +1936,6 @@ pub enum Op {
     FatArrow,
     Dollar,
     Backslash,
-
-    RsDotDot,
 }
 
 impl fmt::Debug for Op {
@@ -1970,8 +1981,6 @@ impl fmt::Debug for Op {
             Self::FatArrow => write!(f, "=>"),
             Self::Dollar => write!(f, "$"),
             Self::Backslash => write!(f, "\\"),
-
-            Self::RsDotDot => write!(f, ".."),
         }
     }
 }
@@ -1991,8 +2000,6 @@ pub enum Pair {
     OuterAttr,
     InnerAttr,
     EndAttr,
-    RsSquareOpen,
-    RsSquareClose,
 }
 
 impl fmt::Debug for Pair {
@@ -2011,8 +2018,6 @@ impl fmt::Debug for Pair {
             Self::OuterAttr => write!(f, "#["),
             Self::InnerAttr => write!(f, "#!["),
             Self::EndAttr => write!(f, "]"),
-            Self::RsSquareOpen => write!(f, "["),
-            Self::RsSquareClose => write!(f, "]"),
         }
     }
 }
@@ -2086,7 +2091,7 @@ macro_rules! T {
 
 	// op
 	[ + ] => { TokenCode::Op(Op::Add) };
-	[ ~ ] => { TokenCode::Op(Op::Sub) };
+	[ - ] => { TokenCode::Op(Op::Sub) };
 	[ * ] => { TokenCode::Op(Op::Star) };
 	[ / ] => { TokenCode::Op(Op::Div) };
 	[ % ] => { TokenCode::Op(Op::Rem) };
@@ -2132,7 +2137,7 @@ macro_rules! T {
 	[ = ] => { TokenCode::Assign(Assign::Assign) };
 	[ := ] => { TokenCode::Assign(Assign::Declare) };
 	[ += ] => { TokenCode::Assign(Assign::Add) };
-	[ ~= ] => { TokenCode::Assign(Assign::Sub) };
+	[ -= ] => { TokenCode::Assign(Assign::Sub) };
 	[ *= ] => { TokenCode::Assign(Assign::Star) };
 	[ /= ] => { TokenCode::Assign(Assign::Div) };
 	[ %= ] => { TokenCode::Assign(Assign::Rem) };
@@ -2155,13 +2160,5 @@ macro_rules! T {
 	[ "`]" ] => { TokenCode::Pair(Pair::ArrayClose) };
 	[ "#[" ] => { TokenCode::Pair(Pair::OuterAttr) };
 	[ "#![" ] => { TokenCode::Pair(Pair::InnerAttr) };
-
-    // pure Rust, used in macro
-	[ "rs:func" ] => { TokenCode::Keyword(Keyword::RsFunc) };
-	[ "rs:macro" ] => { TokenCode::Keyword(Keyword::RsMacro) };
-	[ "rs:ret" ] => { TokenCode::Keyword(Keyword::RsRet) };
-	[ "rs:.." ] => { TokenCode::Op(Op::RsDotDot) };
-	[ "rs:[" ] => { TokenCode::Pair(Pair::RsSquareOpen) };
-	[ "rs:]" ] => { TokenCode::Pair(Pair::RsSquareClose) };
 }
 pub(crate) use T;

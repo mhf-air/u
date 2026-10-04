@@ -73,7 +73,7 @@ impl Parse {
 
             p -= 1;
             m.insert(T![+], p);
-            m.insert(T![~], p);
+            m.insert(T![-], p);
 
             p -= 1;
             m.insert(T![<<], p);
@@ -127,17 +127,17 @@ impl Parse {
         LangFormatter::new(&s.tokens, &s.end_tokens)
     }
 
-    pub fn to_rust(self) -> Result<ToRust, ParseError> {
-        let s = self;
-        let mut p = LangFormatter::new(&s.tokens, &s.end_tokens);
-        s.pkg.to_rust(&mut p);
-        Ok(p.to_rust())
-    }
-
-    pub fn to_u(self) -> String {
+    pub fn to_u(self) -> Result<ToU, ParseError> {
         let s = self;
         let mut p = LangFormatter::new(&s.tokens, &s.end_tokens);
         s.pkg.to_u(&mut p);
+        Ok(p.to_u())
+    }
+
+    pub fn to_rs(self) -> String {
+        let s = self;
+        let mut p = LangFormatter::new(&s.tokens, &s.end_tokens);
+        s.pkg.to_rs(&mut p);
         p.buf()
     }
 
@@ -309,7 +309,7 @@ impl Parse {
         if s.tokens.is_empty() {
             return Ok(());
         }
-        let u_pair = UPair {
+        let rs_pair = RsPair {
             start: 0,
             end: s.tokens.len(),
         };
@@ -328,7 +328,7 @@ impl Parse {
             s.pkg = Package {
                 shebang,
                 end_tokens,
-                u_pair,
+                rs_pair,
                 ..Default::default()
             };
             return Ok(());
@@ -371,7 +371,7 @@ impl Parse {
             inner_attrs,
             items,
             end_tokens,
-            u_pair,
+            rs_pair,
         };
         Ok(())
     }
@@ -712,7 +712,7 @@ impl Parse {
                 T![_]
                 | T![=]
                 | T![+=]
-                | T![~=]
+                | T![-=]
                 | T![*=]
                 | T![/=]
                 | T![%=]
@@ -3086,7 +3086,7 @@ impl Parse {
             match &token.code {
                 // Expr op Expr
                 T![+]
-                | T![~]
+                | T![-]
                 | T![*]
                 | T![/]
                 | T![%]
@@ -3242,7 +3242,7 @@ impl Parse {
 
                     match op.code {
                         T![+]
-                        | T![~]
+                        | T![-]
                         | T![*]
                         | T![/]
                         | T![%]
@@ -3365,7 +3365,7 @@ impl Parse {
                 }
                 // compound assignment
                 T![+=]
-                | T![~=]
+                | T![-=]
                 | T![*=]
                 | T![/=]
                 | T![%=]
@@ -3479,18 +3479,6 @@ impl Parse {
                             ExprOperator::IncDec(ExprIncDec {
                                 expr,
                                 inc: true,
-                            }),
-                        ))),
-                    };
-                }
-                // Expr~~
-                T![~~] => {
-                    expr = Expr {
-                        outer_attrs: Attrs::default(),
-                        payload: ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
-                            ExprOperator::IncDec(ExprIncDec {
-                                expr,
-                                inc: false,
                             }),
                         ))),
                     };
@@ -4148,7 +4136,7 @@ impl Parse {
         matches!(code,
             T![")"] | T!["`]"] | T!["{"] | T![;] | T![,] |
             T![==] | T![!=] | T![>] | T![>=] | T![<=] |
-            T![=] | T![+=] | T![~=] | T![*=] | T![/=] | T![%=] |
+            T![=] | T![+=] | T![-=] | T![*=] | T![/=] | T![%=] |
             T![&=] | T![|=] | T![^=] | T![<<=] | T![>>=]
         )
     }
@@ -4213,7 +4201,6 @@ impl Parse {
                     let token = s.current();
                     if matches!(&token.code, T![|]) {
                         r.t_delim_close = token.clone();
-                        r.t_delim_close.code = T!["rs:]"];
                         s.plusplus();
                         break;
                     }
@@ -4308,7 +4295,7 @@ impl Parse {
         let end = s.index.get();
         let r = Type {
             payload,
-            u_pair: UPair{start, end},
+            rs_pair: RsPair{start, end},
         };
         return Ok(r);
     }
@@ -4993,7 +4980,7 @@ impl Parse {
                     s.plusplus();
                     GenericArg::Const(GenericArgsConst::LiteralExpr(ExprLiteral(token.clone())))
                 }
-                T![~] => {
+                T![-] => {
                     s.plusplus();
                     let next_token = s.current();
                     if let TokenCode::Literal(_) = &next_token.code {
@@ -5235,7 +5222,7 @@ impl Parse {
         s.plusplus();
         match &token.code {
             // literal
-            T![~] | TokenCode::Literal(_) => {
+            T![-] | TokenCode::Literal(_) => {
                 let pattern_literal = if let TokenCode::Literal(_) = &token.code {
                     PatternLiteral {
                         name: token.clone(),
@@ -5259,7 +5246,7 @@ impl Parse {
                         s.plusplus();
                         let next_token = s.current();
                         if matches!(next_token.code,
-                            T![~]
+                            T![-]
                             | TokenCode::Literal(_)
                             | TokenCode::Identifier(_)
                             | T![super] | T![self] | T![Self] | T![crate]

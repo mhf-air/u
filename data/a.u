@@ -269,10 +269,13 @@ identifier func() {
 
     c- = "c-"
     -c = "-c"
+    -A = "-A"
     aa = "aa"
-    aA = "aA"
     Aa = "Aa"
-    AA = "AA"
+
+    // the following two cases are forbidden
+    // aA = "aA"
+    // AA = "AA"
 
     -- = "--"
     --- = "---"

@@ -100,11 +100,16 @@ impl CmdNone {
 
             // CmdFmt::new(vec!["data/f.u".to_string()]).run()?;
 
-            let filepath = "data/r.rs";
-            let buf = compile_from_rust(filepath).unwrap();
+            // let u_to_rs = true;
+            let u_to_rs = false;
 
-            // let filepath = "data/a.u";
-            // let buf = compile_to_rust(filepath).unwrap();
+            let buf = if u_to_rs {
+                let filepath = "data/a.u";
+                compile_to_rs(filepath).unwrap()
+            } else {
+                let filepath = "data/r.rs";
+                compile_from_rust(filepath).unwrap()
+            };
 
             println!("{}", buf);
             Ok(())
@@ -140,12 +145,12 @@ impl CmdCompile {
             return Ok(());
         }
 
-        s.to_rust()?;
+        s.to_rs()?;
 
         Ok(())
     }
 
-    fn to_rust(&self) -> io::Result<()> {
+    fn to_rs(&self) -> io::Result<()> {
         let s = self;
 
         let rs_path = s.get_rs_path()?;
@@ -155,7 +160,7 @@ impl CmdCompile {
 
         if rs_path.file_name().unwrap() == "mod.rs" {
             // detect lex errors
-            let r = compile_to_rust(&s.src);
+            let r = compile_to_rs(&s.src);
             if let Err(err) = r {
                 println!("{}", err);
                 return Ok(());
@@ -164,7 +169,7 @@ impl CmdCompile {
             return Ok(());
         }
 
-        let r = compile_to_rust(&s.src);
+        let r = compile_to_rs(&s.src);
         if let Err(err) = r {
             println!("{}", err);
             return Ok(());
@@ -330,7 +335,7 @@ impl CmdCompile {
             }
 
             // to rust
-            match p.to_rust() {
+            match p.to_rs() {
                 Err(_) => {
                     return Err(io::Error::new(io::ErrorKind::Other, "to rust error"));
                 }
@@ -787,12 +792,12 @@ path = "main.rs"
 
             let main_file = format!("../../../crates/{}/main.u", crate_name);
             if Path::new(&main_file).exists() {
-                let main = compile_to_rust(&main_file).unwrap();
+                let main = compile_to_rs(&main_file).unwrap();
                 io_func!(fs::write("main.rs", main), || "main.rs");
             }
             let lib_file = format!("../../../crates/{}/lib.u", crate_name);
             if Path::new(&lib_file).exists() {
-                let main = compile_to_rust(&lib_file).unwrap();
+                let main = compile_to_rs(&lib_file).unwrap();
                 io_func!(fs::write("lib.rs", main), || "lib.rs");
             } else {
                 io_func!(write_default_lib_rs("lib.rs"), || "lib.rs");
@@ -833,7 +838,7 @@ path = "main.rs"
                 if path.is_dir() {
                     visit_src(&CmdCompile { src: path_str }, &format!("{}/{}", dir, name))?;
                 } else if name != "mod" {
-                    let src = compile_to_rust(&path_str).unwrap();
+                    let src = compile_to_rs(&path_str).unwrap();
                     io_func!(fs::write(&format!("{}/{}.rs", dir, name), &src), || &src);
                 }
             }
@@ -861,7 +866,7 @@ path = "main.rs"
                         visit_src(compile, &dir_name)?;
                     }
                 } else {
-                    let src = compile_to_rust(&path_str).unwrap();
+                    let src = compile_to_rs(&path_str).unwrap();
                     io_func!(fs::write(&format!("{}/{}.rs", dir, name), &src), || &src);
                 }
             }
@@ -891,7 +896,7 @@ fn check_status(status: process::ExitStatus) -> io::Result<()> {
 }
 
 // --------------------------------------------------------------------------------
-fn compile_to_rust(filepath: &str) -> Result<String, String> {
+fn compile_to_rs(filepath: &str) -> Result<String, String> {
     let data = fs::read_to_string(&filepath).unwrap();
 
     let mut l = cc::lex::Lex::new();
@@ -904,7 +909,7 @@ fn compile_to_rust(filepath: &str) -> Result<String, String> {
         return Err(serde_json::to_string(&err).unwrap());
     }
 
-    match p.to_rust() {
+    match p.to_rs() {
         Err(err) => Err(serde_json::to_string(&err).unwrap()),
         Ok(f) => {
             Ok(f.buf)
@@ -930,7 +935,7 @@ fn compile_from_rust(filepath: &str) -> Result<String, String> {
         return Err(serde_json::to_string(&err).unwrap());
     }
 
-    match p.to_rust() {
+    match p.to_u() {
         Err(err) => Err(serde_json::to_string(&err).unwrap()),
         Ok(f) => {
             Ok(f.buf)

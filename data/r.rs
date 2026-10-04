@@ -8,4 +8,4 @@
     another form of inner doc comment
 */
 
-#![allow(unused-uses)]
+#![allow(unused_uses)]

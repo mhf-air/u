@@ -127,11 +127,11 @@ impl Parse {
         LangFormatter::new(&s.tokens, &s.end_tokens)
     }
 
-    pub fn to_rust(self) -> Result<ToRust, ParseError> {
+    pub fn to_rs(self) -> Result<ToRust, ParseError> {
         let s = self;
         let mut p = LangFormatter::new(&s.tokens, &s.end_tokens);
-        s.pkg.to_rust(&mut p);
-        Ok(p.to_rust())
+        s.pkg.to_rs(&mut p);
+        Ok(p.to_rs())
     }
 
     pub fn to_u(self) -> String {
@@ -4213,7 +4213,6 @@ impl Parse {
                     let token = s.current();
                     if matches!(&token.code, T![|]) {
                         r.t_delim_close = token.clone();
-                        r.t_delim_close.code = T!["rs:]"];
                         s.plusplus();
                         break;
                     }
