@@ -9,3 +9,9 @@
 */
 
 #![allow(unused_uses)]
+
+extern crate foo as _;
+extern crate std;
+extern crate std as ruststd;
+
+const NAME: &str = "hello";

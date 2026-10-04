@@ -1,7 +1,6 @@
 use crate::rs::ra::*;
 use crate::rs::rl::{
-    Token, TokenCode, Span, Keyword, Pair, Op, Assign,
-    Lex, Identifier, Literal, LiteralPayload, T,
+    Token, TokenCode, Span, Keyword, Pair, Op, Assign, Lex, Literal, LiteralPayload, T,
 };
 use serde::Serialize;
 use std::cell::Cell;
@@ -420,10 +419,14 @@ impl Parse {
             return Err(s.panic(&s.current(), "expected Stmt"));
         }
 
-        // get_first_special_token
-        let first_special_token = s.get_first_special_token()?;
+        let vis = if matches!(s.current().code, T![pub]) {
+            s.parse_vis()?
+        } else {
+            Visibility::default()
+        };
 
-        if first_special_token.is_none() {
+        // get_first_special_token
+        let Some(first_special_token) = s.get_first_special_token()? else {
             // parse expr
             let expr = s.parse_expr()?;
             let token = s.current();
@@ -457,10 +460,10 @@ impl Parse {
             } else {
                 return Ok(Stmt::Expr(expr));
             }
-        }
+        };
 
         let stmt: Stmt;
-        let special_token = first_special_token.unwrap();
+        let special_token = first_special_token;
         match &special_token.code {
             T![:=] => {
                 let mut a = s.parse_let()?;
@@ -513,7 +516,7 @@ impl Parse {
                         let a = s.parse_crate()?;
                         stmt = Stmt::Item(Item {
                             outer_attrs,
-                            vis: Visibility::default(),
+                            vis,
                             payload: ItemPayload::Crate(a),
                         });
                     } else {
@@ -528,14 +531,11 @@ impl Parse {
                     }
                 }
                 Keyword::Const => {
-                    let n = s.parse_identifier_pub()?;
-                    s.expect(T![const])?;
                     let mut a = s.parse_const()?;
-                    a.name = n.name;
                     a.t_const = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        vis: n.vis,
+                        vis,
                         payload: ItemPayload::Const(a),
                     });
                 }
@@ -686,104 +686,13 @@ impl Parse {
     fn get_first_special_token(&self) -> ParseResult<Option<&Token>> {
         let s = self;
 
-        // get the tokens from after identifier to the first semicolon(;) or
-        // opening brace({), skipping pairs(parens, etc.) in the process
-        let mut first_special_token: Option<&Token> = None;
-        let mut start = s.index.get();
-        while start < s.tokens.len() {
-            let token = &s.tokens[start];
-            start += 1;
-            match &token.code {
-                T![;] => {
-                    break;
-                }
-                T!["}"] => {
-                    break;
-                }
-
-                TokenCode::Pair(_) => {
-                    start = s.skip_pair(start, token)?;
-                }
-                T![:=] | T![->] => {
-                    first_special_token = Some(token);
-                    break;
-                }
-
-                T![_]
-                | T![=]
-                | T![+=]
-                | T![-=]
-                | T![*=]
-                | T![/=]
-                | T![%=]
-                | T![&=]
-                | T![|=]
-                | T![^=]
-                | T![<<=]
-                | T![>>=] => {
-                    break;
-                }
-
-                T![if] | T![for] | T![match] => {
-                    break;
-                }
-
-                TokenCode::Keyword(keyword) => {
-                    if start >= 2 {
-                        let prev_token = &s.tokens[start - 2];
-                        match prev_token.code {
-                            T![.] | T![..] => {
-                                // skip variables used in third-party code,
-                                // like a.trait or a..trait
-                                continue;
-                            }
-                            _ => (),
-                        }
-                    }
-
-                    match keyword {
-                        Keyword::Const => {
-                            if start >= 2 {
-                                // for case like that:
-                                // ret r as *const T as *const c-void
-                                let last_token = &s.tokens[start - 2];
-                                if matches!(&last_token.code, T![*]) {
-                                    continue;
-                                }
-                            }
-                            let next_token = &s.tokens[start];
-                            if !matches!(&next_token.code, T!["{"]) {
-                                first_special_token = Some(token);
-                                break;
-                            }
-                        }
-                        Keyword::Use
-                        | Keyword::Extern
-                        | Keyword::Enum
-                        | Keyword::Func
-                        | Keyword::Impl
-                        | Keyword::Let
-                        | Keyword::Trait
-                        | Keyword::Macro
-                        | Keyword::Mod
-                        | Keyword::Static
-                        | Keyword::Struct
-                        | Keyword::Type
-                        | Keyword::Union => {
-                            first_special_token = Some(token);
-                            break;
-                        }
-                        // NOTE impl trait are not allowed outside of function and
-                        // inherent method return types
-                        // for implementing complicated types that involve function pointers,
-                        // wrap them in parens
-                        _ => {}
-                    }
-                }
-
-                _ => (),
-            }
-        }
+        let token = s.current();
+        let first_special_token = match &token.code {
+            T![const] | T![use] | T![extern] | T![enum] | T![fn] | T![impl]
+            | T![let] | T![trait] | T![mod] | T![static] | T![type] | T![union]
+            => Some(token),
+            _ => return Ok(None),
+        };
 
         Ok(first_special_token)
     }
@@ -879,21 +788,7 @@ impl Parse {
     }
 
     fn parse_identifier_pub(&self) -> ParseResult<IdentifierPlus> {
-        let s = self;
-
-        let mut r = IdentifierPlus::default();
-
-        let token = s.current();
-        r.name = token.clone();
-        s.plusplus();
-
-        // expect identifier
-        let TokenCode::Identifier(identifier) = &token.code else {
-            return Err(s.panic(token, &format!("expected identifier, but got {:?}", token)));
-        };
-        s.check_identifier(identifier, &token)?;
-
-        r.vis = s.parse_vis()?;
+        let r = IdentifierPlus::default();
 
         Ok(r)
     }
@@ -914,33 +809,6 @@ impl Parse {
         }
 
         Ok(r)
-    }
-
-    fn check_identifier(&self, a: &Identifier, token: &Token) -> ParseResult<()> {
-        let s = self;
-        let id = &a.id;
-
-        if id.is_empty() {
-            return Ok(());
-        }
-        let chars: Vec<char> = id.chars().collect();
-        if !chars[0].is_uppercase() {
-            return Ok(());
-        }
-        if chars.ends_with(&['-', '-', 'r']) {
-            return Ok(());
-        }
-        let list = chars.split(|c| *c == '-');
-        for word in list {
-            if word.is_empty() {
-                continue;
-            }
-            match word[0] {
-                '0'..='9' => return Err(s.panic(token, "forbid '-' followed by digit")),
-                _ => {}
-            }
-        }
-        Ok(())
     }
 
     fn parse_generics(&self) -> ParseResult<Generics> {
@@ -2174,6 +2042,19 @@ impl Parse {
         let s = self;
 
         let mut r = Const::default();
+
+        s.expect(T![const])?;
+
+        let token = s.current();
+        r.name = token.clone();
+        s.plusplus();
+        if !matches!(&token.code, TokenCode::Identifier(_)) {
+            return Err(s.panic(
+                token,
+                &format!("expected identifier but got {:?}", token),
+            ));
+        }
+        s.expect(T![:])?;
 
         r.type_ = s.parse_type()?;
 

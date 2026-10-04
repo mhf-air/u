@@ -1603,7 +1603,7 @@ impl Identifier {
             if *c != '_' {
                 break;
             }
-            p.push('_');
+            p.push('-');
             i += 1;
         }
         let chars = &chars[i..];

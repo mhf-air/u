@@ -397,7 +397,6 @@ impl ToLang for Crate {
             alias.0.to_u(p);
             alias.1.to_u(p);
         }
-        p.push_raw(";");
     }
 }
 
@@ -1046,16 +1045,15 @@ impl ToLang for Const {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        p.push_raw("const");
         s.t_const.to_u_before(p);
         s.name.to_u_one(p);
-        p.push_raw(":");
+        s.name.to_u_before(p);
+        p.push_raw("const");
         s.type_.to_u(p);
         if let Some((t_eq, expr)) = &s.expr {
             t_eq.to_u(p);
             expr.to_u(p);
         }
-        p.push_raw(";");
     }
 }
 
