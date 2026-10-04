@@ -276,6 +276,8 @@ identifier func() {
     // the following two cases are forbidden
     // aA = "aA"
     // AA = "AA"
+    // A--b = ""
+    // A-1 = ""
 
     -- = "--"
     --- = "---"

@@ -19,6 +19,7 @@ I like Rust's semantics, but dislike some of its syntax
     - anYThInGcUsTom--r for anYThInGcUsTom
     - leading '-' are preserved, so -Order-item will be _OrderItem
     - forbid aA and AA, use aA--r and aa--c instead, but A is allowed
+    - forbid A--b and A-1, use A-b and A1 instead
 
     as for identifiers containing digit, consider digits as lower-case letters.
 

@@ -1,7 +1,6 @@
 use crate::compile::ast::*;
 use crate::compile::lex::{
-    Token, TokenCode, Span, Keyword, Pair, Op, Assign,
-    Lex, Identifier, Literal, LiteralPayload, T,
+    Token, TokenCode, Span, Keyword, Pair, Op, Assign, Lex, Literal, LiteralPayload, T,
 };
 use serde::Serialize;
 use std::cell::Cell;
@@ -883,10 +882,9 @@ impl Parse {
         s.plusplus();
 
         // expect identifier
-        let TokenCode::Identifier(identifier) = &token.code else {
+        if !matches!(&token.code, TokenCode::Identifier(_)) {
             return Err(s.panic(token, &format!("expected identifier, but got {:?}", token)));
-        };
-        s.check_identifier(identifier, &token)?;
+        }
 
         r.vis = s.parse_vis()?;
 
@@ -909,33 +907,6 @@ impl Parse {
         }
 
         Ok(r)
-    }
-
-    fn check_identifier(&self, a: &Identifier, token: &Token) -> ParseResult<()> {
-        let s = self;
-        let id = &a.id;
-
-        if id.is_empty() {
-            return Ok(());
-        }
-        let chars: Vec<char> = id.chars().collect();
-        if !chars[0].is_uppercase() {
-            return Ok(());
-        }
-        if chars.ends_with(&['-', '-', 'r']) {
-            return Ok(());
-        }
-        let list = chars.split(|c| *c == '-');
-        for word in list {
-            if word.is_empty() {
-                continue;
-            }
-            match word[0] {
-                '0'..='9' => return Err(s.panic(token, "forbid '-' followed by digit")),
-                _ => {}
-            }
-        }
-        Ok(())
     }
 
     fn parse_generics(&self) -> ParseResult<Generics> {

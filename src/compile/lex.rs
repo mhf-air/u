@@ -1898,6 +1898,26 @@ impl Identifier {
             if all_caps {
                 return lex.panic("all uppercase letters with length more than 1 except leading '-'");
             }
+
+            let mut has_dash = false;
+            for c in chars {
+                if *c == '-' {
+                    // no A--B
+                    if has_dash {
+                        return lex.panic("\"--\" is not allowed in Snake-case");
+                    }
+                    has_dash = true;
+                } else {
+                    if has_dash {
+                        has_dash = false;
+                        // no A-1
+                        if !c.is_lowercase() {
+                            return lex.panic(
+                                "the character after '-' must be lowercase in Snake-case");
+                        }
+                    }
+                }
+            }
         }
 
         Ok(())
