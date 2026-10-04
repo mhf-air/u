@@ -100,8 +100,8 @@ impl CmdNone {
 
             // CmdFmt::new(vec!["data/f.u".to_string()]).run()?;
 
-            let u_to_rs = true;
-            // let u_to_rs = false;
+            // let u_to_rs = true;
+            let u_to_rs = false;
 
             let buf = if u_to_rs {
                 let filepath = "data/a.u";

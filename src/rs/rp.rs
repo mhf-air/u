@@ -448,7 +448,6 @@ impl Parse {
                     call.is_stmt = true;
                     return Ok(Stmt::Item(Item {
                         outer_attrs,
-                        vis: Visibility::default(),
                         payload: ItemPayload::MacroCall(call),
                     }));
                 } else {
@@ -505,9 +504,9 @@ impl Parse {
                     let vis = s.parse_vis()?;
                     let mut a = s.parse_use()?;
                     a.t_use = token.clone();
+                    a.vis = vis;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        vis,
                         payload: ItemPayload::Use(a),
                     });
                 }
@@ -516,7 +515,6 @@ impl Parse {
                         let a = s.parse_crate()?;
                         stmt = Stmt::Item(Item {
                             outer_attrs,
-                            vis,
                             payload: ItemPayload::Crate(a),
                         });
                     } else {
@@ -525,7 +523,6 @@ impl Parse {
                         a.t_extern = special_token.clone();
                         stmt = Stmt::Item(Item {
                             outer_attrs,
-                            vis: Visibility::default(),
                             payload: ItemPayload::Extern(a),
                         });
                     }
@@ -533,9 +530,9 @@ impl Parse {
                 Keyword::Const => {
                     let mut a = s.parse_const()?;
                     a.t_const = special_token.clone();
+                    a.vis = vis;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        vis,
                         payload: ItemPayload::Const(a),
                     });
                 }
@@ -544,11 +541,11 @@ impl Parse {
                     s.expect(T![enum])?;
                     let mut a = s.parse_enum()?;
                     a.name = n.name;
+                    a.vis = n.vis;
                     a.generics = n.generics;
                     a.t_enum = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        vis: n.vis,
                         payload: ItemPayload::Enum(a),
                     });
                 }
@@ -564,12 +561,12 @@ impl Parse {
 
                     let mut a = s.parse_func()?;
                     a.name = n.name;
+                    a.vis = n.vis;
                     a.generics = n.generics;
                     a.self_param = self_param;
                     a.t_func = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        vis: n.vis,
                         payload: ItemPayload::Func(Box::new(a)),
                     });
                 }
@@ -579,7 +576,6 @@ impl Parse {
                     a.t_impl = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        vis: Visibility::default(),
                         payload: ItemPayload::Impl(a),
                     });
                 }
@@ -588,11 +584,11 @@ impl Parse {
                     s.expect(T![trait])?;
                     let mut a = s.parse_trait()?;
                     a.name = n.name;
+                    a.vis = n.vis;
                     a.generics = n.generics;
                     a.t_trait = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        vis: n.vis,
                         payload: ItemPayload::Trait(a),
                     });
                 }
@@ -604,7 +600,6 @@ impl Parse {
                     a.t_macro = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        vis: n.vis,
                         payload: ItemPayload::Macro(a),
                     });
                 }
@@ -613,10 +608,10 @@ impl Parse {
                     s.expect(T![mod])?;
                     let mut a = s.parse_mod()?;
                     a.name = n.name;
+                    a.vis = n.vis;
                     a.t_mod = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        vis: n.vis,
                         payload: ItemPayload::Mod(a),
                     });
                 }
@@ -625,10 +620,10 @@ impl Parse {
                     s.expect(T![static])?;
                     let mut a = s.parse_static()?;
                     a.name = n.name;
+                    a.vis = n.vis;
                     a.t_static = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        vis: n.vis,
                         payload: ItemPayload::Static(a),
                     });
                 }
@@ -637,11 +632,11 @@ impl Parse {
                     s.expect(T![struct])?;
                     let mut a = s.parse_struct()?;
                     a.name = n.name;
+                    a.vis = n.vis;
                     a.generics = n.generics;
                     a.t_struct = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        vis: n.vis,
                         payload: ItemPayload::Struct(a),
                     });
                 }
@@ -650,11 +645,11 @@ impl Parse {
                     s.expect(T![union])?;
                     let mut a = s.parse_union()?;
                     a.name = n.name;
+                    a.vis = n.vis;
                     a.generics = n.generics;
                     a.t_union = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        vis: n.vis,
                         payload: ItemPayload::Union(a),
                     });
                 }
@@ -663,11 +658,11 @@ impl Parse {
                     s.expect(T![type])?;
                     let mut a = s.parse_type_alias()?;
                     a.name = n.name;
+                    a.vis = n.vis;
                     a.generics = n.generics;
                     a.t_type = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
-                        vis: n.vis,
                         payload: ItemPayload::TypeAlias(a),
                     });
                 }
@@ -789,7 +784,6 @@ impl Parse {
 
     fn parse_identifier_pub(&self) -> ParseResult<IdentifierPlus> {
         let r = IdentifierPlus::default();
-
         Ok(r)
     }
 
@@ -1348,21 +1342,18 @@ impl Parse {
                         r.items.push(ExternalBlockItem {
                             outer_attrs: item.outer_attrs,
                             payload: ExternalBlockItemPayload::Func(*a),
-                            vis: item.vis,
                         });
                     }
                     ItemPayload::Static(a) => {
                         r.items.push(ExternalBlockItem {
                             outer_attrs: item.outer_attrs,
                             payload: ExternalBlockItemPayload::Static(a),
-                            vis: item.vis,
                         });
                     }
                     ItemPayload::MacroCall(a) => {
                         r.items.push(ExternalBlockItem {
                             outer_attrs: item.outer_attrs,
                             payload: ExternalBlockItemPayload::MacroCall(a),
-                            vis: item.vis,
                         });
                     }
                     _ => return Err(s.panic(token, "illegal extern item")),
@@ -2158,7 +2149,6 @@ impl Parse {
                     ItemPayload::Func(f) => {
                         let a = AssociatedItem {
                             outer_attrs: item.outer_attrs,
-                            vis: item.vis,
                             payload: AssociatedItemPayload::Func(*f),
                         };
                         r.items.push(a);
@@ -2166,7 +2156,6 @@ impl Parse {
                     ItemPayload::Const(f) => {
                         let a = AssociatedItem {
                             outer_attrs: item.outer_attrs,
-                            vis: item.vis,
                             payload: AssociatedItemPayload::Const(f),
                         };
                         r.items.push(a);
@@ -2174,7 +2163,6 @@ impl Parse {
                     ItemPayload::TypeAlias(f) => {
                         let a = AssociatedItem {
                             outer_attrs: item.outer_attrs,
-                            vis: item.vis,
                             payload: AssociatedItemPayload::TypeAlias(f),
                         };
                         r.items.push(a);
@@ -2183,7 +2171,6 @@ impl Parse {
                         f.is_stmt = true;
                         let a = AssociatedItem {
                             outer_attrs: item.outer_attrs,
-                            vis: item.vis,
                             payload: AssociatedItemPayload::MacroCall(f),
                         };
                         r.items.push(a);
@@ -2275,7 +2262,6 @@ impl Parse {
                 };
                 r.items.push(AssociatedItem {
                     outer_attrs: item.outer_attrs,
-                    vis: item.vis,
                     payload,
                 });
             } else {
