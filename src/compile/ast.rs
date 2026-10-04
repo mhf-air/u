@@ -12,7 +12,6 @@ pub struct LangFormatter<'a> {
     line: usize,
     column: usize,
 
-    in_impl_static: bool,
     no_first_before: bool,
 }
 // Clone required by rust-analyzer
@@ -51,7 +50,6 @@ impl<'a> LangFormatter<'a> {
             line: 1,
             column: 1,
 
-            in_impl_static: false,
             no_first_before: false,
         }
     }
@@ -257,7 +255,6 @@ impl Visibility {
 #[derive(Debug, Default)]
 pub struct Item {
     pub outer_attrs: Attrs,
-    pub vis: Visibility,
     pub payload: ItemPayload,
 }
 impl ToLang for Item {
@@ -265,8 +262,6 @@ impl ToLang for Item {
         let s = self;
 
         s.outer_attrs.to_rs(p);
-        s.payload.to_rs_before(p);
-        s.vis.to_rs(p);
         s.payload.to_rs(p);
     }
 }
@@ -292,34 +287,6 @@ pub enum ItemPayload {
 impl Default for ItemPayload {
     fn default() -> Self {
         ItemPayload::Crate(Crate::default())
-    }
-}
-
-impl ItemPayload {
-    fn to_rs_before(&self, p: &mut LangFormatter) {
-        let s = self;
-        use ItemPayload as A;
-
-        let t_no_before = Token::default();
-
-        let first_u_token = match s {
-            A::Mod(a) => &a.name,
-            A::Crate(a) => &a.t_extern,
-            A::Extern(a) => &a.t_extern,
-            A::Use(a) => &a.t_use,
-            A::Func(a) => &a.name,
-            A::TypeAlias(a) => &a.name,
-            A::Struct(a) => &a.name,
-            A::Enum(a) => &a.name,
-            A::Union(a) => &a.name,
-            A::Const(a) => &a.name,
-            A::Static(a) => &a.name,
-            A::Trait(a) => &a.name,
-            A::Impl(_a) => &t_no_before,
-            A::Macro(a) => &a.name,
-            A::MacroCall(_a) => &t_no_before,
-        };
-        first_u_token.to_rs_before(p);
     }
 }
 
@@ -350,6 +317,7 @@ impl ToLang for ItemPayload {
 
 #[derive(Debug, Default)]
 pub struct Mod {
+    pub vis: Visibility,
     pub name: Token,
     pub inner_attrs: Attrs,
     pub items: Vec<Item>,
@@ -362,6 +330,8 @@ impl ToLang for Mod {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
 
+        s.name.to_rs_before(p);
+        s.vis.to_rs(p);
         s.t_mod.to_rs_one(p);
         s.t_mod.to_rs_before(p);
         s.name.to_rs_one(p);
@@ -381,6 +351,7 @@ impl ToLang for Mod {
 
 #[derive(Debug, Default)]
 pub struct Crate {
+    pub vis: Visibility,
     pub name: Token,
     // AS, ALIAS
     pub alias: Option<(Token, Token)>,
@@ -391,6 +362,8 @@ impl ToLang for Crate {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
 
+        s.t_extern.to_rs_before(p);
+        s.vis.to_rs(p);
         p.push_raw("extern crate ");
         s.name.to_rs_one(p);
         if let Some(alias) = &s.alias {
@@ -403,6 +376,7 @@ impl ToLang for Crate {
 
 #[derive(Debug, Default)]
 pub struct Use {
+    pub vis: Visibility,
     pub item: UseItem,
     pub t_use: Token,
 }
@@ -410,6 +384,8 @@ impl ToLang for Use {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
 
+        s.t_use.to_rs_before(p);
+        s.vis.to_rs(p);
         p.push_raw("use");
         s.item.to_rs(p);
         p.push_raw(";");
@@ -468,6 +444,7 @@ impl ToLang for UseItem {
 
 #[derive(Debug, Default)]
 pub struct Func {
+    pub vis: Visibility,
     pub name: Token,
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
@@ -488,6 +465,9 @@ pub struct Func {
 impl ToLang for Func {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
+
+        s.name.to_rs_before(p);
+        s.vis.to_rs(p);
 
         let mut is_first = true;
 
@@ -737,6 +717,7 @@ pub struct FuncVariadics {
 
 #[derive(Debug, Default)]
 pub struct TypeAlias {
+    pub vis: Visibility,
     pub name: Token,
     pub generics: Option<Generics>,
     pub bounds: TypeParamBounds,
@@ -748,6 +729,9 @@ pub struct TypeAlias {
 impl ToLang for TypeAlias {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
+
+        s.name.to_rs_before(p);
+        s.vis.to_rs(p);
 
         s.t_type.to_rs_one(p);
         s.t_type.to_rs_before(p);
@@ -781,6 +765,7 @@ impl ToLang for TypeAlias {
 
 #[derive(Debug, Default)]
 pub struct Struct {
+    pub vis: Visibility,
     pub name: Token,
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
@@ -795,6 +780,9 @@ pub struct Struct {
 impl ToLang for Struct {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
+
+        s.name.to_rs_before(p);
+        s.vis.to_rs(p);
 
         s.t_struct.to_rs_one(p);
         s.t_struct.to_rs_before(p);
@@ -898,6 +886,7 @@ impl ToLang for TupleField {
 
 #[derive(Debug, Default)]
 pub struct Enum {
+    pub vis: Visibility,
     pub name: Token,
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
@@ -910,6 +899,9 @@ pub struct Enum {
 impl ToLang for Enum {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
+
+        s.name.to_rs_before(p);
+        s.vis.to_rs(p);
 
         s.t_enum.to_rs_one(p);
         s.t_enum.to_rs_before(p);
@@ -998,6 +990,7 @@ pub enum EnumItemPayload {
 
 #[derive(Debug, Default)]
 pub struct Union {
+    pub vis: Visibility,
     pub name: Token,
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
@@ -1010,6 +1003,9 @@ pub struct Union {
 impl ToLang for Union {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
+
+        s.name.to_rs_before(p);
+        s.vis.to_rs(p);
 
         s.t_union.to_rs_one(p);
         s.t_union.to_rs_before(p);
@@ -1036,6 +1032,7 @@ impl ToLang for Union {
 
 #[derive(Debug, Default)]
 pub struct Const {
+    pub vis: Visibility,
     pub name: Token,
     pub type_: Type,
     pub expr: Option<(Token, Expr)>,
@@ -1045,6 +1042,9 @@ pub struct Const {
 impl ToLang for Const {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
+
+        s.name.to_rs_before(p);
+        s.vis.to_rs(p);
 
         p.push_raw("const");
         s.t_const.to_rs_before(p);
@@ -1061,6 +1061,7 @@ impl ToLang for Const {
 
 #[derive(Debug, Default)]
 pub struct Static {
+    pub vis: Visibility,
     pub name: Token,
     pub type_: Type,
     pub expr: Option<(Token, Expr)>,
@@ -1072,6 +1073,9 @@ pub struct Static {
 impl ToLang for Static {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
+
+        s.name.to_rs_before(p);
+        s.vis.to_rs(p);
 
         if let Some(safe) = &s.t_safe {
             safe.to_rs_one(p);
@@ -1097,6 +1101,7 @@ impl ToLang for Static {
 // --------------------------------------------------------------------------------
 #[derive(Debug, Default)]
 pub struct Trait {
+    pub vis: Visibility,
     pub name: Token,
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
@@ -1113,6 +1118,9 @@ pub struct Trait {
 impl ToLang for Trait {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
+
+        s.name.to_rs_before(p);
+        s.vis.to_rs(p);
 
         if let Some(t) = &s.t_unsafe {
             t.to_rs_one(p);
@@ -1149,7 +1157,6 @@ impl ToLang for Trait {
 #[derive(Debug)]
 pub struct AssociatedItem {
     pub outer_attrs: Attrs,
-    pub vis: Visibility,
     pub payload: AssociatedItemPayload,
 }
 impl ToLang for AssociatedItem {
@@ -1159,21 +1166,6 @@ impl ToLang for AssociatedItem {
 
         s.outer_attrs.to_rs(p);
 
-        let t_no_before = Token::default();
-        let first_u_token = match &s.payload {
-            A::Func(a) => &a.name,
-            A::TypeAlias(a) => &a.name,
-            A::Const(a) => &a.name,
-            A::MacroCall(_a) => &t_no_before,
-        };
-        first_u_token.to_rs_before(p);
-
-        // vis only needed here
-        if p.in_impl_static {
-            if !matches!(&s.payload, A::MacroCall(_)) {
-                s.vis.to_rs(p);
-            }
-        }
         match &s.payload {
             A::Func(a) => a.to_rs(p),
             A::Const(a) => a.to_rs(p),
@@ -1242,14 +1234,8 @@ impl ToLang for Impl {
         }
 
         s.inner_attrs.to_rs(p);
-        if matches!(&s.payload, ImplPayload::Static) {
-            p.in_impl_static = true;
-        }
         for it in &s.items {
             it.to_rs(p);
-        }
-        if p.in_impl_static {
-            p.in_impl_static = false;
         }
         s.t_brace_close.to_rs(p);
     }
@@ -1285,6 +1271,7 @@ impl ToLang for Macro {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
 
+        s.name.to_rs_before(p);
         s.t_macro.to_rs_one(p);
         p.push_raw("!");
         s.t_macro.to_rs_before(p);
@@ -1422,6 +1409,7 @@ extern[unsafe?] Abi? {
 */
 #[derive(Debug, Default)]
 pub struct ExternalBlock {
+    pub vis: Visibility,
     pub inner_attrs: Attrs,
     pub items: Vec<ExternalBlockItem>,
 
@@ -1434,6 +1422,9 @@ pub struct ExternalBlock {
 impl ToLang for ExternalBlock {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
+
+        s.t_extern.to_rs_before(p);
+        s.vis.to_rs(p);
 
         if let Some(t) = &s.t_unsafe {
             t.to_rs_one(p);
@@ -1454,7 +1445,6 @@ impl ToLang for ExternalBlock {
 #[derive(Debug)]
 pub struct ExternalBlockItem {
     pub outer_attrs: Attrs,
-    pub vis: Visibility,
     pub payload: ExternalBlockItemPayload,
 }
 impl ToLang for ExternalBlockItem {
@@ -1462,19 +1452,10 @@ impl ToLang for ExternalBlockItem {
         let s = self;
 
         s.outer_attrs.to_rs(p);
-        s.vis.to_rs(p);
         match &s.payload {
-            ExternalBlockItemPayload::Func(a) => {
-                a.name.to_rs_before(p);
-                a.to_rs(p);
-            }
-            ExternalBlockItemPayload::Static(a) => {
-                a.name.to_rs_before(p);
-                a.to_rs(p);
-            }
-            ExternalBlockItemPayload::MacroCall(a) => {
-                a.to_rs(p);
-            }
+            ExternalBlockItemPayload::Func(a) => a.to_rs(p),
+            ExternalBlockItemPayload::Static(a) => a.to_rs(p),
+            ExternalBlockItemPayload::MacroCall(a) => a.to_rs(p),
         }
     }
 }
