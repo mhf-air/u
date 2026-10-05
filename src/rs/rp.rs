@@ -158,10 +158,6 @@ impl Parse {
         let s = self;
         s.index.set(s.index.get() + n);
     }
-    fn dec(&self, n: usize) {
-        let s = self;
-        s.index.set(s.index.get() - n);
-    }
 
     fn has_more(&self) -> bool {
         let s = self;
@@ -426,7 +422,7 @@ impl Parse {
         };
 
         // get_first_special_token
-        let Some(first_special_token) = s.get_first_special_token()? else {
+        let Some(first_special_token) = s.get_first_special_token() else {
             // parse expr
             let expr = s.parse_expr()?;
             let token = s.current();
@@ -501,7 +497,6 @@ impl Parse {
                 Keyword::Use => {
                     let token = s.current();
                     s.expect(T![use])?;
-                    let vis = s.parse_vis()?;
                     let mut a = s.parse_use()?;
                     a.t_use = token.clone();
                     a.vis = vis;
@@ -529,8 +524,8 @@ impl Parse {
                 }
                 Keyword::Const => {
                     let mut a = s.parse_const()?;
-                    a.t_const = special_token.clone();
                     a.vis = vis;
+                    a.t_const = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         payload: ItemPayload::Const(a),
@@ -541,7 +536,7 @@ impl Parse {
                     s.expect(T![enum])?;
                     let mut a = s.parse_enum()?;
                     a.name = n.name;
-                    a.vis = n.vis;
+                    a.vis = vis;
                     a.generics = n.generics;
                     a.t_enum = special_token.clone();
                     stmt = Stmt::Item(Item {
@@ -549,7 +544,7 @@ impl Parse {
                         payload: ItemPayload::Enum(a),
                     });
                 }
-                Keyword::Func => {
+                Keyword::Fn => {
                     let n = s.parse_identifier_pub_generics()?;
 
                     // self param
@@ -561,7 +556,7 @@ impl Parse {
 
                     let mut a = s.parse_func()?;
                     a.name = n.name;
-                    a.vis = n.vis;
+                    a.vis = vis;
                     a.generics = n.generics;
                     a.self_param = self_param;
                     a.t_func = special_token.clone();
@@ -584,7 +579,7 @@ impl Parse {
                     s.expect(T![trait])?;
                     let mut a = s.parse_trait()?;
                     a.name = n.name;
-                    a.vis = n.vis;
+                    a.vis = vis;
                     a.generics = n.generics;
                     a.t_trait = special_token.clone();
                     stmt = Stmt::Item(Item {
@@ -608,7 +603,7 @@ impl Parse {
                     s.expect(T![mod])?;
                     let mut a = s.parse_mod()?;
                     a.name = n.name;
-                    a.vis = n.vis;
+                    a.vis = vis;
                     a.t_mod = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
@@ -616,11 +611,8 @@ impl Parse {
                     });
                 }
                 Keyword::Static => {
-                    let n = s.parse_identifier_pub()?;
-                    s.expect(T![static])?;
                     let mut a = s.parse_static()?;
-                    a.name = n.name;
-                    a.vis = n.vis;
+                    a.vis = vis;
                     a.t_static = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
@@ -632,7 +624,7 @@ impl Parse {
                     s.expect(T![struct])?;
                     let mut a = s.parse_struct()?;
                     a.name = n.name;
-                    a.vis = n.vis;
+                    a.vis = vis;
                     a.generics = n.generics;
                     a.t_struct = special_token.clone();
                     stmt = Stmt::Item(Item {
@@ -645,7 +637,7 @@ impl Parse {
                     s.expect(T![union])?;
                     let mut a = s.parse_union()?;
                     a.name = n.name;
-                    a.vis = n.vis;
+                    a.vis = vis;
                     a.generics = n.generics;
                     a.t_union = special_token.clone();
                     stmt = Stmt::Item(Item {
@@ -658,7 +650,7 @@ impl Parse {
                     s.expect(T![type])?;
                     let mut a = s.parse_type_alias()?;
                     a.name = n.name;
-                    a.vis = n.vis;
+                    a.vis = vis;
                     a.generics = n.generics;
                     a.t_type = special_token.clone();
                     stmt = Stmt::Item(Item {
@@ -678,108 +670,185 @@ impl Parse {
         Ok(stmt)
     }
 
-    fn get_first_special_token(&self) -> ParseResult<Option<&Token>> {
+    fn get_first_special_token(&self) -> Option<&Token> {
         let s = self;
 
         let token = s.current();
-        let first_special_token = match &token.code {
-            T![const] | T![use] | T![extern] | T![enum] | T![fn] | T![impl]
-            | T![let] | T![trait] | T![mod] | T![static] | T![type] | T![union]
-            => Some(token),
-            _ => return Ok(None),
-        };
 
-        Ok(first_special_token)
+        let mut is_func = false;
+
+        match &token.code {
+            T![use] | T![enum] | T![fn] | T![impl] | T![let] |
+            T![trait] | T![mod] | T![static] | T![type] | T![union]
+            => {
+                return Some(token);
+            }
+            T![const] => {
+                let t1 = s.nth(1);
+                match &t1.code {
+                    T!["{"] => {
+                        return None;
+                    }
+                    // const IDENTIFIER
+                    TokenCode::Identifier(_) => {
+                        return Some(token);
+                    }
+                    // const async? [safe|unsafe]? (extern Abi?)? fn
+                    _ => {
+                        is_func = true;
+                    }
+                }
+            }
+            T![async] => {
+                let t1 = s.nth(1);
+                if matches!(t1.code, T![move] | T!["{"]) {
+                    return None;
+                }
+                // async [safe|unsafe]? (extern Abi?)? fn
+                is_func = true;
+            }
+            T![unsafe] => {
+                let t1 = s.nth(1);
+                match &t1.code {
+                    // unsafe mod
+                    // unsafe static
+                    // unsafe fn
+                    // unsafe trait
+                    // unsafe impl
+                    T![mod] | T![static] | T![fn] | T![trait] | T![impl] => {
+                        return Some(t1);
+                    }
+                    T![extern] => {
+                        let t2 = s.nth(2);
+                        match &t2.code {
+                            // unsafe extern {}
+                            T!["{"] => {
+                                return Some(token);
+                            }
+                            // unsafe extern fn
+                            T![fn] => {
+                                return Some(t2);
+                            }
+                            _ => {}
+                        }
+                        let t3 = s.nth(3);
+                        // unsafe extern Abi fn
+                        if matches!(t3.code, T![fn]) {
+                            return Some(t3);
+                        }
+                        // unsafe extern Abi {}
+                        return Some(token);
+                    }
+                    _ => {}
+                }
+            }
+            T![extern] => {
+                let t1 = s.nth(1);
+                match &t1.code {
+                    // extern crate
+                    // extern {}
+                    T![crate] | T!["{"] => {
+                        return Some(token);
+                    }
+                    // extern fn
+                    T![fn] => {
+                        return Some(t1);
+                    }
+                    _ => {}
+                }
+                let t2 = s.nth(2);
+                match &t2.code {
+                    // extern Abi {}
+                    T!["{"] => {
+                        return Some(token);
+                    }
+                    // extern Abi fn
+                    T![fn] => {
+                        return Some(t2);
+                    }
+                    _ => {}
+                }
+            }
+            TokenCode::Identifier(a) if a.prefix.is_none() && a.id == "safe" => {
+                // safe static
+                // safe fn
+                // safe extern Abi? fn
+                let t1 = s.nth(1);
+                match &t1.code {
+                    T![static] => {
+                        return Some(t1);
+                    }
+                    T![fn] => {
+                        return Some(t1);
+                    }
+                    T![extern] => {
+                        is_func = true;
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
+
+        // const? async? [safe|unsafe]? (extern Abi?)? fn
+        if is_func {
+            let mut i = 0;
+            while i < s.tokens.len() {
+                let token = s.nth(i);
+                if matches!(token.code, T![fn]) {
+                    return Some(token);
+                }
+                i += 1;
+            }
+        }
+
+        return None;
     }
 
     // --------------------------------------------------------------------------------
-    // parse lhs of first special token
 
     fn parse_vis(&self) -> ParseResult<Visibility> {
         let s = self;
 
-        // default
-        let plus_token = s.current();
-        match &plus_token.code {
-            T![+] => {
-                s.plusplus();
-            }
-            T![^] => {
-                s.plusplus();
-                return Ok(Visibility {
-                    payload: VisibilityPayload::Crate,
-                });
+        let mut r = Visibility {
+            payload: VisibilityPayload::Pub,
+            t_pub: Some(s.current().clone()),
+        };
+        s.plusplus();
+
+        if !matches!(s.current().code, T!["("]) {
+            return Ok(r);
+        };
+        s.plusplus();
+
+        // pub(sth)
+        let token = s.current();
+        s.plusplus();
+        match &token.code {
+            T![self] => r.payload = VisibilityPayload::Private(true),
+            T![super] => r.payload = VisibilityPayload::Super,
+            T![crate] => r.payload = VisibilityPayload::Crate,
+            T![in] => {
+                let items = s.parse_path_expr_segments()?;
+                let mut path = SimplePath::default();
+                for item in items {
+                    if !item.generic_args.items.is_empty() {
+                        return Err(s.panic(token, "pub can't contain generic params"));
+                    }
+                    let result = SimplePathSegment::try_from(item);
+                    let Ok(a) = result else {
+                        return Err(s.panic(token, "pub can't contain Self"));
+                    };
+                    path.items.push(a);
+                }
+                r.payload = VisibilityPayload::SimplePath(path);
             }
             _ => {
-                return Ok(Visibility::default());
+                return Err(s.panic(token, "illegal token after 'pub ('"));
             }
         }
-
-        // +
-        if !matches!(s.current().code, T!["("]) {
-            return pub_vis();
-        };
-
-        // the token after '+('
-        let token = s.nth(1);
-        // + ()
-        if matches!(token.code, T![")"]) {
-            return pub_vis();
-        }
-
-        // +(sth)
-        if matches!(s.nth(2).code, T![")"]) {
-            s.inc(3);
-            let r = match token.code {
-                T![self] => Visibility {
-                    payload: VisibilityPayload::Private(true),
-                },
-                T![super] => Visibility {
-                    payload: VisibilityPayload::Super,
-                },
-                T![crate] => Visibility {
-                    payload: VisibilityPayload::Crate,
-                },
-                _ => {
-                    // not part of +()
-                    s.dec(3);
-                    Visibility {
-                        payload: VisibilityPayload::Pub,
-                    }
-                }
-            };
-            return Ok(r);
-        }
-
-        // +(in some-path)
-        if matches!(token.code, T![in]) {
-            s.inc(2);
-            let items = s.parse_path_expr_segments()?;
-            let mut path = SimplePath::default();
-            for item in items {
-                if !item.generic_args.items.is_empty() {
-                    return Err(s.panic(token, "pub can't contain generic params"));
-                }
-                let result = SimplePathSegment::try_from(item);
-                let Ok(a) = result else {
-                    return Err(s.panic(token, "pub can't contain Self"));
-                };
-                path.items.push(a);
-            }
-            s.plusplus();
-            let r = Visibility {
-                payload: VisibilityPayload::SimplePath(path),
-            };
-            return Ok(r);
-        }
-
-        return pub_vis();
-
-        fn pub_vis() -> ParseResult<Visibility> {
-            return Ok(Visibility {
-                payload: VisibilityPayload::Pub,
-            });
-        }
+        s.expect(T![")"])?;
+        return Ok(r);
     }
 
     fn parse_identifier_pub(&self) -> ParseResult<IdentifierPlus> {
@@ -2069,6 +2138,8 @@ impl Parse {
 
         let mut r = Static::default();
 
+        s.expect(T![static])?;
+
         let token = s.current();
         if matches!(&token.code, T!["["]) {
             s.plusplus();
@@ -2087,6 +2158,16 @@ impl Parse {
             r.t_mut = Some(token.clone());
             s.plusplus();
         }
+        let token = s.current();
+        r.name = token.clone();
+        s.plusplus();
+        if !matches!(&token.code, TokenCode::Identifier(_)) {
+            return Err(s.panic(
+                token,
+                &format!("expected identifier but got {:?}", token),
+            ));
+        }
+        s.expect(T![:])?;
 
         r.type_ = s.parse_type()?;
 

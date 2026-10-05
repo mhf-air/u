@@ -197,6 +197,7 @@ impl Package {
 #[derive(Debug, Default)]
 pub struct Visibility {
     pub payload: VisibilityPayload,
+    pub t_pub: Option<Token>,
 }
 #[derive(Debug)]
 pub enum VisibilityPayload {
@@ -214,40 +215,28 @@ impl Default for VisibilityPayload {
 impl ToLang for Visibility {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
-        s.to_u_custom(p, true);
-    }
-}
-impl Visibility {
-    fn to_u_custom(&self, p: &mut LangFormatter, with_space: bool) {
-        let s = self;
         use VisibilityPayload as A;
 
-        let mut none = false;
         match &s.payload {
             A::Private(is_self) => {
                 if *is_self {
-                    p.push_raw("pub(self)");
-                } else {
-                    none = true;
+                    p.push_raw("+(self)");
                 }
             }
             A::Pub => {
-                p.push_raw("pub");
+                p.push_raw("+");
             }
             A::Crate => {
-                p.push_raw("pub(crate)");
+                p.push_raw("^");
             }
             A::Super => {
-                p.push_raw("pub(super)");
+                p.push_raw("+(super)");
             }
             A::SimplePath(path) => {
-                p.push_raw("pub(in");
+                p.push_raw("+(in");
                 path.to_u(p);
                 p.push_raw(")");
             }
-        }
-        if with_space && !none {
-            p.push_raw(" ");
         }
     }
 }
@@ -875,7 +864,7 @@ impl ToLang for TupleField {
         let s = self;
 
         s.outer_attrs.to_u(p);
-        s.vis.to_u_custom(p, false);
+        s.vis.to_u(p);
         s.type_.to_u(p);
         if let Some(t) = &s.t_comma {
             t.to_u(p);
@@ -1042,11 +1031,15 @@ impl ToLang for Const {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_const.to_u_before(p);
+        if let Some(t) = &s.vis.t_pub {
+            t.to_u_before(p);
+        } else {
+            s.t_const.to_u_before(p);
+        }
         s.name.to_u_one(p);
-        s.name.to_u_before(p);
         s.vis.to_u(p);
 
+        s.name.to_u_before(p);
         p.push_raw("const");
         s.type_.to_u(p);
         if let Some((t_eq, expr)) = &s.expr {
