@@ -1610,6 +1610,11 @@ impl Identifier {
         if chars.is_empty() {
             return p;
         }
+        // only 1 letter after leading '_' is allowed, whatever it is
+        if chars.len() == 1 {
+            p.push(chars[0]);
+            return p;
+        }
 
         if !chars[0].is_uppercase() {
             let all_small = chars.iter().all(|it| !it.is_uppercase());

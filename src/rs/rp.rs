@@ -47,10 +47,35 @@ pub struct Parse {
 
 impl Parse {
     pub fn new(lex: Lex) -> Parse {
+        let mut tokens = lex.tokens;
+        if !tokens.is_empty() {
+            let last_semicolon = {
+                let mut r = Token::default();
+                r.code = T![;];
+                r.u = ";".to_owned();
+
+                let span = if lex.end_tokens.is_empty() {
+                    tokens.last().unwrap().span
+                } else {
+                    lex.end_tokens.last().unwrap().span
+                };
+                r.span = Span {
+                    line: span.end_line,
+                    column: span.end_column + 1,
+                    width: 1,
+                    end_line: span.end_line,
+                    end_column: span.end_column + 1,
+                };
+
+                r
+            };
+            tokens.push(last_semicolon);
+        }
+
         return Parse {
             pkg: Package::default(),
 
-            tokens: lex.tokens,
+            tokens,
             end_tokens: lex.end_tokens,
             index: Cell::new(0),
 
@@ -646,12 +671,8 @@ impl Parse {
                     });
                 }
                 Keyword::Type => {
-                    let n = s.parse_identifier_pub_generics()?;
-                    s.expect(T![type])?;
                     let mut a = s.parse_type_alias()?;
-                    a.name = n.name;
                     a.vis = vis;
-                    a.generics = n.generics;
                     a.t_type = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
@@ -1022,6 +1043,7 @@ impl Parse {
         let mut r = LifetimeParam::default();
         r.lifetime = s.current().clone();
         s.plusplus();
+        s.expect(T![:])?;
 
         while s.has_more() {
             let token = s.current();
@@ -1756,25 +1778,44 @@ impl Parse {
         Ok(r)
     }
 
+    // type IDENTIFIER GenericParams? ( : Bounds? )?
+    //      WhereClause?
+    //      ( = Type WhereClause? )? ;
     fn parse_type_alias(&self) -> ParseResult<TypeAlias> {
         let s = self;
 
         let mut r = TypeAlias::default();
 
-        // possible where clause
+        s.expect(T![type])?;
+
+        // name
+        let token = s.current();
+        r.name = token.clone();
+        s.plusplus();
+        if !matches!(&token.code, TokenCode::Identifier(_)) {
+            return Err(s.panic(
+                token,
+                &format!("expected identifier but got {:?}", token),
+            ));
+        }
+
+        // possible GenericsParams
+        let token = s.current();
+        if matches!(token.code, T!["["]) {
+            r.generics = Some(s.parse_generics()?);
+        }
+
+        // possible bounds
+        let token = s.current();
+        if matches!(&token.code, T![:]) {
+            s.plusplus();
+            r.bounds = s.parse_type_param_bounds()?;
+        }
+
+        // possible where clause before =
         let token = s.current();
         if matches!(&token.code, T![where]) {
             r.where_ = Some(s.parse_where()?);
-        }
-
-        let token = s.current();
-        if matches!(&token.code, T![;]) {
-            return Ok(r);
-        }
-
-        // possible TypeParamBounds
-        if !matches!(&token.code, T![=]) {
-            r.bounds = s.parse_type_param_bounds()?;
         }
 
         // possible type
@@ -2098,6 +2139,7 @@ impl Parse {
         Ok(r)
     }
 
+    // const IDENTIFIER : Type ( = Expr )? ;
     fn parse_const(&self) -> ParseResult<Const> {
         let s = self;
 
@@ -2133,25 +2175,23 @@ impl Parse {
         Ok(r)
     }
 
+    // [safe|unsafe]? static mut? IDENTIFIER : Type ( = Expr )? ;
     fn parse_static(&self) -> ParseResult<Static> {
         let s = self;
 
         let mut r = Static::default();
 
-        s.expect(T![static])?;
-
         let token = s.current();
-        if matches!(&token.code, T!["["]) {
+        if matches!(&token.code, T![unsafe]) {
+            r.t_safe = Some(token.clone());
             s.plusplus();
-            let token = s.current();
-            if let TokenCode::Identifier(ident) = &token.code && ident.id == "safe" {
-                r.t_safe = Some(token.clone());
-                s.plusplus();
-            } else {
-                return Err(s.panic(token, &format!("illegal token {:?} for static item", token)));
-            }
-            s.expect(T!["]"])?;
+        } else if let TokenCode::Identifier(a) = &token.code &&
+                a.prefix.is_none() && a.id == "safe" {
+            r.t_safe = Some(token.clone());
+            s.plusplus();
         }
+
+        s.expect(T![static])?;
 
         let token = s.current();
         if matches!(&token.code, T![mut]) {
@@ -4738,22 +4778,8 @@ impl Parse {
         r.t_where = s.current().clone();
         s.expect(T![where])?;
 
-        let span_b = s.current().span;
-        s.expect(T!["{"])?;
-        let span_next = s.current().span;
-        // 'where {T Clone}'
-        if span_b.line == span_next.line && span_b.end_column + 1 == span_next.column {
-            return Err(s.panic(s.current(), "there must be whitespace after 'where {'"));
-        }
-
         while s.has_more() {
             let token = s.current();
-            if matches!(&token.code, T!["}"]) {
-                r.t_brace_close = token.clone();
-                s.plusplus();
-                break;
-            }
-
             let w_item = if let TokenCode::Lifetime(_) = &token.code {
                 let bounds = s.parse_lifetime_bounds()?;
                 let item = WhereItemLifetime {
@@ -4770,30 +4796,30 @@ impl Parse {
                     item.for_lifetimes = Some(f);
                 }
                 item.type_ = s.parse_type()?;
+                s.expect(T![:])?;
                 item.bounds = s.parse_type_param_bounds()?;
                 WhereItem::TypeBound(item)
             };
 
             let token = s.current();
             match &token.code {
-                T!["}"] => {
-                    r.items.push((w_item, None));
-                    r.t_brace_close = token.clone();
-                    s.plusplus();
+                T![;] | T!["{"] | T![=] => {
+                    r.items.push((w_item, false));
+                    r.t_after_last = s.current().clone();
                     break;
                 }
                 T![,] => {
-                    r.items.push((w_item, Some(token.clone())));
                     s.plusplus();
-                }
-                T![;] => {
-                    let mut t = token.clone();
-                    t.code = T![,];
-                    r.items.push((w_item, Some(t)));
-                    s.plusplus();
+                    let next_token = s.current();
+                    let show_comma = next_token.span.line == token.span.line;
+                    r.items.push((w_item, show_comma));
+                    if matches!(&next_token.code, T![;] | T!["{"] | T![=]) {
+                        r.t_after_last = next_token.clone();
+                        break;
+                    }
                 }
                 _ => {
-                    return Err(s.panic(token, &format!("expected ; or }} but got {:?}", token)));
+                    return Err(s.panic(token, &format!("illegal token {:?} for WhereClause", token)));
                 }
             }
         }

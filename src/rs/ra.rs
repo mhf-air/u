@@ -577,8 +577,8 @@ impl ToLang for Func {
 
         // body
         if let Some(body) = &s.body {
-            if let Some(where_) = &s.where_ {
-                where_.t_brace_close.to_u_before(p);
+            if s.where_.is_some() {
+                p.push_raw(" ");
                 body.t_brace_open.to_u_one(p);
             } else {
                 body.t_brace_open.to_u(p);
@@ -718,25 +718,28 @@ impl ToLang for TypeAlias {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.name.to_u_before(p);
-        s.vis.to_u(p);
-
-        s.t_type.to_u_one(p);
-        s.t_type.to_u_before(p);
+        if let Some(t) = &s.vis.t_pub {
+            t.to_u_before(p);
+        } else {
+            s.t_type.to_u_before(p);
+        }
         s.name.to_u_one(p);
+        s.vis.to_u(p);
         if let Some(generics) = &s.generics {
             generics.to_u(p);
         }
+
+        s.name.to_u_before(p);
+        s.t_type.to_u_one(p);
         if !s.bounds.items.is_empty() {
-            p.push_raw(":");
             s.bounds.to_u(p);
         }
         if let Some(where_) = &s.where_ {
             where_.to_u(p);
         }
         if let Some((t_eq, type_, where_)) = &s.rhs {
-            if let Some(where_) = &s.where_ {
-                where_.t_brace_close.to_u_before(p);
+            if s.where_.is_some() {
+                p.push_raw(" ");
                 t_eq.to_u_one(p);
             } else {
                 t_eq.to_u(p);
@@ -747,7 +750,6 @@ impl ToLang for TypeAlias {
                 where_.to_u(p);
             }
         }
-        p.push_raw(";");
     }
 }
 
@@ -786,8 +788,8 @@ impl ToLang for Struct {
                         where_.to_u(p);
                     }
                     if let Some(t) = &s.t_brace_open {
-                        if let Some(where_) = &s.where_ {
-                            where_.t_brace_close.to_u_before(p);
+                        if s.where_.is_some() {
+                            p.push_raw(" ");
                             t.to_u_one(p);
                         } else {
                             t.to_u(p);
@@ -900,7 +902,7 @@ impl ToLang for Enum {
         }
         if let Some(where_) = &s.where_ {
             where_.to_u(p);
-            where_.t_brace_close.to_u_before(p);
+            p.push_raw(" ");
             s.t_brace_open.to_u_one(p);
         } else {
             s.t_brace_open.to_u(p);
@@ -1005,7 +1007,7 @@ impl ToLang for Union {
 
         if let Some(where_) = &s.where_ {
             where_.to_u(p);
-            where_.t_brace_close.to_u_before(p);
+            p.push_raw(" ");
             s.t_brace_open.to_u_one(p);
         } else {
             s.t_brace_open.to_u(p);
@@ -1064,27 +1066,33 @@ impl ToLang for Static {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.name.to_u_before(p);
+        if let Some(t) = &s.vis.t_pub {
+            t.to_u_before(p);
+        } else {
+            if let Some(safe) = &s.t_safe {
+                safe.to_u_before(p);
+            } else {
+                s.t_static.to_u_before(p);
+            }
+        }
+
+        s.name.to_u_one(p);
         s.vis.to_u(p);
+        s.t_static.to_u(p);
 
         if let Some(safe) = &s.t_safe {
+            p.push_raw("[");
             safe.to_u_one(p);
-            s.t_static.to_u(p);
-        } else {
-            s.t_static.to_u_one(p);
+            p.push_raw("]");
         }
         if let Some(mut_) = &s.t_mut {
             mut_.to_u(p);
         }
-        s.t_static.to_u_before(p);
-        s.name.to_u_one(p);
-        p.push_raw(":");
         s.type_.to_u(p);
         if let Some((t_eq, expr)) = &s.expr {
             t_eq.to_u(p);
             expr.to_u(p);
         }
-        p.push_raw(";");
     }
 }
 
@@ -1130,7 +1138,7 @@ impl ToLang for Trait {
         }
         if let Some(where_) = &s.where_ {
             where_.to_u(p);
-            where_.t_brace_close.to_u_before(p);
+            p.push_raw(" ");
             s.t_brace_open.to_u_one(p);
         } else {
             s.t_brace_open.to_u(p);
@@ -1217,7 +1225,7 @@ impl ToLang for Impl {
 
         if let Some(where_) = &s.where_ {
             where_.to_u(p);
-            where_.t_brace_close.to_u_before(p);
+            p.push_raw(" ");
             s.t_brace_open.to_u_one(p);
         } else {
             s.t_brace_open.to_u(p);
@@ -1608,22 +1616,30 @@ pub struct ConstParam {
 // -----------------------------------------------------------------------------
 #[derive(Debug, Default)]
 pub struct Where {
-    pub items: Vec<(WhereItem, Option<Token>)>,
+    pub items: Vec<(WhereItem, bool)>,
 
     pub t_where: Token,
-    pub t_brace_close: Token,
+    pub t_after_last: Token,
 }
 impl ToLang for Where {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
         s.t_where.to_u(p);
-        for (it, t) in &s.items {
+        p.push_raw(" {");
+        for (it, show_comma) in &s.items {
             it.to_u(p);
-            if let Some(t) = t {
-                t.to_u(p);
+            if *show_comma {
+                p.push_raw(",");
             }
         }
+        s.t_after_last.to_u_before(p);
+        if s.t_after_last.tokens_before.is_empty() {
+            // for
+            // where T: Clone;
+            p.push_raw(" ");
+        }
+        p.push_raw("}");
     }
 }
 #[derive(Debug)]
@@ -1643,7 +1659,6 @@ impl ToLang for WhereItem {
         match &s {
             WhereItem::Lifetime(a) => {
                 a.lifetime.to_u(p);
-                p.push_raw(":");
                 for (it, t) in &a.lifetime_bounds {
                     it.to_u(p);
                     if let Some(t) = t {
@@ -1656,7 +1671,6 @@ impl ToLang for WhereItem {
                     for_.to_u(p);
                 }
                 a.type_.to_u(p);
-                p.push_raw(":");
                 a.bounds.to_u(p);
             }
         }
