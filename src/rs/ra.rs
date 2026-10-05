@@ -319,11 +319,16 @@ impl ToLang for Mod {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.name.to_u_before(p);
-        s.vis.to_u(p);
-        s.t_mod.to_u_one(p);
-        s.t_mod.to_u_before(p);
+        if let Some(t) = &s.vis.t_pub {
+            t.to_u_before(p);
+        } else {
+            s.t_mod.to_u_before(p);
+        }
         s.name.to_u_one(p);
+        s.vis.to_u(p);
+        s.name.to_u_before(p);
+        s.t_mod.to_u_one(p);
+
         let Some((t_open, t_close)) = &s.t_braces else {
             p.push_raw(";");
             return;
@@ -1530,20 +1535,16 @@ impl ToLang for GenericParam {
         match &s.payload {
             GenericParamPayload::Lifetime(a) => {
                 a.lifetime.to_u(p);
-                if !a.lifetime_bounds.is_empty() {
-                    p.push_raw(":");
-                    for (it, t) in &a.lifetime_bounds {
-                        it.to_u(p);
-                        if let Some(t) = t {
-                            t.to_u(p);
-                        }
+                for (it, t) in &a.bounds.items {
+                    it.to_u(p);
+                    if let Some(t) = t {
+                        t.to_u(p);
                     }
                 }
             }
             GenericParamPayload::Type(a) => {
                 a.name.to_u(p);
                 if !a.bounds.items.is_empty() {
-                    p.push_raw(":");
                     a.bounds.to_u(p);
                 }
                 if let Some(type_) = &a.type_ {
@@ -1552,11 +1553,10 @@ impl ToLang for GenericParam {
                 }
             }
             GenericParamPayload::Const(a) => {
-                a.name.to_u_before(p);
-                a.t_const.to_u_one(p);
                 a.t_const.to_u_before(p);
                 a.name.to_u_one(p);
-                p.push_raw(":");
+                a.name.to_u_before(p);
+                a.t_const.to_u_one(p);
                 a.type_.to_u(p);
                 if let Some((t, expr)) = &a.expr {
                     t.to_u(p);
@@ -1583,8 +1583,13 @@ impl Default for GenericParamPayload {
 
 #[derive(Debug, Default)]
 pub struct LifetimeParam {
-    pub lifetime: Token,
-    pub lifetime_bounds: Vec<(Lifetime, Option<Token>)>,
+    pub lifetime: Lifetime,
+    pub bounds: LifetimeBounds,
+}
+
+#[derive(Debug, Default)]
+pub struct LifetimeBounds {
+    pub items: Vec<(Lifetime, Option<Token>)>,
 }
 #[derive(Debug, Default)]
 pub struct Lifetime {

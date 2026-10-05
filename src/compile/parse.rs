@@ -928,21 +928,9 @@ impl Parse {
 
             let token = s.current();
             s.plusplus();
-            match &token.code {
-                T!["]"] => {
-                    r.t_square_close = token.clone();
-                    break;
-                }
-                T![,] => {
-                    let last = r.params.len() - 1;
-                    r.params[last].t_comma = Some(token.clone());
-                }
-                _ => {
-                    return Err(s.panic(
-                        token,
-                        &format!("illegal token {:?} for generic params", token),
-                    ));
-                }
+            if matches!(&token.code, T!["]"]) {
+                r.t_square_close = token.clone();
+                break;
             }
         }
 
@@ -951,41 +939,52 @@ impl Parse {
         fn parse_generic_param(s: &Parse) -> ParseResult<GenericParam> {
             let mut r = GenericParam::default();
 
-            while s.has_more() {
-                let token = s.current();
-                match &token.code {
-                    T!["]"] | T![,] => {
-                        break;
-                    }
-                    T!["#["] => {
-                        r.outer_attrs = s.parse_outer_attrs()?;
-                    }
-                    TokenCode::Lifetime(_) => {
-                        let c = s.parse_lifetime_bounds()?;
-                        r.payload = GenericParamPayload::Lifetime(c);
-                    }
-                    TokenCode::Identifier(_) => {
-                        s.plusplus();
-                        let name = token.clone();
+            let token = s.current();
+            if matches!(&token.code, T!["#["]) {
+                r.outer_attrs = s.parse_outer_attrs()?;
+            }
 
-                        let token = s.current();
-                        if matches!(token.code, T![const]) {
-                            let mut c = parse_const_param(s)?;
-                            c.name = name;
-                            r.payload = GenericParamPayload::Const(c);
-                        } else {
-                            let mut c = parse_type_param(s)?;
-                            c.name = name;
-                            r.payload = GenericParamPayload::Type(c);
-                        }
-                    }
-                    _ => {
-                        return Err(s.panic(
-                            token,
-                            &format!("illegal token {:?} for generic params", token),
-                        ));
+            let token = s.current();
+            match &token.code {
+                TokenCode::Lifetime(_) => {
+                    let mut c = LifetimeParam::default();
+                    c.lifetime = Lifetime {
+                        name: token.clone(),
+                    };
+                    s.plusplus();
+                    c.bounds = s.parse_lifetime_bounds()?;
+                    r.payload = GenericParamPayload::Lifetime(c);
+                }
+                TokenCode::Identifier(_) => {
+                    s.plusplus();
+                    let name = token.clone();
+
+                    let token = s.current();
+                    if matches!(token.code, T![const]) {
+                        let mut c = parse_const_param(s)?;
+                        c.name = name;
+                        r.payload = GenericParamPayload::Const(c);
+                    } else {
+                        let mut c = parse_type_param(s)?;
+                        c.name = name;
+                        r.payload = GenericParamPayload::Type(c);
                     }
                 }
+                _ => {
+                    return Err(s.panic(
+                        token,
+                        &format!("illegal token {:?} for generic params", token),
+                    ));
+                }
+            }
+
+            let token = s.current();
+            if !matches!(&token.code, T!["]"] | T![,]) {
+                return Err(s.panic(token, &format!("expected ] or , but got {:?}", token)));
+            }
+            if matches!(&token.code, T![,]) {
+                r.t_comma = Some(token.clone());
+                return Ok(r);
             }
 
             Ok(r)
@@ -1051,12 +1050,10 @@ impl Parse {
     // --------------------------------------------------------------------------------
     // bounds
 
-    fn parse_lifetime_bounds(&self) -> ParseResult<LifetimeParam> {
+    fn parse_lifetime_bounds(&self) -> ParseResult<LifetimeBounds> {
         let s = self;
 
-        let mut r = LifetimeParam::default();
-        r.lifetime = s.current().clone();
-        s.plusplus();
+        let mut r = LifetimeBounds::default();
 
         while s.has_more() {
             let token = s.current();
@@ -1076,7 +1073,7 @@ impl Parse {
 
             let token = s.current();
             if matches!(&token.code, T!["]"] | T![,] | T![;]) {
-                r.lifetime_bounds.push((lifetime, None));
+                r.items.push((lifetime, None));
                 break;
             }
             if !matches!(&token.code, T![+]) {
@@ -1087,7 +1084,7 @@ impl Parse {
             }
             s.plusplus();
 
-            r.lifetime_bounds.push((lifetime, Some(token.clone())));
+            r.items.push((lifetime, Some(token.clone())));
         }
 
         Ok(r)
@@ -4777,12 +4774,14 @@ impl Parse {
             }
 
             let w_item = if let TokenCode::Lifetime(_) = &token.code {
+                let lifetime = token.clone();
+                s.plusplus();
                 let bounds = s.parse_lifetime_bounds()?;
                 let item = WhereItemLifetime {
                     lifetime: Lifetime {
-                        name: bounds.lifetime,
+                        name: lifetime,
                     },
-                    lifetime_bounds: bounds.lifetime_bounds,
+                    lifetime_bounds: bounds.items,
                 };
                 WhereItem::Lifetime(item)
             } else {

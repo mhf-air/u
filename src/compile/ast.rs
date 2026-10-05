@@ -1537,9 +1537,9 @@ impl ToLang for GenericParam {
         match &s.payload {
             GenericParamPayload::Lifetime(a) => {
                 a.lifetime.to_rs(p);
-                if !a.lifetime_bounds.is_empty() {
+                if !a.bounds.items.is_empty() {
                     p.push_raw(":");
-                    for (it, t) in &a.lifetime_bounds {
+                    for (it, t) in &a.bounds.items {
                         it.to_rs(p);
                         if let Some(t) = t {
                             t.to_rs(p);
@@ -1590,8 +1590,13 @@ impl Default for GenericParamPayload {
 
 #[derive(Debug, Default)]
 pub struct LifetimeParam {
-    pub lifetime: Token,
-    pub lifetime_bounds: Vec<(Lifetime, Option<Token>)>,
+    pub lifetime: Lifetime,
+    pub bounds: LifetimeBounds,
+}
+
+#[derive(Debug, Default)]
+pub struct LifetimeBounds {
+    pub items: Vec<(Lifetime, Option<Token>)>,
 }
 #[derive(Debug, Default)]
 pub struct Lifetime {
