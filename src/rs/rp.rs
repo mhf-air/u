@@ -485,6 +485,15 @@ impl Parse {
         let stmt: Stmt;
         let special_token = first_special_token;
         match &special_token.code {
+            // macro_rules!
+            T![!] => {
+                let mut a = s.parse_macro()?;
+                a.t_macro = special_token.clone();
+                stmt = Stmt::Item(Item {
+                    outer_attrs,
+                    payload: ItemPayload::Macro(a),
+                });
+            }
             T![:=] => {
                 let mut a = s.parse_let()?;
                 a.outer_attrs = outer_attrs;
@@ -557,12 +566,8 @@ impl Parse {
                     });
                 }
                 Keyword::Enum => {
-                    let n = s.parse_identifier_pub_generics()?;
-                    s.expect(T![enum])?;
                     let mut a = s.parse_enum()?;
-                    a.name = n.name;
                     a.vis = vis;
-                    a.generics = n.generics;
                     a.t_enum = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
@@ -570,8 +575,6 @@ impl Parse {
                     });
                 }
                 Keyword::Fn => {
-                    let n = s.parse_identifier_pub_generics()?;
-
                     // self param
                     let mut self_param = None;
                     if matches!(s.current().code, T!["("]) {
@@ -580,9 +583,7 @@ impl Parse {
                     s.expect(T![func])?;
 
                     let mut a = s.parse_func()?;
-                    a.name = n.name;
                     a.vis = vis;
-                    a.generics = n.generics;
                     a.self_param = self_param;
                     a.t_func = special_token.clone();
                     stmt = Stmt::Item(Item {
@@ -600,34 +601,16 @@ impl Parse {
                     });
                 }
                 Keyword::Trait => {
-                    let n = s.parse_identifier_pub_generics()?;
-                    s.expect(T![trait])?;
                     let mut a = s.parse_trait()?;
-                    a.name = n.name;
                     a.vis = vis;
-                    a.generics = n.generics;
                     a.t_trait = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         payload: ItemPayload::Trait(a),
                     });
                 }
-                Keyword::Macro => {
-                    let n = s.parse_identifier_pub()?;
-                    s.expect(T![macro])?;
-                    let mut a = s.parse_macro()?;
-                    a.name = n.name;
-                    a.t_macro = special_token.clone();
-                    stmt = Stmt::Item(Item {
-                        outer_attrs,
-                        payload: ItemPayload::Macro(a),
-                    });
-                }
                 Keyword::Mod => {
-                    let n = s.parse_identifier_pub()?;
-                    s.expect(T![mod])?;
                     let mut a = s.parse_mod()?;
-                    a.name = n.name;
                     a.vis = vis;
                     a.t_mod = special_token.clone();
                     stmt = Stmt::Item(Item {
@@ -645,12 +628,8 @@ impl Parse {
                     });
                 }
                 Keyword::Struct => {
-                    let n = s.parse_identifier_pub_generics()?;
-                    s.expect(T![struct])?;
                     let mut a = s.parse_struct()?;
-                    a.name = n.name;
                     a.vis = vis;
-                    a.generics = n.generics;
                     a.t_struct = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
@@ -658,12 +637,8 @@ impl Parse {
                     });
                 }
                 Keyword::Union => {
-                    let n = s.parse_identifier_pub_generics()?;
-                    s.expect(T![union])?;
                     let mut a = s.parse_union()?;
-                    a.name = n.name;
                     a.vis = vis;
-                    a.generics = n.generics;
                     a.t_union = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
@@ -790,20 +765,34 @@ impl Parse {
                     _ => {}
                 }
             }
-            TokenCode::Identifier(a) if a.prefix.is_none() && a.id == "safe" => {
-                // safe static
-                // safe fn
-                // safe extern Abi? fn
-                let t1 = s.nth(1);
-                match &t1.code {
-                    T![static] => {
-                        return Some(t1);
+            TokenCode::Identifier(a) => {
+                if a.prefix.is_some() {
+                    return None;
+                }
+                match a.id.as_ref() {
+                    "safe" => {
+                        // safe static
+                        // safe fn
+                        // safe extern Abi? fn
+                        let t1 = s.nth(1);
+                        match &t1.code {
+                            T![static] => {
+                                return Some(t1);
+                            }
+                            T![fn] => {
+                                return Some(t1);
+                            }
+                            T![extern] => {
+                                is_func = true;
+                            }
+                            _ => {}
+                        }
                     }
-                    T![fn] => {
-                        return Some(t1);
-                    }
-                    T![extern] => {
-                        is_func = true;
+                    "macro_rules" => {
+                        let token = s.nth(1);
+                        if matches!(&token.code, T![!]) {
+                            return Some(&token);
+                        }
                     }
                     _ => {}
                 }
@@ -870,29 +859,6 @@ impl Parse {
         }
         s.expect(T![")"])?;
         return Ok(r);
-    }
-
-    fn parse_identifier_pub(&self) -> ParseResult<IdentifierPlus> {
-        let r = IdentifierPlus::default();
-        Ok(r)
-    }
-
-    fn parse_identifier_pub_generics(&self) -> ParseResult<IdentifierPlusGenerics> {
-        let s = self;
-
-        let mut r = IdentifierPlusGenerics::default();
-
-        let a = s.parse_identifier_pub()?;
-        r.name = a.name;
-        r.vis = a.vis;
-
-        // possible [
-        let token = s.current();
-        if matches!(token.code, T!["["]) {
-            r.generics = Some(s.parse_generics()?);
-        }
-
-        Ok(r)
     }
 
     fn parse_generics(&self) -> ParseResult<Generics> {
@@ -1195,6 +1161,18 @@ impl Parse {
         let s = self;
 
         let mut r = Mod::default();
+
+        s.expect(T![mod])?;
+
+        let token = s.current();
+        r.name = token.clone();
+        s.plusplus();
+        if !matches!(&token.code, TokenCode::Identifier(_)) {
+            return Err(s.panic(
+                token,
+                &format!("expected identifier but got {:?}", token),
+            ));
+        }
 
         if matches!(&s.current().code, T![;]) {
             return Ok(r);
@@ -1544,6 +1522,25 @@ impl Parse {
             }
         }
 
+        s.expect(T![fn])?;
+
+        // name
+        let token = s.current();
+        r.name = token.clone();
+        s.plusplus();
+        if !matches!(&token.code, TokenCode::Identifier(_)) {
+            return Err(s.panic(
+                token,
+                &format!("expected identifier but got {:?}", token),
+            ));
+        }
+
+        // possible GenericsParams
+        let token = s.current();
+        if matches!(token.code, T![<]) {
+            r.generics = Some(s.parse_generics()?);
+        }
+
         // params
         r.t_paren_open = s.current().clone();
         s.expect(T!["("])?;
@@ -1801,7 +1798,7 @@ impl Parse {
 
         // possible GenericsParams
         let token = s.current();
-        if matches!(token.code, T!["["]) {
+        if matches!(token.code, T![<]) {
             r.generics = Some(s.parse_generics()?);
         }
 
@@ -1843,6 +1840,25 @@ impl Parse {
 
         let mut r = Struct::default();
         let mut has_where = false;
+
+        s.expect(T![struct])?;
+
+        // name
+        let token = s.current();
+        r.name = token.clone();
+        s.plusplus();
+        if !matches!(&token.code, TokenCode::Identifier(_)) {
+            return Err(s.panic(
+                token,
+                &format!("expected identifier but got {:?}", token),
+            ));
+        }
+
+        // possible GenericsParams
+        let token = s.current();
+        if matches!(token.code, T![<]) {
+            r.generics = Some(s.parse_generics()?);
+        }
 
         while s.has_more() {
             let token = s.current();
@@ -1998,6 +2014,25 @@ impl Parse {
         let mut r = Enum::default();
         let mut has_where = false;
 
+        s.expect(T![enum])?;
+
+        // name
+        let token = s.current();
+        r.name = token.clone();
+        s.plusplus();
+        if !matches!(&token.code, TokenCode::Identifier(_)) {
+            return Err(s.panic(
+                token,
+                &format!("expected identifier but got {:?}", token),
+            ));
+        }
+
+        // possible GenericsParams
+        let token = s.current();
+        if matches!(token.code, T![<]) {
+            r.generics = Some(s.parse_generics()?);
+        }
+
         while s.has_more() {
             let token = s.current();
             match &token.code {
@@ -2104,6 +2139,25 @@ impl Parse {
 
         let mut r = Union::default();
         let mut has_where = false;
+
+        s.expect(T![union])?;
+
+        // name
+        let token = s.current();
+        r.name = token.clone();
+        s.plusplus();
+        if !matches!(&token.code, TokenCode::Identifier(_)) {
+            return Err(s.panic(
+                token,
+                &format!("expected identifier but got {:?}", token),
+            ));
+        }
+
+        // possible GenericsParams
+        let token = s.current();
+        if matches!(token.code, T![<]) {
+            r.generics = Some(s.parse_generics()?);
+        }
 
         while s.has_more() {
             let token = s.current();
@@ -2239,6 +2293,25 @@ impl Parse {
             }
             s.plusplus();
             s.expect(T!["]"])?;
+        }
+
+        s.expect(T![trait])?;
+
+        // name
+        let token = s.current();
+        r.name = token.clone();
+        s.plusplus();
+        if !matches!(&token.code, TokenCode::Identifier(_)) {
+            return Err(s.panic(
+                token,
+                &format!("expected identifier but got {:?}", token),
+            ));
+        }
+
+        // possible GenericsParams
+        let token = s.current();
+        if matches!(token.code, T![<]) {
+            r.generics = Some(s.parse_generics()?);
         }
 
         // possible TypeParamBounds
@@ -2402,6 +2475,19 @@ impl Parse {
         let s = self;
 
         let mut r = Macro::default();
+
+        s.plusplus();
+        s.expect(T![!])?;
+
+        let token = s.current();
+        r.name = token.clone();
+        s.plusplus();
+        if !matches!(&token.code, TokenCode::Identifier(_)) {
+            return Err(s.panic(
+                token,
+                &format!("expected identifier but got {:?}", token),
+            ));
+        }
 
         let token = s.current();
         r.t_delim_open = token.clone();
@@ -5863,17 +5949,3 @@ impl fmt::Display for ParseError {
 impl error::Error for ParseError {}
 
 pub type ParseResult<T> = Result<T, ParseError>;
-
-// --------------------------------------------------------------------------------
-#[derive(Debug, Default)]
-struct IdentifierPlus {
-    name: Token,
-    vis: Visibility,
-}
-
-#[derive(Debug, Default)]
-struct IdentifierPlusGenerics {
-    name: Token,
-    vis: Visibility,
-    generics: Option<Generics>,
-}
