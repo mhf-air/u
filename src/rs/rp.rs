@@ -529,10 +529,8 @@ impl Parse {
             }
             TokenCode::Keyword(keyword) => match keyword {
                 Keyword::Use => {
-                    let token = s.current();
-                    s.expect(T![use])?;
                     let mut a = s.parse_use()?;
-                    a.t_use = token.clone();
+                    a.t_use = special_token.clone();
                     a.vis = vis;
                     stmt = Stmt::Item(Item {
                         outer_attrs,
@@ -1226,6 +1224,8 @@ impl Parse {
     fn parse_use(&self) -> ParseResult<Use> {
         let s = self;
 
+        s.expect(T![use])?;
+
         let mut r = Use::default();
         r.item = parse_use_item(s)?;
         return Ok(r);
@@ -1287,48 +1287,13 @@ impl Parse {
             while s.has_more() {
                 let it = parse_use_item(s)?;
 
-                s.minusminus();
-                let before_token = s.current();
-                s.plusplus();
                 let token = s.current();
-                // add ',' after '*' if the next token after '*' is not at the same line
-                if matches!(&before_token.code, T![*]) &&
-                            token.span.line > before_token.span.line {
-                    let span = before_token.span;
-                    let t = Token {
-                        code: T![,],
-                        span: Span {
-                            column: span.column + 1,
-                            end_column: span.end_column + 1,
-                            ..span
-                        },
-                        tokens_before: Vec::new(),
-                        u: ",".to_owned(),
-                    };
-                    r.items.push((it, Some(t)));
-                    if matches!(&token.code, T!["}"]) {
-                        r.t_brace_close = token.clone();
-                        s.plusplus();
-                        return Ok(r);
-                    }
-                    continue;
-                }
-
-                s.plusplus();
                 match &token.code {
                     T![,] => {
-                        r.items.push((it, Some(token.clone())));
-                        let token = s.current();
-                        if matches!(&token.code, T!["}"]) {
-                            r.t_brace_close = token.clone();
-                            s.plusplus();
-                            return Ok(r);
-                        }
-                    }
-                    T![;] => {
-                        let mut t = token.clone();
-                        t.code = T![,];
-                        r.items.push((it, Some(t)));
+                        let next_token = s.nth(1);
+                        let show_comma = next_token.span.line == token.span.line;
+                        r.items.push((it, show_comma));
+                        s.plusplus();
                         let token = s.current();
                         if matches!(&token.code, T!["}"]) {
                             r.t_brace_close = token.clone();
@@ -1337,8 +1302,9 @@ impl Parse {
                         }
                     }
                     T!["}"] => {
-                        r.items.push((it, None));
+                        r.items.push((it, false));
                         r.t_brace_close = token.clone();
+                        s.plusplus();
                         return Ok(r);
                     }
                     _ => {}
@@ -3845,9 +3811,11 @@ impl Parse {
             }
 
             // qualified path in expression
-            T!["["] => {
+            T![<] => {
                 s.minusminus();
                 let type_ = s.parse_qualifyed_path_type()?;
+                s.expect(T![::])?;
+                s.minusminus();
                 let items = s.parse_path_expr_segments()?;
                 r.payload = ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Path(
                     ExprPath::QualifiedPath(QualifiedPathInExpr { type_, items }),
@@ -3855,7 +3823,7 @@ impl Parse {
             }
 
             // path in expression or macro call(simple path followed by _)
-            T![super] | T![self] | T![Self] | T![crate] | TokenCode::Identifier(_) => {
+            T![super] | T![self] | T![Self] | T![crate] | TokenCode::Identifier(_) | T![::] => {
                 s.minusminus();
                 let items = s.parse_path_expr_segments()?;
                 let token = s.current();
@@ -4407,9 +4375,11 @@ impl Parse {
                 }
             }
             // qualified path
-            T!["["] => {
+            T![<] => {
                 s.minusminus();
                 let qualified_path_type = s.parse_qualifyed_path_type()?;
+                s.expect(T![::])?;
+                s.minusminus();
                 let a_type_path = s.parse_type_path()?;
                 let payload = TypePayload::TypeNoBounds(Box::new(
                     TypeNoBounds::QualifiedPathInType(QualifiedPathInType {
@@ -4632,7 +4602,7 @@ impl Parse {
             }
 
             // type path
-            T![Self] => {
+            T![Self] | T![::] => {
                 s.minusminus();
                 let a = s.parse_type_path()?;
                 let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::TypePath(a)));
@@ -4671,7 +4641,7 @@ impl Parse {
         return Err(s.panic(token, "not a type"));
     }
 
-    // (params) (: Type)?
+    // (params) (-> Type)?
     fn parse_func_type(&self) -> ParseResult<TypeBareFunction> {
         let s = self;
 
@@ -4808,7 +4778,7 @@ impl Parse {
         }
 
         let token = s.current();
-        if matches!(token.code, T![:]) {
+        if matches!(token.code, T![->]) {
             s.plusplus();
             // return type
             let type_ = s.parse_type()?;
@@ -4827,6 +4797,7 @@ impl Parse {
 
         let mut r = QualifiedPathType::default();
         r.t_square_open = s.current().clone();
+        r.t_square_open.code = T!["["];
         s.plusplus();
         r.type_ = s.parse_type()?;
         let token = s.current();
@@ -4835,7 +4806,8 @@ impl Parse {
             r.type_path = Some((token.clone(), s.parse_type_path()?));
         }
         r.t_square_close = s.current().clone();
-        s.expect(T!["]"])?;
+        r.t_square_close.code = T!["]"];
+        s.expect(T![>])?;
 
         Ok(r)
     }
@@ -4913,7 +4885,7 @@ impl Parse {
             r.items.push(a);
 
             let token = s.current();
-            if !matches!(&token.code, T![..]) {
+            if !matches!(&token.code, T![::]) {
                 break;
             }
         }
@@ -4925,7 +4897,7 @@ impl Parse {
         let s = self;
 
         let token = s.current();
-        let t_sep = if matches!(&token.code, T![..]) {
+        let t_sep = if matches!(&token.code, T![::]) {
             s.plusplus();
             Some(token.clone())
         } else {
@@ -4962,8 +4934,19 @@ impl Parse {
             });
         }
 
-        if matches!(&token.code, T!["["]) {
-            let args = s.parse_generic_args()?;
+        // possible :: before <
+        let need_colons = if matches!(&s.current().code, T![::]) &&
+                matches!(&s.nth(1).code, T![<]) {
+            s.plusplus();
+            true
+        } else {
+            false
+        };
+
+        let token = s.current();
+        if matches!(&token.code, T![<]) {
+            let mut args = s.parse_generic_args()?;
+            args.need_colons = need_colons;
             return Ok(TypePathSegment {
                 t_sep,
                 name,
@@ -4983,15 +4966,17 @@ impl Parse {
 
         let mut r = GenericArgs::default();
         r.t_square_open = s.current().clone();
+        r.t_square_open.code = T!["["];
         s.plusplus();
 
         while s.has_more() {
             let token = s.current();
-            if matches!(&token.code, T!["]"]) {
+            if matches!(&token.code, T![>]) {
                 if r.items.is_empty() {
                     return Err(s.panic(token, "empty generic args"));
                 }
                 r.t_square_close = token.clone();
+                r.t_square_close.code = T!["]"];
                 s.plusplus();
                 break;
             }
@@ -5061,15 +5046,16 @@ impl Parse {
                                 type_,
                                 t_eq,
                             })
-                        } else if matches!(&token.code, T![,] | T!["]"]){
-                            GenericArg::Type(type_)
-                        } else {
+                        } else if matches!(&token.code, T![:]) {
+                            s.plusplus();
                             let path_seg = mem::take(&mut b.items[0]);
                             let bounds = s.parse_type_param_bounds()?;
                             GenericArg::Bounds(GenericArgsBounds {
                                 path_seg,
                                 bounds,
                             })
+                        } else {
+                            GenericArg::Type(type_)
                         }
                     } else {
                         GenericArg::Type(type_)
@@ -5090,7 +5076,7 @@ impl Parse {
 
         while s.has_more() {
             let token = s.current();
-            let t_sep = if matches!(&token.code, T![..]) {
+            let t_sep = if matches!(&token.code, T![::]) {
                 s.plusplus();
                 Some(token.clone())
             } else {
@@ -5102,7 +5088,7 @@ impl Parse {
             r.push(item);
 
             let token = s.current();
-            if !matches!(&token.code, T![..]) {
+            if !matches!(&token.code, T![::]) {
                 break;
             }
         }
@@ -5126,11 +5112,11 @@ impl Parse {
         }
         r.name = PathIdentSegment { token: token.clone() };
 
-        // possible generics
-        let token = s.current();
-        if matches!(&token.code, T!["["]) {
+        // possible :: before <
+        if matches!(&s.current().code, T![::]) &&
+                matches!(&s.nth(1).code, T![<]) {
+            s.plusplus();
             r.generic_args = s.parse_generic_args()?;
-            r.generic_args.need_colons = true;
         }
 
         Ok(r)
@@ -5516,9 +5502,11 @@ impl Parse {
             }
 
             // qualified path in expression
-            T!["["] => {
+            T![<] => {
                 s.minusminus();
                 let type_ = s.parse_qualifyed_path_type()?;
+                s.expect(T![::])?;
+                s.minusminus();
                 let items = s.parse_path_expr_segments()?;
                 return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Path(
                     PatternPath::QualifiedPath(QualifiedPathInExpr { type_, items }),
@@ -5526,7 +5514,7 @@ impl Parse {
             }
 
             // path in expression or macro call(simple path followed by _)
-            T![super] | T![self] | T![Self] | T![crate] | TokenCode::Identifier(_) => {
+            T![super] | T![self] | T![Self] | T![crate] | TokenCode::Identifier(_) | T![::] => {
                 let next_token = s.current();
                 if matches!(&next_token.code, T![@]) {
                     // possible @

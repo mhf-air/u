@@ -37,3 +37,42 @@ pub mod math {
         'a: 'b,
     = i32;
 }
+
+use {
+    crate::a,
+    crate::a::*,
+    super::a,
+    self::a,
+    ::crate_abc::a,
+
+    std,
+    std::env,
+    std::env::consts as env_consts,
+    super::ApiResult as Result,
+    std::option::{ Option, Option::Some, Option::None as nil },
+    astd::option::{
+        Option {
+            self,
+            Some,
+            None as nil,
+        },
+        env,
+    },
+};
+
+pub use crate::a;
+pub(crate) use crate::a::*;
+pub(super) use crate::a;
+pub(in crate::abc) use crate::a;
+use crate::a::*;
+use super::a;
+use self::a;
+use ::crate_abc::a;
+
+use std;
+use std::env;
+use std::env::consts as env_consts;
+use std::env::consts
+    as env_consts;
+use super::ApiResult as Result;
+use std::option::{ Option, Option::Some, Option::None as nil };

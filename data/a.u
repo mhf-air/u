@@ -306,6 +306,7 @@ Point[N const usize] type Copy + Clone = [`i32; N`]
 Point[T] type = (T, T) where { T Copy }
 Point[T] type = fn(T) where { T Iterator }
 Point['a 'b + 'c, 'd 'e] type = &'a i32
+Point[T] type = abc..Abc..[T]
 Point[T] type = std..boxed..Box[dyn std..ops..Fn-once(isize): isize]
 Point[T] type = impl Iterator[Item = ops..Example[T]]
 Point[T] type = impl Iterator[Item ops..Example[T]]

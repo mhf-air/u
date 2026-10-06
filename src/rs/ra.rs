@@ -377,11 +377,14 @@ impl ToLang for Use {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_use.to_u_before(p);
+        if let Some(t) = &s.vis.t_pub {
+            t.to_u_before(p);
+        } else {
+            s.t_use.to_u_before(p);
+        }
+        s.t_use.to_u_one(p);
         s.vis.to_u(p);
-        p.push_raw("use");
         s.item.to_u(p);
-        p.push_raw(";");
     }
 }
 #[derive(Debug, Default)]
@@ -393,7 +396,7 @@ pub struct UseItem {
 }
 #[derive(Debug, Default)]
 pub struct UseItemSub {
-    pub items: Vec<(UseItem, Option<Token>)>,
+    pub items: Vec<(UseItem, bool)>,
     pub leading_sep: bool,
 
     pub t_brace_open: Token,
@@ -404,8 +407,10 @@ impl ToLang for UseItem {
         let s = self;
 
         if !s.paths.is_empty() {
-            let list = if let TokenCode::Identifier(id) = &s.paths[0].code && id.id == "-"{
+            let list = if matches!(&s.paths[0].code, T![::]) {
                 s.paths[0].to_u_before(p);
+                p.push_raw("-");
+                s.paths[0].to_u_one(p);
                 &s.paths[1..]
             } else {
                 &s.paths
@@ -423,11 +428,10 @@ impl ToLang for UseItem {
             if sub.leading_sep {
                 p.push_raw("::");
             }
-            for it in &sub.items {
-                let (item, comma) = it;
-                item.to_u(p);
-                if let Some(comma) = comma {
-                    comma.to_u(p);
+            for (it, show_comma) in &sub.items {
+                it.to_u(p);
+                if *show_comma {
+                    p.push_raw(",");
                 }
             }
             sub.t_brace_close.to_u(p);
@@ -1801,18 +1805,16 @@ impl ToLang for SimplePath {
             return;
         }
 
-        // -..crate-abc..Abc turns into ::crate_abc::Abc
+        // ::crate_abc::Abc turns into -..crate-abc..Abc
         let first = s.items.first().unwrap();
-        if let TokenCode::Identifier(a) = &first.token.code && a.id == "-" {
-            if s.items.len() == 1 {
-                first.to_u(p);
+        if let Some(t) = &first.t_sep {
+            if p.no_first_before {
+                p.no_first_before = false;
             } else {
-                if p.no_first_before {
-                    p.no_first_before = false;
-                } else {
-                    first.token.to_u_before(p);
-                }
+                t.to_u_before(p);
             }
+            p.push_raw("-..");
+            first.token.to_u_one(p);
         } else {
             first.to_u(p);
         }
@@ -1904,18 +1906,16 @@ impl ToLang for PathInExpr {
             return;
         }
 
-        // -..crate-abc..Abc turns into ::crate_abc::Abc
+        // ::crate_abc::Abc turns into -..crate-abc..Abc
         let first = s.items.first().unwrap();
-        if let TokenCode::Identifier(a) = &first.name.token.code && a.id == "-" {
-            if s.items.len() == 1 {
-                first.to_u(p);
+        if let Some(t) = &first.t_sep {
+            if p.no_first_before {
+                p.no_first_before = false;
             } else {
-                if p.no_first_before {
-                    p.no_first_before = false;
-                } else {
-                    first.name.token.to_u_before(p);
-                }
+                t.to_u_before(p);
             }
+            p.push_raw("-..");
+            first.name.token.to_u_one(p);
         } else {
             first.to_u(p);
         }
@@ -1976,7 +1976,6 @@ impl ToLang for QualifiedPathInExpr {
 
         s.type_.to_u(p);
         for it in &s.items {
-            p.push_raw("::");
             it.to_u(p);
         }
     }
@@ -2035,14 +2034,12 @@ impl ToLang for TypePath {
             return;
         }
 
-        // -..crate-abc..Abc turns into ::crate_abc::Abc
+        // ::crate_abc::Abc turns into -..crate-abc..Abc
         let first = s.items.first().unwrap();
-        if let TokenCode::Identifier(a) = &first.name.token.code && a.id == "-" {
-            if s.items.len() == 1 {
-                first.to_u(p);
-            } else {
-                first.name.token.to_u_before(p);
-            }
+        if let Some(t) = &first.t_sep {
+            t.to_u_before(p);
+            p.push_raw("-..");
+            first.name.token.to_u_one(p);
         } else {
             first.to_u(p);
         }
@@ -2107,7 +2104,7 @@ impl ToLang for TypePathFunc {
         s.t_paren_close.to_u(p);
 
         if let Some(return_type) = &s.return_type {
-            p.push_raw(" ->");
+            p.push_raw(":");
             return_type.to_u(p);
         }
     }
@@ -2126,7 +2123,7 @@ impl ToLang for GenericArgs {
         let s = self;
 
         if s.need_colons {
-            p.push_raw("::");
+            p.push_raw("..");
         }
         s.t_square_open.to_u(p);
         for (it, t) in &s.items {

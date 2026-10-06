@@ -4883,8 +4883,19 @@ impl Parse {
             });
         }
 
+        // possible .. before []
+        let need_colons = if matches!(&s.current().code, T![..]) &&
+                matches!(&s.nth(1).code, T!["["]) {
+            s.plusplus();
+            true
+        } else {
+            false
+        };
+
+        let token = s.current();
         if matches!(&token.code, T!["["]) {
-            let args = s.parse_generic_args()?;
+            let mut args = s.parse_generic_args()?;
+            args.need_colons = need_colons;
             return Ok(TypePathSegment {
                 t_sep,
                 name,
