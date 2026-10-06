@@ -1955,37 +1955,16 @@ impl Parse {
         let s = self;
 
         let mut r = Enum::default();
-        let mut has_where = false;
 
-        while s.has_more() {
-            let token = s.current();
-            match &token.code {
-                T![;] => {
-                    break;
-                }
-                T!["{"] => {
-                    r.t_brace_open = token.clone();
-                    s.plusplus();
-                    r.items = parse_enum_items(s)?;
-                    r.t_brace_close = s.current().clone();
-                    s.expect(T!["}"])?;
-                    break;
-                }
-                T![where] => {
-                    if has_where {
-                        return Err(s.panic(token, "already has a where clause"));
-                    }
-                    r.where_ = Some(s.parse_where()?);
-                    has_where = true;
-                }
-                _ => {
-                    return Err(s.panic(
-                        token,
-                        &format!("expected ; {{ or where but got {:?}", token),
-                    ));
-                }
-            }
+        if matches!(&s.current().code, T![where]) {
+            r.where_ = Some(s.parse_where()?);
         }
+
+        r.t_brace_open = s.current().clone();
+        s.expect(T!["{"])?;
+        r.items = parse_enum_items(s)?;
+        r.t_brace_close = s.current().clone();
+        s.expect(T!["}"])?;
 
         return Ok(r);
 
@@ -2013,20 +1992,20 @@ impl Parse {
                 let token = s.current();
                 match &token.code {
                     T!["{"] => {
-                        field.t_brace_open = Some(token.clone());
+                        let t_o = token.clone();
                         s.plusplus();
                         let fields = s.parse_struct_fields()?;
-                        field.t_brace_close = Some(s.current().clone());
+                        let t_c = s.current().clone();
                         s.expect(T!["}"])?;
-                        field.payload = EnumItemPayload::Struct(fields);
+                        field.payload = Some((EnumItemPayload::Struct(fields), t_o, t_c));
                     }
                     T!["("] => {
-                        field.t_paren_open = Some(token.clone());
+                        let t_o = token.clone();
                         s.plusplus();
                         let fields = s.parse_tuple_fields()?;
-                        field.t_paren_close = Some(s.current().clone());
+                        let t_c = s.current().clone();
                         s.expect(T![")"])?;
-                        field.payload = EnumItemPayload::Tuple(fields);
+                        field.payload = Some((EnumItemPayload::Tuple(fields), t_o, t_c));
                     }
                     _ => (),
                 }
@@ -2062,38 +2041,19 @@ impl Parse {
         let s = self;
 
         let mut r = Union::default();
-        let mut has_where = false;
 
-        while s.has_more() {
-            let token = s.current();
-            match &token.code {
-                T![;] => {
-                    break;
-                }
-                T!["{"] => {
-                    r.t_brace_open = token.clone();
-                    s.plusplus();
-                    r.fields = s.parse_struct_fields()?;
-                    r.t_brace_close = s.current().clone();
-                    s.expect(T!["}"])?;
-                    s.expect(T![;])?;
-                    break;
-                }
-                T![where] => {
-                    if has_where {
-                        return Err(s.panic(token, "already has a where clause"));
-                    }
-                    r.where_ = Some(s.parse_where()?);
-                    has_where = true;
-                }
-                _ => {
-                    return Err(s.panic(
-                        token,
-                        &format!("expected ; {{ or where but got {:?}", token),
-                    ));
-                }
-            }
+        if matches!(&s.current().code, T![where]) {
+            r.where_ = Some(s.parse_where()?);
         }
+        if matches!(&s.current().code, T![;]) {
+            return Ok(r);
+        }
+
+        r.t_brace_open = s.current().clone();
+        s.expect(T!["{"])?;
+        r.fields = s.parse_struct_fields()?;
+        r.t_brace_close = s.current().clone();
+        s.expect(T!["}"])?;
 
         Ok(r)
     }

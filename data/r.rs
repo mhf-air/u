@@ -78,9 +78,24 @@ use super::ApiResult as Result;
 use std::option::{ Option, Option::Some, Option::None as nil };
 
 pub struct Point<T> {
-    x: i32,
+    pub x: i32,
     y: i32,
 }
 pub struct Point<T> {x: T, y: T}
 pub struct Point<T>(pub T, T);
 struct Point;
+
+pub union Point<T> where T: Clone {
+    x: i32,
+    y: i32,
+}
+
+pub enum Point<T> where T: Clone {
+    Z,
+    A(String, f64),
+    B { name: String, weight: f64 },
+    C {
+        name: String,
+        weight: f64,
+    } = 1,
+}

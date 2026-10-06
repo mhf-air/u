@@ -915,14 +915,9 @@ pub struct EnumItem {
     pub outer_attrs: Attrs,
     pub name: Token,
     // pub vis: Visibility, // it's not needed
-    pub payload: EnumItemPayload,
+    pub payload: Option<(EnumItemPayload, Token, Token)>,
     pub discriminant: Option<(Token, Expr)>,
 
-    pub t_brace_open: Option<Token>,
-    pub t_brace_close: Option<Token>,
-    pub t_paren_open: Option<Token>,
-    pub t_paren_close: Option<Token>,
-    pub t_eq: Option<Token>,
     pub t_comma: Option<Token>,
 }
 impl ToLang for EnumItem {
@@ -932,30 +927,21 @@ impl ToLang for EnumItem {
         s.outer_attrs.to_rs(p);
         s.name.to_rs(p);
 
-        match &s.payload {
-            EnumItemPayload::Struct(a) => {
-                if let Some(t) = &s.t_brace_open {
-                    t.to_rs(p);
+        if let Some((payload, t_o, t_c)) = &s.payload {
+            t_o.to_rs(p);
+            match payload {
+                EnumItemPayload::Struct(a) => {
+                    for it in a {
+                        it.to_rs(p);
+                    }
                 }
-                for it in a {
-                    it.to_rs(p);
-                }
-                if let Some(t) = &s.t_brace_close {
-                    t.to_rs(p);
-                }
-            }
-            EnumItemPayload::Tuple(a) => {
-                if let Some(t) = &s.t_paren_open {
-                    t.to_rs(p);
-                }
-                for it in a {
-                    it.to_rs(p);
-                }
-                if let Some(t) = &s.t_paren_close {
-                    t.to_rs(p);
+                EnumItemPayload::Tuple(a) => {
+                    for it in a {
+                        it.to_rs(p);
+                    }
                 }
             }
-            EnumItemPayload::None => {}
+            t_c.to_rs(p);
         }
         if let Some((t, expr)) = &s.discriminant {
             t.to_rs(p);
@@ -966,12 +952,15 @@ impl ToLang for EnumItem {
         }
     }
 }
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub enum EnumItemPayload {
-    #[default]
-    None,
     Struct(Vec<StructField>),
     Tuple(Vec<TupleField>),
+}
+impl Default for EnumItemPayload {
+    fn default() -> Self {
+        Self::Struct(Vec::new())
+    }
 }
 
 #[derive(Debug, Default)]
