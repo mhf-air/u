@@ -515,7 +515,9 @@ impl Parse {
                         });
                     } else {
                         s.expect(T![extern])?;
+                        let vis = s.parse_vis()?;
                         let mut a = s.parse_extern()?;
+                        a.vis = vis;
                         a.t_extern = special_token.clone();
                         stmt = Stmt::Item(Item {
                             outer_attrs,
@@ -1246,11 +1248,12 @@ impl Parse {
 
         // crate
         s.plusplus();
+        r.vis = s.parse_vis()?;
 
         r.name = s.current().clone();
-        if !matches!(&r.name.code, TokenCode::Identifier(_)) {
+        if !matches!(&r.name.code, TokenCode::Identifier(_) | T![self]) {
             return Err(s.panic(&r.name,
-                &format!("expected identifier after 'crate', but got {:?}", r.name)));
+                &format!("expected identifier or 'self' after 'crate', but got {:?}", r.name)));
         }
         s.plusplus();
 

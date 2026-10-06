@@ -347,7 +347,6 @@ impl ToLang for Mod {
 pub struct Crate {
     pub vis: Visibility,
     pub name: Token,
-    // AS, ALIAS
     pub alias: Option<(Token, Token)>,
 
     pub t_extern: Token,
@@ -356,10 +355,14 @@ impl ToLang for Crate {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_extern.to_u_before(p);
+        if let Some(t) = &s.vis.t_pub {
+            t.to_u_before(p);
+        } else {
+            s.t_extern.to_u_before(p);
+        }
+        p.push_raw("extern crate");
         s.vis.to_u(p);
-        p.push_raw("extern crate ");
-        s.name.to_u_one(p);
+        s.name.to_u(p);
         if let Some(alias) = &s.alias {
             alias.0.to_u(p);
             alias.1.to_u(p);
@@ -1392,12 +1395,6 @@ fn transform_macro_tokens(tokens: &[Token]) -> Vec<Token> {
 }
 
 // --------------------------------------------------------------------------------
-/*
-extern[unsafe?] Abi? {
-    foo func(x i32, ...)
-    identifier static mut? Type
-}
-*/
 #[derive(Debug, Default)]
 pub struct ExternalBlock {
     pub vis: Visibility,
@@ -1414,19 +1411,29 @@ impl ToLang for ExternalBlock {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_extern.to_u_before(p);
+        if let Some(t) = &s.vis.t_pub {
+            t.to_u_before(p);
+        } else {
+            if let Some(t) = &s.t_unsafe {
+                t.to_u_before(p);
+            } else {
+                s.t_extern.to_u_before(p);
+            }
+        }
+        s.t_extern.to_u_one(p);
         s.vis.to_u(p);
 
         if let Some(t) = &s.t_unsafe {
+            p.push_raw("[");
             t.to_u_one(p);
-            p.push_raw(" ");
+            p.push_raw("]");
         }
-        s.t_extern.to_u_one(p);
         if let Some(t) = &s.t_abi {
             t.to_u(p);
         }
 
         s.t_brace_open.to_u(p);
+        s.inner_attrs.to_u(p);
         for it in &s.items {
             it.to_u(p);
         }

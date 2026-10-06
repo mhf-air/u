@@ -1377,7 +1377,7 @@ fn transform_macro_tokens(tokens: &[Token]) -> Vec<Token> {
 
 // --------------------------------------------------------------------------------
 /*
-extern[unsafe?] Abi? {
+extern+[unsafe?] Abi? {
     foo func(x i32, ...)
     identifier static mut? Type
 }

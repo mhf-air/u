@@ -10,7 +10,8 @@
 
 #![allow(unused_uses)]
 
-extern crate foo as _;
+pub extern crate foo as _;
+extern crate self;
 extern crate std;
 extern crate std as ruststd;
 
@@ -98,4 +99,10 @@ pub enum Point<T> where T: Clone {
         name: String,
         weight: f64,
     } = 1,
+}
+
+pub unsafe extern "C" {
+    #![inner]
+
+    pub static VAR: &str = "var";
 }

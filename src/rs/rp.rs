@@ -535,15 +535,16 @@ impl Parse {
                 }
                 Keyword::Extern => {
                     if matches!(s.nth(1).code, T![crate]) {
-                        let a = s.parse_crate()?;
+                        let mut a = s.parse_crate()?;
+                        a.vis = vis;
                         stmt = Stmt::Item(Item {
                             outer_attrs,
                             payload: ItemPayload::Crate(a),
                         });
                     } else {
-                        s.expect(T![extern])?;
                         let mut a = s.parse_extern()?;
                         a.t_extern = special_token.clone();
+                        a.vis = vis;
                         stmt = Stmt::Item(Item {
                             outer_attrs,
                             payload: ItemPayload::Extern(a),
@@ -713,7 +714,7 @@ impl Parse {
                         match &t2.code {
                             // unsafe extern {}
                             T!["{"] => {
-                                return Some(token);
+                                return Some(t1);
                             }
                             // unsafe extern fn
                             T![fn] => {
@@ -727,7 +728,7 @@ impl Parse {
                             return Some(t3);
                         }
                         // unsafe extern Abi {}
-                        return Some(token);
+                        return Some(t1);
                     }
                     _ => {}
                 }
@@ -1202,9 +1203,9 @@ impl Parse {
         s.plusplus();
 
         r.name = s.current().clone();
-        if !matches!(&r.name.code, TokenCode::Identifier(_)) {
+        if !matches!(&r.name.code, TokenCode::Identifier(_) | T![self]) {
             return Err(s.panic(&r.name,
-                &format!("expected identifier after 'crate', but got {:?}", r.name)));
+                &format!("expected identifier or 'self' after 'crate', but got {:?}", r.name)));
         }
         s.plusplus();
 
@@ -1323,18 +1324,12 @@ impl Parse {
 
         let mut r = ExternalBlock::default();
 
-        // possible [unsafe]
         let token = s.current();
-        if matches!(&token.code, T!["["]) {
-            s.plusplus();
-            let token = s.current();
+        if matches!(&token.code, T![unsafe]) {
             r.t_unsafe = Some(token.clone());
-            if !matches!(&token.code, T![unsafe]) {
-                return Err(s.panic(token, &format!("expected unsafe but got {:?}", token)));
-            }
             s.plusplus();
-            s.expect(T!["]"])?;
         }
+        s.expect(T![extern])?;
 
         // possible string literal, i.e. "C"
         let token = s.current();

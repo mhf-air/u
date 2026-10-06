@@ -29,7 +29,7 @@
 //
 // - goto-definition jump to the correct position in u
 
-extern crate std
+extern crate+ self
 extern crate std as ruststd
 extern crate foo as -
 
@@ -513,7 +513,7 @@ apply[F Fn-once()] func(f F) { }
 capture['a, T] func(x &'a (), y T) impl Sized + use['a, T, Self] {}
 capture['a, T] func(x &'a (), y T) impl Sized + use[] {}
 
-extern[unsafe] "C" {
+extern+[unsafe] "C" {
     abs func(input i32, ...) i32
     abs func[safe](input i32, ...) i32
     name--c static mut i32
