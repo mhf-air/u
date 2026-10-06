@@ -440,11 +440,7 @@ impl Parse {
             return Err(s.panic(&s.current(), "expected Stmt"));
         }
 
-        let vis = if matches!(s.current().code, T![pub]) {
-            s.parse_vis()?
-        } else {
-            Visibility::default()
-        };
+        let vis = s.parse_vis()?;
 
         // get_first_special_token
         let Some(first_special_token) = s.get_first_special_token() else {
@@ -672,8 +668,8 @@ impl Parse {
         let mut is_func = false;
 
         match &token.code {
-            T![use] | T![enum] | T![fn] | T![impl] | T![let] |
-            T![trait] | T![mod] | T![static] | T![type] | T![union]
+            T![use] | T![struct] | T![enum] | T![trait] | T![fn] | T![impl] | T![let] |
+            T![mod] | T![static] | T![type] | T![union]
             => {
                 return Some(token);
             }
@@ -818,7 +814,14 @@ impl Parse {
     fn parse_vis(&self) -> ParseResult<Visibility> {
         let s = self;
 
-        let mut r = Visibility {
+        let mut r = Visibility::default();
+
+        let token = s.current();
+        if !matches!(&token.code, T![pub]) {
+            return Ok(r);
+        }
+
+        r = Visibility {
             payload: VisibilityPayload::Pub,
             t_pub: Some(s.current().clone()),
         };
@@ -1790,7 +1793,6 @@ impl Parse {
         let s = self;
 
         let mut r = Struct::default();
-        let mut has_where = false;
 
         s.expect(T![struct])?;
 
@@ -1811,68 +1813,37 @@ impl Parse {
             r.generics = Some(s.parse_generics()?);
         }
 
-        while s.has_more() {
-            let token = s.current();
-            match &token.code {
-                T![;] => {
-                    break;
-                }
-                T!["{"] => {
-                    r.t_brace_open = Some(token.clone());
-                    s.plusplus();
-                    let fields = s.parse_struct_fields()?;
-                    r.t_brace_close = Some(s.current().clone());
-                    s.expect(T!["}"])?;
-                    r.payload = Some(StructPayload::Struct(fields));
-                    s.expect(T![;])?;
-                    break;
-                }
-                T!["("] => {
-                    r.t_paren_open = Some(token.clone());
-                    if has_where {
-                        return Err(
-                            s.panic(token, "where clause should be after parens in struct tuple")
-                        );
-                    }
-                    s.plusplus();
-                    let fields = s.parse_tuple_fields()?;
-                    r.t_paren_close = Some(s.current().clone());
-                    s.expect(T![")"])?;
-                    r.payload = Some(StructPayload::Tuple(fields));
-                    let token = s.current();
-                    match &token.code {
-                        T![;] => {
-                            break;
-                        }
-                        T![where] => {
-                            s.plusplus();
-                            r.where_ = Some(s.parse_where()?);
-                            s.expect(T![;])?;
-                            break;
-                        }
-                        _ => {
-                            return Err(s.panic(
-                                token,
-                                &format!("expected ; or where but got {:?}", token),
-                            ));
-                        }
-                    }
-                }
-                T![where] => {
-                    if has_where {
-                        return Err(s.panic(token, "already has a where clause"));
-                    }
-                    r.where_ = Some(s.parse_where()?);
-                    has_where = true;
-                }
-                _ => {
-                    return Err(s.panic(
-                        token,
-                        &format!("expected ; {{ ( or where but got {:?}", token),
-                    ));
-                }
+        let token = s.current();
+        // tuple
+        if matches!(&token.code, T!["("]) {
+            let t_o = token.clone();
+            s.plusplus();
+            let fields = s.parse_tuple_fields()?;
+            let t_c = s.current().clone();
+            s.expect(T![")"])?;
+            r.payload = Some((StructPayload::Tuple(fields), t_o, t_c));
+
+            if matches!(&s.current().code, T![where]) {
+                r.where_ = Some(s.parse_where()?);
             }
+            s.expect(T![;])?;
+            return Ok(r);
         }
+
+        // struct
+        if matches!(&s.current().code, T![where]) {
+            r.where_ = Some(s.parse_where()?);
+        }
+        if matches!(&s.current().code, T![;]) {
+            return Ok(r);
+        }
+
+        let t_o = s.current().clone();
+        s.expect(T!["{"])?;
+        let fields = s.parse_struct_fields()?;
+        let t_c = s.current().clone();
+        s.expect(T!["}"])?;
+        r.payload = Some((StructPayload::Struct(fields), t_o, t_c));
 
         Ok(r)
     }
@@ -1890,6 +1861,8 @@ impl Parse {
             let mut field = StructField::default();
             field.outer_attrs = s.parse_outer_attrs()?;
 
+            field.vis = s.parse_vis()?;
+
             let token = s.current();
             let TokenCode::Identifier(_) = &token.code else {
                 return Err(s.panic(token, &format!("expected identifier but got {:?}", token)));
@@ -1897,19 +1870,15 @@ impl Parse {
             field.name = token.clone();
             s.plusplus();
 
-            field.vis = s.parse_vis()?;
+            s.expect(T![:])?;
 
             field.type_ = s.parse_type()?;
 
             let token = s.current();
             if matches!(&token.code, T![,]) {
-                field.t_comma = Some(token.clone());
                 s.plusplus();
-            } else if matches!(&token.code, T![;]) {
-                let mut t = token.clone();
-                t.code = T![,];
-                field.t_comma = Some(t);
-                s.plusplus();
+                let next_token = s.current();
+                field.t_comma = next_token.span.line == token.span.line;
             } else if !matches!(&token.code, T!["}"]) {
                 return Err(s.panic(token, &format!("illegal token after field {:?}", token)));
             }
@@ -1937,11 +1906,6 @@ impl Parse {
             let t_comma = if matches!(&token.code, T![,]) {
                 s.plusplus();
                 Some(token.clone())
-            } else if matches!(&token.code, T![;]) {
-                let mut t = token.clone();
-                t.code = T![,];
-                s.plusplus();
-                Some(t)
             } else if !matches!(&token.code, T![")"]) {
                 return Err(s.panic(token, &format!("illegal token after field {:?}", token)));
             } else {

@@ -769,13 +769,9 @@ pub struct Struct {
     pub name: Token,
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
-    pub payload: Option<StructPayload>,
+    pub payload: Option<(StructPayload, Token, Token)>,
 
     pub t_struct: Token,
-    pub t_brace_open: Option<Token>,
-    pub t_brace_close: Option<Token>,
-    pub t_paren_open: Option<Token>,
-    pub t_paren_close: Option<Token>,
 }
 impl ToLang for Struct {
     fn to_rs(&self, p: &mut LangFormatter) {
@@ -791,37 +787,27 @@ impl ToLang for Struct {
             generics.to_rs(p);
         }
 
-        if let Some(payload) = &s.payload {
+        if let Some((payload, t_o, t_c)) = &s.payload {
             match payload {
                 StructPayload::Struct(a) => {
                     if let Some(where_) = &s.where_ {
                         where_.to_rs(p);
-                    }
-                    if let Some(t) = &s.t_brace_open {
-                        if let Some(where_) = &s.where_ {
-                            where_.t_brace_close.to_rs_before(p);
-                            t.to_rs_one(p);
-                        } else {
-                            t.to_rs(p);
-                        }
+                        where_.t_brace_close.to_rs_before(p);
+                        t_o.to_rs_one(p);
+                    } else {
+                        t_o.to_rs(p);
                     }
                     for it in a {
                         it.to_rs(p);
                     }
-                    if let Some(t) = &s.t_brace_close {
-                        t.to_rs(p);
-                    }
+                    t_c.to_rs(p);
                 }
                 StructPayload::Tuple(a) => {
-                    if let Some(t) = &s.t_paren_open {
-                        t.to_rs(p);
-                    }
+                    t_o.to_rs(p);
                     for it in a {
                         it.to_rs(p);
                     }
-                    if let Some(t) = &s.t_paren_close {
-                        t.to_rs(p);
-                    }
+                    t_c.to_rs(p);
                     if let Some(where_) = &s.where_ {
                         where_.to_rs(p);
                     }

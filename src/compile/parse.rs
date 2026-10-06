@@ -1833,70 +1833,38 @@ impl Parse {
         let s = self;
 
         let mut r = Struct::default();
-        let mut has_where = false;
 
-        while s.has_more() {
-            let token = s.current();
-            match &token.code {
-                T![;] => {
-                    break;
-                }
-                T!["{"] => {
-                    r.t_brace_open = Some(token.clone());
-                    s.plusplus();
-                    let fields = s.parse_struct_fields()?;
-                    r.t_brace_close = Some(s.current().clone());
-                    s.expect(T!["}"])?;
-                    r.payload = Some(StructPayload::Struct(fields));
-                    s.expect(T![;])?;
-                    break;
-                }
-                T!["("] => {
-                    r.t_paren_open = Some(token.clone());
-                    if has_where {
-                        return Err(
-                            s.panic(token, "where clause should be after parens in struct tuple")
-                        );
-                    }
-                    s.plusplus();
-                    let fields = s.parse_tuple_fields()?;
-                    r.t_paren_close = Some(s.current().clone());
-                    s.expect(T![")"])?;
-                    r.payload = Some(StructPayload::Tuple(fields));
-                    let token = s.current();
-                    match &token.code {
-                        T![;] => {
-                            break;
-                        }
-                        T![where] => {
-                            s.plusplus();
-                            r.where_ = Some(s.parse_where()?);
-                            s.expect(T![;])?;
-                            break;
-                        }
-                        _ => {
-                            return Err(s.panic(
-                                token,
-                                &format!("expected ; or where but got {:?}", token),
-                            ));
-                        }
-                    }
-                }
-                T![where] => {
-                    if has_where {
-                        return Err(s.panic(token, "already has a where clause"));
-                    }
-                    r.where_ = Some(s.parse_where()?);
-                    has_where = true;
-                }
-                _ => {
-                    return Err(s.panic(
-                        token,
-                        &format!("expected ; {{ ( or where but got {:?}", token),
-                    ));
-                }
+        let token = s.current();
+        // tuple
+        if matches!(&token.code, T!["("]) {
+            let t_o = token.clone();
+            s.plusplus();
+            let fields = s.parse_tuple_fields()?;
+            let t_c = s.current().clone();
+            s.expect(T![")"])?;
+            r.payload = Some((StructPayload::Tuple(fields), t_o, t_c));
+
+            if matches!(&s.current().code, T![where]) {
+                r.where_ = Some(s.parse_where()?);
             }
+            s.expect(T![;])?;
+            return Ok(r);
         }
+
+        // struct
+        if matches!(&s.current().code, T![where]) {
+            r.where_ = Some(s.parse_where()?);
+        }
+        if matches!(&s.current().code, T![;]) {
+            return Ok(r);
+        }
+
+        let t_o = s.current().clone();
+        s.expect(T!["{"])?;
+        let fields = s.parse_struct_fields()?;
+        let t_c = s.current().clone();
+        s.expect(T!["}"])?;
+        r.payload = Some((StructPayload::Struct(fields), t_o, t_c));
 
         Ok(r)
     }

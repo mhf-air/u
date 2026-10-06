@@ -76,3 +76,11 @@ use std::env::consts
     as env_consts;
 use super::ApiResult as Result;
 use std::option::{ Option, Option::Some, Option::None as nil };
+
+pub struct Point<T> {
+    x: i32,
+    y: i32,
+}
+pub struct Point<T> {x: T, y: T}
+pub struct Point<T>(pub T, T);
+struct Point;

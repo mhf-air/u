@@ -768,59 +768,49 @@ pub struct Struct {
     pub name: Token,
     pub generics: Option<Generics>,
     pub where_: Option<Where>,
-    pub payload: Option<StructPayload>,
+    pub payload: Option<(StructPayload, Token, Token)>,
 
     pub t_struct: Token,
-    pub t_brace_open: Option<Token>,
-    pub t_brace_close: Option<Token>,
-    pub t_paren_open: Option<Token>,
-    pub t_paren_close: Option<Token>,
 }
 impl ToLang for Struct {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.name.to_u_before(p);
-        s.vis.to_u(p);
-
-        s.t_struct.to_u_one(p);
-        s.t_struct.to_u_before(p);
+        if let Some(t) = &s.vis.t_pub {
+            t.to_u_before(p);
+        } else {
+            s.t_struct.to_u_before(p);
+        }
         s.name.to_u_one(p);
+        s.vis.to_u(p);
         if let Some(generics) = &s.generics {
             generics.to_u(p);
         }
 
-        if let Some(payload) = &s.payload {
+        s.name.to_u_before(p);
+        s.t_struct.to_u_one(p);
+
+        if let Some((payload, t_o, t_c)) = &s.payload {
             match payload {
                 StructPayload::Struct(a) => {
                     if let Some(where_) = &s.where_ {
                         where_.to_u(p);
-                    }
-                    if let Some(t) = &s.t_brace_open {
-                        if s.where_.is_some() {
-                            p.push_raw(" ");
-                            t.to_u_one(p);
-                        } else {
-                            t.to_u(p);
-                        }
+                        p.push_raw(" ");
+                        t_o.to_u_one(p);
+                    } else {
+                        t_o.to_u(p);
                     }
                     for it in a {
                         it.to_u(p);
                     }
-                    if let Some(t) = &s.t_brace_close {
-                        t.to_u(p);
-                    }
+                    t_c.to_u(p);
                 }
                 StructPayload::Tuple(a) => {
-                    if let Some(t) = &s.t_paren_open {
-                        t.to_u(p);
-                    }
+                    t_o.to_u(p);
                     for it in a {
                         it.to_u(p);
                     }
-                    if let Some(t) = &s.t_paren_close {
-                        t.to_u(p);
-                    }
+                    t_c.to_u(p);
                     if let Some(where_) = &s.where_ {
                         where_.to_u(p);
                     }
@@ -844,7 +834,7 @@ pub struct StructField {
     pub name: Token,
     pub vis: Visibility,
     pub type_: Type,
-    pub t_comma: Option<Token>,
+    pub t_comma: bool,
 }
 impl ToLang for StructField {
     fn to_u(&self, p: &mut LangFormatter) {
@@ -855,11 +845,10 @@ impl ToLang for StructField {
         s.name.to_u_before(p);
         s.vis.to_u(p);
         s.name.to_u_one(p);
-        p.push_raw(":");
 
         s.type_.to_u(p);
-        if let Some(t) = &s.t_comma {
-            t.to_u(p);
+        if s.t_comma {
+            p.push_raw(",");
         }
     }
 }
