@@ -2234,12 +2234,15 @@ impl Parse {
             r.generics = Some(s.parse_generics()?);
         }
 
+        let token = s.current();
+        if matches!(&token.code, T![!]) {
+            impl_trait.t_not = Some(token.clone());
+            s.plusplus();
+        }
+
         let type_ = s.parse_type()?;
 
-        if matches!(&s.current().code, T![where] | T!["{"]) {
-            r.type_ = type_;
-            r.payload = ImplPayload::Static;
-        } else {
+        if matches!(&s.current().code, T![for]) {
             if let TypePayload::TypeNoBounds(a) = type_.payload &&
                     let TypeNoBounds::TypePath(b) = *a {
                 impl_trait.type_path = b;
@@ -2250,11 +2253,13 @@ impl Parse {
             s.plusplus();
             r.type_ = s.parse_type()?;
             r.payload = ImplPayload::Trait(impl_trait);
+        } else {
+            r.type_ = type_;
+            r.payload = ImplPayload::Static;
         }
 
         // possible where clause
-        let token = s.current();
-        if matches!(&token.code, T![where]) {
+        if matches!(&s.current().code, T![where]) {
             r.where_ = Some(s.parse_where()?);
         }
 
@@ -2264,7 +2269,7 @@ impl Parse {
         while s.has_more() {
             let token = s.current();
             if matches!(&token.code, T!["}"]) {
-                r.t_brace_close = s.current().clone();
+                r.t_brace_close = token.clone();
                 s.plusplus();
                 break;
             }

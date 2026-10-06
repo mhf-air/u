@@ -1118,23 +1118,31 @@ impl ToLang for Trait {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.name.to_u_before(p);
-        s.vis.to_u(p);
-
-        if let Some(t) = &s.t_unsafe {
-            t.to_u_one(p);
-            p.push_raw(" ");
-            s.t_trait.to_u_one(p);
+        if let Some(t) = &s.vis.t_pub {
+            t.to_u_before(p);
         } else {
-            s.t_trait.to_u_one(p);
+            if let Some(t) = &s.t_unsafe {
+                t.to_u_before(p);
+            } else {
+                s.t_trait.to_u_before(p);
+            }
         }
-        s.t_trait.to_u_before(p);
+
         s.name.to_u_one(p);
+        s.vis.to_u(p);
         if let Some(generics) = &s.generics {
             generics.to_u(p);
         }
+
+        s.name.to_u_before(p);
+        s.t_trait.to_u_one(p);
+        if let Some(t) = &s.t_unsafe {
+            p.push_raw("[");
+            t.to_u_one(p);
+            p.push_raw("]");
+        }
+
         if !s.bounds.items.is_empty() {
-            p.push_raw(":");
             s.bounds.to_u(p);
         }
         if let Some(where_) = &s.where_ {
@@ -1201,10 +1209,9 @@ impl ToLang for Impl {
         let s = self;
 
         if let ImplPayload::Trait(a) = &s.payload && let Some(t) = &a.t_unsafe {
-            s.t_impl.to_u_before(p);
-            t.to_u_one(p);
-            p.push_raw(" ");
+            t.to_u_before(p);
             s.t_impl.to_u_one(p);
+            p.push_raw("[unsafe]");
         } else {
             s.t_impl.to_u(p);
         }
@@ -1218,6 +1225,9 @@ impl ToLang for Impl {
                 s.type_.to_u(p);
             }
             ImplPayload::Trait(a) => {
+                if let Some(t) = &a.t_not {
+                    t.to_u(p);
+                }
                 a.type_path.to_u(p);
                 a.t_for.to_u(p);
                 s.type_.to_u(p);
@@ -1249,6 +1259,7 @@ pub enum ImplPayload {
 
 #[derive(Debug, Default)]
 pub struct ImplTrait {
+    pub t_not: Option<Token>,
     pub type_path: TypePath,
     pub t_for: Token,
     pub t_unsafe: Option<Token>,

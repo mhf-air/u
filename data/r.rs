@@ -106,3 +106,25 @@ pub unsafe extern "C" {
 
     pub static VAR: &str = "var";
 }
+
+pub unsafe trait WithSelf<T>: Super<Self> where Self: Sized {
+    #![inner]
+
+    pub const MAX: i32;
+    const MAX: i32 = 1;
+    type B;
+}
+
+impl<T> Person<T> where T: Clone {
+    #![inner]
+
+    pub const MAX: i32;
+    const MAX: i32 = 1;
+    type B;
+}
+impl<T> Clone for Person<T> where T: Clone {
+    #![inner]
+}
+unsafe impl<T> !Clone for Person<T> where T: Clone {
+    #![inner]
+}

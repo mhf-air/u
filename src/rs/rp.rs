@@ -587,7 +587,6 @@ impl Parse {
                     });
                 }
                 Keyword::Impl => {
-                    s.expect(T![impl])?;
                     let mut a = s.parse_impl()?;
                     a.t_impl = special_token.clone();
                     stmt = Stmt::Item(Item {
@@ -2144,19 +2143,11 @@ impl Parse {
 
         let mut r = Trait::default();
 
-        // possible [unsafe]
         let token = s.current();
-        if matches!(&token.code, T!["["]) {
-            s.plusplus();
-            let token = s.current();
+        if matches!(&token.code, T![unsafe]) {
             r.t_unsafe = Some(token.clone());
-            if !matches!(&token.code, T![unsafe]) {
-                return Err(s.panic(token, &format!("expected unsafe, but got {:?}", token)));
-            }
             s.plusplus();
-            s.expect(T!["]"])?;
         }
-
         s.expect(T![trait])?;
 
         // name
@@ -2171,20 +2162,18 @@ impl Parse {
         }
 
         // possible GenericsParams
-        let token = s.current();
-        if matches!(token.code, T![<]) {
+        if matches!(s.current().code, T![<]) {
             r.generics = Some(s.parse_generics()?);
         }
 
         // possible TypeParamBounds
-        let token = s.current();
-        if !matches!(&token.code, T![where] | T!["{"]) {
+        if matches!(&s.current().code, T![:]) {
+            s.plusplus();
             r.bounds = s.parse_type_param_bounds()?;
         }
 
         // possible where clause
-        let token = s.current();
-        if matches!(&token.code, T![where]) {
+        if matches!(&s.current().code, T![where]) {
             r.where_ = Some(s.parse_where()?);
         }
 
@@ -2253,45 +2242,46 @@ impl Parse {
         let s = self;
 
         let mut r = Impl::default();
-
         let mut impl_trait = ImplTrait::default();
-        // possible [unsafe]
+
         let token = s.current();
-        if matches!(&token.code, T!["["]) {
-            let next_token = s.nth(1);
-            if matches!(&next_token.code, T![unsafe]) {
-                impl_trait.t_unsafe = Some(next_token.clone());
-                s.plusplus();
-                s.plusplus();
-                s.expect(T!["]"])?;
-            }
+        if matches!(&token.code, T![unsafe]) {
+            impl_trait.t_unsafe = Some(token.clone());
+            s.plusplus();
         }
-        let token = s.current();
-        if matches!(&token.code, T![<]) {
+        s.expect(T![impl])?;
+
+        if matches!(&s.current().code, T![<]) {
             r.generics = Some(s.parse_generics()?);
+        }
+
+        let token = s.current();
+        if matches!(&token.code, T![!]) {
+            impl_trait.t_not = Some(token.clone());
+            s.plusplus();
         }
 
         let type_ = s.parse_type()?;
 
-        if matches!(&s.current().code, T![where] | T!["{"]) {
-            r.type_ = type_;
-            r.payload = ImplPayload::Static;
-        } else {
+        let token = s.current();
+        if matches!(&token.code, T![for]) {
             if let TypePayload::TypeNoBounds(a) = type_.payload &&
                     let TypeNoBounds::TypePath(b) = *a {
                 impl_trait.type_path = b;
             } else {
                 return Err(s.panic(&s.current(), "Type is not TypePath in impl"));
             }
-            impl_trait.t_for = s.current().clone();
+            impl_trait.t_for = token.clone();
             s.plusplus();
             r.type_ = s.parse_type()?;
             r.payload = ImplPayload::Trait(impl_trait);
+        } else {
+            r.type_ = type_;
+            r.payload = ImplPayload::Static;
         }
 
         // possible where clause
-        let token = s.current();
-        if matches!(&token.code, T![where]) {
+        if matches!(&s.current().code, T![where]) {
             r.where_ = Some(s.parse_where()?);
         }
 
@@ -2301,7 +2291,7 @@ impl Parse {
         while s.has_more() {
             let token = s.current();
             if matches!(&token.code, T!["}"]) {
-                r.t_brace_close = s.current().clone();
+                r.t_brace_close = token.clone();
                 s.plusplus();
                 break;
             }

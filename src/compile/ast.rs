@@ -1194,6 +1194,9 @@ impl ToLang for Impl {
                 s.type_.to_rs(p);
             }
             ImplPayload::Trait(a) => {
+                if let Some(t) = &a.t_not {
+                    t.to_rs(p);
+                }
                 a.type_path.to_rs(p);
                 a.t_for.to_rs(p);
                 s.type_.to_rs(p);
@@ -1225,6 +1228,7 @@ pub enum ImplPayload {
 
 #[derive(Debug, Default)]
 pub struct ImplTrait {
+    pub t_not: Option<Token>,
     pub type_path: TypePath,
     pub t_for: Token,
     pub t_unsafe: Option<Token>,

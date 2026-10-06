@@ -382,6 +382,7 @@ impl fmt..Debug for Person['a] {
             .finish()
     }
 }
+impl !Clone for Person {}
 
 Pair[T, U] struct(+ T, + U)
 Pair[T, U] struct(^ T, U)
