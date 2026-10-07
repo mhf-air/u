@@ -154,6 +154,8 @@ pub const async unsafe extern "C" fn f() {
 }
 
 fn f(&self, #[a] mut a: i32, mut b: i32, ...) -> i32 {
+    let s = self;
+    s.a = a;
 }
 
 #[rustfmt::skip]
@@ -164,3 +166,7 @@ fn f(
     b: i32,
     mut a: i32,
 ) {}
+
+macro_rules! abc {
+    ($l:expr) => { bar!($l); }
+}

@@ -1261,7 +1261,7 @@ impl Token {
                     Keyword::Enum => "enum",
                     Keyword::Extern => "extern",
                     Keyword::For => "for",
-                    Keyword::Func => "fn",
+                    Keyword::Func => "func",
                     Keyword::If => "if",
                     Keyword::Impl => "impl",
                     Keyword::In => "in",

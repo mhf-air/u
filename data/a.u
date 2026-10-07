@@ -3,6 +3,9 @@
 //!
 //! rust reference
 //!     https://doc.rust-lang.org/reference/introduction.html
+//!
+//! - open *.rs: read *.rs -> rust's ast -> write .*.u
+//! - write .*.u: u u-compile .*.u
 
 /*!
     another form of inner doc comment
@@ -11,17 +14,6 @@
 #![allow(unused-uses)]
 
 // todo
-// - func[no-s]
-//     in u->rs, if there's no func[no-s],
-//         add "let s = self;"
-//     in rs->u, if there's no "let s = self;" as the first item in method body,
-//         add func[no-s]
-//     else
-//         delete the first item in u
-//
-// - open *.rs: read *.rs -> rust's ast -> write .*.u
-// - write .*.u: u u-compile .*.u
-//
 // - in rust-to-u, when parsing macro_call!,
 //      - try parsing it into Vec[Expr], if ok, then it's macro-call_() or [s]() or [b]()
 //      - try parsing it into Vec[Stmt], if ok, then it's macro-call_{} or [s]{} or [p]{}

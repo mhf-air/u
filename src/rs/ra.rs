@@ -528,7 +528,7 @@ impl ToLang for Func {
         if let Some((t, abi)) = &s.qualifier.t_extern {
             if is_first {
                 t.to_u_one(p);
-                // is_first = false;
+                is_first = false;
             } else {
                 p.push_raw(",");
                 t.to_u(p);
@@ -536,6 +536,14 @@ impl ToLang for Func {
             if let Some(abi) = abi {
                 abi.to_u(p);
             }
+        }
+        if s.qualifier.no_s {
+            if is_first {
+                // is_first = false;
+            } else {
+                p.push_raw(", ");
+            }
+            p.push_raw("no-s");
         }
         if s.qualifier.exist {
             p.push_raw("]");
@@ -642,7 +650,7 @@ pub struct FuncQualifier {
     pub t_async: Option<Token>,
     pub t_unsafe: Option<Token>,
     pub t_extern: Option<(Token, Option<Token>)>,
-    pub t_no_s: Option<Token>,
+    pub no_s: bool,
     pub exist: bool,
 }
 #[derive(Debug, Default)]
@@ -1328,11 +1336,10 @@ impl ToLang for Macro {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.name.to_u_before(p);
-        s.t_macro.to_u_one(p);
-        p.push_raw("!");
         s.t_macro.to_u_before(p);
         s.name.to_u_one(p);
+        s.name.to_u_before(p);
+        p.push_raw("macro");
 
         if matches!(s.t_delim_open.code, T!["["]) {
             s.t_delim_open.to_u_before(p);
@@ -1351,10 +1358,6 @@ impl ToLang for Macro {
             p.push_raw("]");
         } else {
             s.t_delim_close.to_u(p);
-        }
-
-        if !matches!(s.t_delim_open.code, T!["{"]) {
-            p.push_raw(";");
         }
     }
 }

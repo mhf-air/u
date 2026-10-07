@@ -483,8 +483,7 @@ impl Parse {
         match &special_token.code {
             // macro_rules!
             T![!] => {
-                let mut a = s.parse_macro()?;
-                a.t_macro = special_token.clone();
+                let a = s.parse_macro()?;
                 stmt = Stmt::Item(Item {
                     outer_attrs,
                     payload: ItemPayload::Macro(a),
@@ -545,6 +544,7 @@ impl Parse {
                     let mut a = s.parse_func()?;
                     a.vis = vis;
                     a.t_func = special_token.clone();
+                    a.t_func.code = T![func];
                     stmt = Stmt::Item(Item {
                         outer_attrs,
                         payload: ItemPayload::Func(Box::new(a)),
@@ -1438,7 +1438,33 @@ impl Parse {
         }
 
         // body
-        let a = s.parse_block_expr()?;
+        let mut a = s.parse_block_expr()?;
+        if r.self_param.is_some() && !a.stmts.is_empty() {
+            // check if the first stmt is
+            // let s = self;
+            let first = &a.stmts[0];
+            if let Stmt::Let(a) = first &&
+                let Some((name, None)) = &a.short &&
+                name.u == "s" &&
+                let Some(expr) = &a.expr &&
+                let ExprPayload::WithoutBlock(a) = &expr.payload &&
+                let ExprWithoutBlock::Path(a) = a.as_ref() &&
+                let ExprPath::Path(a) = a &&
+                !a.items.is_empty()
+            {
+                let a = &a.items[0];
+                if a.t_sep.is_none() &&
+                    a.generic_args.items.is_empty() &&
+                    matches!(a.name.token.code, T![self])
+                {
+                    r.qualifier.no_s = true;
+                    r.qualifier.exist = true;
+                }
+            }
+        }
+        if r.qualifier.no_s {
+            a.stmts.remove(0);
+        }
         r.body = Some(a);
 
         Ok(r)
@@ -2250,6 +2276,7 @@ impl Parse {
         let s = self;
 
         let mut r = Macro::default();
+        r.t_macro = s.current().clone();
 
         s.plusplus();
         s.expect(T![!])?;
@@ -2340,23 +2367,12 @@ impl Parse {
                 }
             }
 
-            match &token.code {
-                T![;] => {
-                    // don't add auto-added semicolons in macro definitions
-                    if !token.is_added_semicolon() {
-                        r.tokens.push(token.clone());
-                    }
-                }
-                _ => {
-                    r.tokens.push(token.clone());
-                }
-            }
+            r.tokens.push(token.clone());
         }
 
         Ok(r)
     }
 
-    // after _
     fn parse_macro_call(&self, path: SimplePath, token: &Token) -> ParseResult<MacroCall> {
         let s = self;
 
