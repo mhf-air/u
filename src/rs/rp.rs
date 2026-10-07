@@ -1351,86 +1351,50 @@ impl Parse {
         Ok(r)
     }
 
+    // const? async? [safe|unsafe]? (extern Abi?)? fn
     fn parse_func(&self) -> ParseResult<Func> {
         let s = self;
 
         let mut r = Func::default();
 
+        r.t_first = s.current().clone();
+
         // qualifier
         let token = s.current();
-        if matches!(&token.code, T!["["]) {
+        if matches!(&token.code, T![const]) {
+            r.qualifier.t_const = Some(token.clone());
+            r.qualifier.exist = true;
             s.plusplus();
-            while s.has_more() {
-                let token = s.current();
+        }
+        let token = s.current();
+        if matches!(&token.code, T![async]) {
+            r.qualifier.t_async = Some(token.clone());
+            r.qualifier.exist = true;
+            s.plusplus();
+        }
+        let token = s.current();
+        if token.u == "safe" || token.u == "unsafe" {
+            r.qualifier.t_unsafe = Some(token.clone());
+            r.qualifier.exist = true;
+            s.plusplus();
+        }
+        let token = s.current();
+        if matches!(&token.code, T![extern]) {
+            r.qualifier.exist = true;
+            s.plusplus();
+            let next_token = s.current();
+            if let TokenCode::Literal(Literal {
+                payload: LiteralPayload::String(_),
+                ..
+            }) = &next_token.code
+            {
+                r.qualifier.t_extern = Some((
+                    token.clone(),
+                    Some(next_token.clone()),
+                ));
                 s.plusplus();
-                match &token.code {
-                    T![async] => {
-                        if r.qualifier.t_async.is_some() {
-                            return Err(s.panic(token, "already set async"));
-                        }
-                        r.qualifier.t_async = Some(token.clone());
-                    }
-                    T![const] => {
-                        if r.qualifier.t_const.is_some() {
-                            return Err(s.panic(token, "already set const"));
-                        }
-                        r.qualifier.t_const = Some(token.clone());
-                    }
-                    T![unsafe] => {
-                        if r.qualifier.t_unsafe.is_some() {
-                            return Err(s.panic(token, "already set unsafe"));
-                        }
-                        r.qualifier.t_unsafe = Some(token.clone());
-                    }
-                    T![extern] => {
-                        if r.qualifier.t_extern.is_some() {
-                            return Err(s.panic(token, "already set extern"));
-                        }
-                        let next_token = s.current();
-                        if let TokenCode::Literal(Literal {
-                            payload: LiteralPayload::String(_),
-                            ..
-                        }) = &next_token.code
-                        {
-                            r.qualifier.t_extern = Some((
-                                token.clone(),
-                                Some(next_token.clone()),
-                            ));
-                            s.plusplus();
-                        } else {
-                            r.qualifier.t_extern = Some((token.clone(), None));
-                        }
-                    }
-                    _ => {
-                        if let TokenCode::Identifier(ident) = &token.code {
-                            if ident.id == "safe" {
-                                if r.qualifier.t_unsafe.is_some() {
-                                    return Err(s.panic(token, "already set safe"));
-                                }
-                                r.qualifier.t_unsafe = Some(token.clone());
-                            } else if ident.id == "no-s" {
-                                r.qualifier.t_no_s = Some(token.clone());
-                            }
-                        } else {
-                            return Err(s.panic(
-                                token,
-                                &format!("illegal token {:?} in func qualifier", token),
-                            ));
-                        }
-                    }
-                }
-
-                let token = s.current();
-                s.plusplus();
-                match &token.code {
-                    T![,] => (),
-                    T!["]"] => {
-                        break;
-                    }
-                    _ => {
-                        return Err(s.panic(token, &format!("expected , or ] but got {:?}", token)));
-                    }
-                }
+            } else {
+                r.qualifier.t_extern = Some((token.clone(), None));
             }
         }
 
@@ -1453,13 +1417,148 @@ impl Parse {
         }
 
         // params
-        r.t_paren_open = s.current().clone();
+        s.parse_func_params(&mut r)?;
+
+        // return type
+        let token = s.current();
+        if matches!(&token.code, T![->]) {
+            s.plusplus();
+            r.return_type = Some(s.parse_type()?);
+        }
+
+        // where
+        let token = s.current();
+        if matches!(&token.code, T![where]) {
+            r.where_ = Some(s.parse_where()?);
+        }
+
+        let token = s.current();
+        if matches!(&token.code, T![;]) {
+            return Ok(r);
+        }
+
+        // body
+        let a = s.parse_block_expr()?;
+        r.body = Some(a);
+
+        Ok(r)
+    }
+
+    fn parse_func_params(&self, f: &mut Func) -> ParseResult<()> {
+        let s = self;
+
+        f.t_paren_open = s.current().clone();
         s.expect(T!["("])?;
-        r.t_first_after_paren = s.current().clone();
+        f.t_first_after_paren = s.current().clone();
+
+        // self param
+        let i_cur = s.index.get();
+        let outer_attrs = s.parse_outer_attrs()?;
+        let token = s.current();
+        match &token.code {
+            T![&] => {
+                let mut i = 1;
+                let label = if matches!(s.nth(i).code, TokenCode::Lifetime(_)) {
+                    i += 1;
+                    Some(s.nth(i - 1).clone())
+                } else {
+                    None
+                };
+                if matches!(s.nth(i).code, T![self]) {
+                    s.inc(i + 1);
+                    f.self_param = Some(SelfParam {
+                        outer_attrs,
+                        payload: SelfParamPayload::Short(SelfParamShort{
+                            t_ref: Some(token.clone()),
+                            label: label,
+                            t_mut: None,
+                        }),
+                        t_first_after_attr: token.clone(),
+                    });
+                } else if matches!(s.nth(i).code, T![mut]) {
+                    let t_mut = Some(s.nth(i).clone());
+                    i += 1;
+                    if matches!(s.nth(i).code, T![self]) {
+                        s.inc(i + 1);
+                        f.self_param = Some(SelfParam {
+                            outer_attrs,
+                            payload: SelfParamPayload::Short(SelfParamShort{
+                                t_ref: Some(token.clone()),
+                                label: label,
+                                t_mut,
+                            }),
+                            t_first_after_attr: token.clone(),
+                        });
+                    }
+                }
+            }
+            T![mut] => {
+                if matches!(s.nth(1).code, T![self]) {
+                    if matches!(s.nth(2).code, T![:]) {
+                        s.inc(3);
+                        let typ = s.parse_type()?;
+                        f.self_param = Some(SelfParam {
+                            outer_attrs,
+                            payload: SelfParamPayload::Type(SelfParamType{
+                                typ,
+                                t_mut: Some(token.clone()),
+                            }),
+                            t_first_after_attr: token.clone(),
+                        });
+                    } else {
+                        s.inc(2);
+                        f.self_param = Some(SelfParam {
+                            outer_attrs,
+                            payload: SelfParamPayload::Short(SelfParamShort{
+                                t_ref: None,
+                                label: None,
+                                t_mut: Some(token.clone()),
+                            }),
+                            t_first_after_attr: token.clone(),
+                        });
+                    }
+                }
+            }
+            T![self] => {
+                if matches!(s.nth(1).code, T![:]) {
+                    s.inc(2);
+                    let typ = s.parse_type()?;
+                    f.self_param = Some(SelfParam {
+                        outer_attrs,
+                        payload: SelfParamPayload::Type(SelfParamType{
+                            typ,
+                            t_mut: None,
+                        }),
+                        t_first_after_attr: token.clone(),
+                    });
+                } else {
+                    s.inc(1);
+                    f.self_param = Some(SelfParam {
+                        outer_attrs,
+                        payload: SelfParamPayload::Short(SelfParamShort{
+                            t_ref: None,
+                            label: None,
+                            t_mut: None,
+                        }),
+                        t_first_after_attr: token.clone(),
+                    });
+                }
+            }
+            _ => {}
+        }
+        if f.self_param.is_some() {
+            if matches!(s.current().code, T![,]) {
+                s.plusplus();
+            }
+        } else {
+            s.index.set(i_cur);
+        }
+
+        // other params
         while s.has_more() {
             let token = s.current();
             if matches!(&token.code, T![")"]) {
-                r.t_paren_close = token.clone();
+                f.t_paren_close = token.clone();
                 s.plusplus();
                 break;
             }
@@ -1479,42 +1578,42 @@ impl Parse {
                 } else {
                     None
                 };
-                r.variadics = Some(FuncVariadics {
+                f.variadics = Some(FuncVariadics {
                     outer_attrs: param.outer_attrs,
                     t_var,
                     t_comma,
                 });
-                r.t_paren_close = s.current().clone();
+                f.t_paren_close = s.current().clone();
                 s.expect(T![")"])?;
                 break;
             }
 
-            let token = s.current();
-            match &token.code {
-                TokenCode::Identifier(_) => {
-                    param.name = token.clone();
-                    s.plusplus();
-                    let token = s.current();
-                    if matches!(&token.code, T![:]) {
-                        return Err(s.panic(
-                            token,
-                            &format!("don't add ':' after param name '{:?}'", param.name),
-                        ));
+            // Pattern: Type
+            param.t_first_in_pattern = s.current().clone();
+            let pat = s.parse_pattern_no_top_alt()?;
+            // check if it's the short form
+            let mut is_short = false;
+            if let PatternNoTopAlt::WithoutRange(pat) = &pat {
+                if let PatternWithoutRange::Identifier(a) = pat {
+                    if a.t_mut.is_none() {
+                        param.name = a.name.clone();
+                        is_short = true;
                     }
-                }
-                T![:] => {
-                    s.plusplus();
-                    param.pat = Some(s.parse_pattern()?);
-                    s.expect(T![:])?;
-                }
-                _ => {
-                    return Err(s.panic(
-                        token,
-                        &format!("expected identifier or ':' but got {:?}", token),
-                    ));
+                } else if let PatternWithoutRange::Path(a) = pat
+                        && let PatternPath::Path(a) = a
+                        && a.items.len() == 1 {
+                    let name = a.items[0].name.token.clone();
+                    param.name = name.clone();
+                    is_short = true;
                 }
             }
+            if !is_short {
+                param.pat = Some(Pattern {
+                    items: vec![(pat, None)],
+                });
+            }
 
+            s.expect(T![:])?;
             let token = s.current();
             if matches!(&token.code, T![...]) {
                 s.plusplus();
@@ -1527,19 +1626,15 @@ impl Parse {
             s.plusplus();
             match &token.code {
                 T![")"] => {
-                    r.t_paren_close = token.clone();
-                    r.params.push(param);
+                    f.t_paren_close = token.clone();
+                    f.params.push(param);
                     break;
                 }
                 T![,] => {
-                    param.t_comma = Some(token.clone());
-                    r.params.push(param);
-                }
-                T![;] => {
-                    let mut t = token.clone();
-                    t.code = T![,];
-                    param.t_comma = Some(t);
-                    r.params.push(param);
+                    let next_token = s.current();
+                    let show_comma = next_token.span.line == token.span.line;
+                    param.show_comma = show_comma;
+                    f.params.push(param);
                 }
                 _ => {
                     return Err(s.panic(token, &format!("expected , or ) but got {:?}", token)));
@@ -1547,143 +1642,7 @@ impl Parse {
             }
         }
 
-        let token = s.current();
-        match &token.code {
-            T![;] => {
-                s.plusplus();
-                return Ok(r);
-            }
-            T![where] => {}
-            T!["{"] => (),
-            _ => {
-                if let TokenCode::Literal(lit) = &token.code &&
-                        let LiteralPayload::String(_)= lit.payload {
-                    r.t_arrow = Some(token.clone());
-                    s.plusplus();
-                }
-                // return type
-                r.return_type = Some(s.parse_type()?);
-            }
-        }
-
-        // where
-        let token = s.current();
-        if matches!(&token.code, T![where]) {
-            r.where_ = Some(s.parse_where()?);
-        }
-
-        let token = s.current();
-        match &token.code {
-            T![;] => {
-                return Ok(r);
-            }
-            T!["{"] => {
-                // body
-                let a = s.parse_block_expr()?;
-                r.body = Some(a);
-            }
-            _ => {
-                return Err(s.panic(token, &format!("expected ; or {{ but got {:?}", token)));
-            }
-        }
-
-        Ok(r)
-    }
-
-    // (&), (&'a), (&'a mut), (&mut), (), (mut), (Type) (mut Type)
-    fn parse_func_self_param(&self) -> ParseResult<SelfParam> {
-        let s = self;
-
-        let mut r = SelfParam::default();
-
-        s.plusplus();
-        r.outer_attrs = s.parse_outer_attrs()?;
-
-        let mut short = SelfParamShort::default();
-
-        let token = s.current();
-        if matches!(token.code, T![&]) {
-            short.t_ref = Some(token.clone());
-            match &s.nth(1).code {
-                // (&)
-                T![")"] => {
-                    r.payload = SelfParamPayload::Short(short);
-                    s.inc(2);
-                }
-                TokenCode::Lifetime(_) => match &s.nth(2).code {
-                    // (&'a)
-                    T![")"] => {
-                        short.label = Some(s.nth(1).clone());
-                        r.payload = SelfParamPayload::Short(short);
-                        s.inc(3);
-                    }
-                    // (&'a mut)
-                    T![mut] => {
-                        if matches!(&s.nth(3).code, T![")"]) {
-                            short.label = Some(s.nth(1).clone());
-                            short.t_mut = Some(s.nth(2).clone());
-                            r.payload = SelfParamPayload::Short(short);
-                            s.inc(4);
-                        }
-                    }
-                    // (Type)
-                    _ => {
-                        let typ = SelfParamType {
-                            typ: s.parse_type()?,
-                            t_mut: None,
-                        };
-                        r.payload = SelfParamPayload::Type(typ);
-                        s.expect(T![")"])?;
-                    }
-                },
-                // (&mut)
-                T![mut] => {
-                    let a_token = s.nth(2);
-                    if matches!(&a_token.code, T![")"]) {
-                        short.t_mut = Some(s.nth(1).clone());
-                        r.payload = SelfParamPayload::Short(short);
-                        s.inc(3);
-                    } else {
-                        return Err(s.panic(a_token,
-                            &format!("expected ')' after '(&mut' but got {:?}", a_token)));
-                    }
-                }
-                // (Type)
-                _ => {
-                    let typ = SelfParamType {
-                        typ: s.parse_type()?,
-                        t_mut: None,
-                    };
-                    r.payload = SelfParamPayload::Type(typ);
-                    s.expect(T![")"])?;
-                }
-            }
-        } else if matches!(token.code, T![")"]) {
-            // ()
-            r.payload = SelfParamPayload::Short(short);
-            s.plusplus();
-        } else {
-            // (mut) or (mut Type)
-            let mut t_mut = None;
-            if matches!(token.code, T![mut]) {
-                t_mut = Some(token.clone());
-                s.plusplus();
-            }
-            if matches!(s.current().code, T![")"]) {
-                s.plusplus();
-                short.t_mut = t_mut;
-                r.payload = SelfParamPayload::Short(short);
-            } else {
-                let typ = SelfParamType {
-                    typ: s.parse_type()?,
-                    t_mut,
-                };
-                r.payload = SelfParamPayload::Type(typ);
-                s.expect(T![")"])?;
-            }
-        }
-
-        Ok(r)
+        Ok(())
     }
 
     // type IDENTIFIER GenericParams? ( : Bounds? )?

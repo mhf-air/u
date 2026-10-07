@@ -1455,32 +1455,20 @@ impl ToLang for Attrs {
         let s = self;
 
         for it in &s.items {
-            it.to_rs(p);
+            it.t_start.to_rs(p);
+            for a in &it.tokens {
+                a.to_rs(p);
+            }
+            it.t_end.to_rs(p);
         }
     }
 }
-
 #[derive(Debug, Default)]
 pub struct Attr {
     pub tokens: Vec<Token>,
 
     pub t_start: Token,
     pub t_end: Token,
-}
-impl ToLang for Attr {
-    fn to_rs(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if s.tokens.is_empty() {
-            return;
-        }
-
-        s.t_start.to_rs(p);
-        for it in &s.tokens {
-            it.to_rs(p);
-        }
-        s.t_end.to_rs(p);
-    }
 }
 
 // --------------------------------------------------------------------------------

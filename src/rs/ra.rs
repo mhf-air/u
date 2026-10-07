@@ -461,22 +461,49 @@ pub struct Func {
     pub t_paren_close: Token,
     pub t_arrow: Option<Token>,
     pub t_first_after_paren: Token,
+    pub t_first: Token,
 }
 impl ToLang for Func {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.name.to_u_before(p);
-        s.vis.to_u(p);
+        if let Some(t) = &s.vis.t_pub {
+            t.to_u_before(p);
+        } else {
+            s.t_first.to_u_before(p);
+        }
 
-        let mut is_first = true;
+        s.name.to_u_one(p);
+        s.vis.to_u(p);
+        if let Some(generics) = &s.generics {
+            generics.to_u(p);
+        }
+
+        // self param
+        if let Some(sp) = &s.self_param {
+            // NOTE for multi-line params, only consider the common cases
+            // not (
+            //     &self
+            // )
+            p.push_raw(" (");
+            sp.to_u(p);
+            p.push_raw(")");
+        }
+
+        s.name.to_u_before(p);
+        s.t_func.to_u_one(p);
 
         // qualifier
+        if s.qualifier.exist {
+            p.push_raw("[");
+        }
+        let mut is_first = true;
         if let Some(t) = &s.qualifier.t_const {
             if is_first {
                 t.to_u_one(p);
                 is_first = false;
             } else {
+                p.push_raw(",");
                 t.to_u(p);
             }
         }
@@ -485,6 +512,7 @@ impl ToLang for Func {
                 t.to_u_one(p);
                 is_first = false;
             } else {
+                p.push_raw(",");
                 t.to_u(p);
             }
         }
@@ -493,73 +521,83 @@ impl ToLang for Func {
                 t.to_u_one(p);
                 is_first = false;
             } else {
+                p.push_raw(",");
                 t.to_u(p);
             }
         }
         if let Some((t, abi)) = &s.qualifier.t_extern {
             if is_first {
                 t.to_u_one(p);
-                is_first = false;
+                // is_first = false;
             } else {
+                p.push_raw(",");
                 t.to_u(p);
             }
             if let Some(abi) = abi {
                 abi.to_u(p);
             }
         }
-
-        // name
-        if is_first {
-            s.t_func.to_u_one(p);
-        } else {
-            s.t_func.to_u(p);
-        }
-        s.t_func.to_u_before(p);
-        s.name.to_u_one(p);
-
-        // generics
-        if let Some(g) = &s.generics {
-            g.to_u(p);
+        if s.qualifier.exist {
+            p.push_raw("]");
         }
 
         // params
+        let mut has_first = true;
         s.t_paren_open.to_u(p);
-        if let Some(sp) = &s.self_param {
-            // NOTE for multi-line params, only consider the common cases
-            // not (
-            //     &self
-            // )
-            let line_paren = s.t_paren_open.span.line;
-            let line_first = s.t_first_after_paren.span.line;
-            if line_paren != line_first {
-                let t = &s.t_first_after_paren.tokens_before;
-                if !t.is_empty() {
-                    t[0].to_u_one(p);
-                }
-            }
-            sp.to_u(p);
-            if !s.params.is_empty() {
-                p.push_raw(",");
-                if line_paren == line_first {
-                    p.push_raw(" ");
-                }
-            }
-        }
         for param in &s.params {
-            param.outer_attrs.to_u(p);
-            if let Some(pat) = &param.pat {
-                pat.to_u(p);
-            } else {
-                param.name.to_u(p);
+            if has_first {
+                // for multi-line first param, show all before tokens
+                // for same line first param, don't show before tokens of the first param
+                let t = if let Some(_) = &param.pat {
+                    &param.t_first_in_pattern
+                } else {
+                    &param.name
+                };
+                if s.t_paren_open.span.line != t.span.line {
+                    has_first = false;
+                }
             }
-            p.push_raw(":");
+
+            if !param.outer_attrs.items.is_empty() {
+                if has_first {
+                    has_first = false;
+                    let first = &param.outer_attrs.items[0];
+                    show_before_not_first_blank(&first.t_start, p);
+
+                    p.no_first_before = true;
+                    param.outer_attrs.to_u(p);
+                    p.no_first_before = false;
+                } else {
+                    param.outer_attrs.to_u(p);
+                }
+            }
+
+            if let Some(pat) = &param.pat {
+                if has_first {
+                    has_first = false;
+                } else {
+                    param.t_first_in_pattern.to_u_before(p);
+                }
+                p.push_raw(":");
+                p.no_first_before = true;
+                pat.to_u(p);
+                p.no_first_before = false;
+                p.push_raw(":");
+            } else {
+                if has_first {
+                    has_first = false;
+                    param.name.to_u_one(p);
+                } else {
+                    param.name.to_u(p);
+                }
+            }
             if let Some(t) = &param.t_var {
                 t.to_u(p);
             } else {
                 param.type_.to_u(p);
             }
-            if let Some(t) = &param.t_comma {
-                t.to_u(p);
+            if param.show_comma {
+                p.push_raw(",");
             }
         }
         if let Some(v) = &s.variadics {
@@ -573,12 +611,6 @@ impl ToLang for Func {
 
         // return type
         if let Some(return_type) = &s.return_type {
-            if let Some(t) = &s.t_arrow {
-                t.to_u_before(p);
-                p.push_raw("->");
-            } else {
-                p.push_raw(" ->");
-            }
             return_type.to_u(p);
         }
 
@@ -597,25 +629,10 @@ impl ToLang for Func {
             }
 
             body.inner_attrs.to_u(p);
-            if s.qualifier.t_no_s.is_none() && s.self_param.is_some() && !body.stmts.is_empty() {
-                let line_paren = body.t_brace_open.span.line;
-                let line_first = body.t_first_after_brace.span.line;
-                if line_paren != line_first {
-                    let t = &body.t_first_after_brace.tokens_before;
-                    if !t.is_empty() {
-                        t[0].to_u_one(p);
-                    }
-                    p.push_raw("let s = self;");
-                } else {
-                    p.push_raw(" let s = self;");
-                }
-            }
             for it in &body.stmts {
                 it.to_u(p);
             }
             body.t_brace_close.to_u(p);
-        } else {
-            p.push_raw(";");
         }
     }
 }
@@ -626,51 +643,80 @@ pub struct FuncQualifier {
     pub t_unsafe: Option<Token>,
     pub t_extern: Option<(Token, Option<Token>)>,
     pub t_no_s: Option<Token>,
+    pub exist: bool,
 }
 #[derive(Debug, Default)]
 pub struct SelfParam {
     pub outer_attrs: Attrs,
     pub payload: SelfParamPayload,
+    pub t_first_after_attr: Token,
 }
 impl ToLang for SelfParam {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.outer_attrs.to_u(p);
+        let mut has_first = true;
+        if !s.outer_attrs.items.is_empty() {
+            has_first = false;
+            let first = &s.outer_attrs.items[0];
+            show_before_not_first_blank(&first.t_start, p);
+
+            p.no_first_before = true;
+            s.outer_attrs.to_u(p);
+            p.no_first_before = false;
+        }
+
+        if has_first {
+            show_before_not_first_blank(&s.t_first_after_attr, p);
+        }
+
         match &s.payload {
             SelfParamPayload::Type(a) => {
                 if let Some(t) = &a.t_mut {
-                    t.to_u(p);
-                    p.push_raw(" self: ");
-                } else {
-                    p.push_raw("self: ");
+                    if has_first {
+                        p.no_first_before = true;
+                        p.no_first_before = false;
+                        t.to_u_one(p);
+                    } else {
+                        t.to_u(p);
+                    }
+                    has_first = false;
                 }
-                a.typ.to_u(p);
+                if has_first {
+                    p.no_first_before = true;
+                    a.typ.to_u(p);
+                    p.no_first_before = false;
+                } else {
+                    a.typ.to_u(p);
+                }
             }
             SelfParamPayload::Short(a) => {
                 if let Some(t_ref) = &a.t_ref {
-                    t_ref.to_u(p);
+                    t_ref.to_u_one(p);
+                    has_first = false;
                 } else {
                     if let Some(t_mut) = &a.t_mut {
                         // (mut)
-                        t_mut.to_u(p);
-                        p.push_raw(" self");
-                    } else {
-                        // ()
-                        p.push_raw("self");
+                        t_mut.to_u_one(p);
                     }
+                    // else ()
                     return;
                 }
                 if let Some(label) = &a.label {
-                    label.to_u(p);
+                    if has_first {
+                        label.to_u_one(p);
+                        has_first = false;
+                    } else {
+                        label.to_u(p);
+                    }
                 }
                 if let Some(t_mut) = &a.t_mut {
-                    t_mut.to_u(p);
-                }
-                if a.label.is_none() && a.t_mut.is_none() {
-                    p.push_raw("self");
-                } else {
-                    p.push_raw(" self");
+                    if has_first {
+                        t_mut.to_u_one(p);
+                        // has_first = false;
+                    } else {
+                        t_mut.to_u(p);
+                    }
                 }
             }
         }
@@ -705,7 +751,8 @@ pub struct FuncParam {
     pub pat: Option<Pattern>,
     pub type_: Type,
     pub t_var: Option<Token>,
-    pub t_comma: Option<Token>,
+    pub show_comma: bool,
+    pub t_first_in_pattern: Token,
 }
 #[derive(Debug)]
 pub struct FuncVariadics {
@@ -1485,32 +1532,25 @@ impl ToLang for Attrs {
         let s = self;
 
         for it in &s.items {
-            it.to_u(p);
+            if p.no_first_before {
+                p.no_first_before = false;
+                it.t_start.to_u_one(p);
+            } else {
+                it.t_start.to_u(p);
+            }
+            for a in &it.tokens {
+                a.to_u(p);
+            }
+            it.t_end.to_u(p);
         }
     }
 }
-
 #[derive(Debug, Default)]
 pub struct Attr {
     pub tokens: Vec<Token>,
 
     pub t_start: Token,
     pub t_end: Token,
-}
-impl ToLang for Attr {
-    fn to_u(&self, p: &mut LangFormatter) {
-        let s = self;
-
-        if s.tokens.is_empty() {
-            return;
-        }
-
-        s.t_start.to_u(p);
-        for it in &s.tokens {
-            it.to_u(p);
-        }
-        s.t_end.to_u(p);
-    }
 }
 
 // --------------------------------------------------------------------------------
@@ -1793,7 +1833,12 @@ impl ToLang for ForLifetimes {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_for.to_u(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_for.to_u_one(p);
+        } else {
+            s.t_for.to_u(p);
+        }
         s.for_.to_u(p);
     }
 }
@@ -2044,7 +2089,11 @@ impl ToLang for TypePath {
         // ::crate_abc::Abc turns into -..crate-abc..Abc
         let first = s.items.first().unwrap();
         if let Some(t) = &first.t_sep {
-            t.to_u_before(p);
+            if p.no_first_before {
+                p.no_first_before = false;
+            } else {
+                t.to_u_before(p);
+            }
             p.push_raw("-..");
             first.name.token.to_u_one(p);
         } else {
@@ -2646,11 +2695,21 @@ impl ToLang for TypePayload {
         match s {
             TypePayload::TypeNoBounds(a) => a.to_u(p),
             TypePayload::ImplTrait(a) => {
-                a.t_impl.to_u(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_impl.to_u_one(p);
+                } else {
+                    a.t_impl.to_u(p);
+                }
                 a.bounds.to_u(p);
             }
             TypePayload::TraitObject(a) => {
-                a.t_dyn.to_u(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_dyn.to_u_one(p);
+                } else {
+                    a.t_dyn.to_u(p);
+                }
                 a.bounds.to_u(p);
             }
         }
@@ -2685,20 +2744,40 @@ impl ToLang for TypeNoBounds {
 
         match s {
             TypeNoBounds::Parenthesized(a) => {
-                a.t_paren_open.to_u(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_paren_open.to_u_one(p);
+                } else {
+                    a.t_paren_open.to_u(p);
+                }
                 a.type_.to_u(p);
                 a.t_paren_close.to_u(p);
             }
             TypeNoBounds::ImplTraitOneBound(a) => {
-                a.t_impl.to_u(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_impl.to_u_one(p);
+                } else {
+                    a.t_impl.to_u(p);
+                }
                 a.bound.to_u(p);
             }
             TypeNoBounds::TraitObjectOneBound(a) => {
-                a.t_dyn.to_u(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_dyn.to_u_one(p);
+                } else {
+                    a.t_dyn.to_u(p);
+                }
                 a.bound.to_u(p);
             }
             TypeNoBounds::Tuple(a) => {
-                a.t_paren_open.to_u(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_paren_open.to_u_one(p);
+                } else {
+                    a.t_paren_open.to_u(p);
+                }
                 for (it, t) in &a.items {
                     it.to_u(p);
                     if let Some(t) = t {
@@ -2708,18 +2787,29 @@ impl ToLang for TypeNoBounds {
                 a.t_paren_close.to_u(p);
             }
             TypeNoBounds::Optional(a) => {
+                // TODO
                 a.t_sep.to_u_before(p);
                 p.push_raw("Option<");
                 a.type_.to_u(p);
                 p.push_raw(">");
             }
             TypeNoBounds::RawPointer(a) => {
-                a.t_pointer.to_u(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_pointer.to_u_one(p);
+                } else {
+                    a.t_pointer.to_u(p);
+                }
                 a.t_mut_const.to_u(p);
                 a.type_no_bounds.to_u(p);
             }
             TypeNoBounds::Reference(a) => {
-                a.t_ref.to_u(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_ref.to_u_one(p);
+                } else {
+                    a.t_ref.to_u(p);
+                }
                 if let Some(a) = &a.lifetime {
                     a.to_u(p);
                 }
@@ -2729,20 +2819,37 @@ impl ToLang for TypeNoBounds {
                 a.type_no_bounds.to_u(p);
             }
             TypeNoBounds::Array(a) => {
-                a.t_delim_open.to_u(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_delim_open.to_u_one(p);
+                } else {
+                    a.t_delim_open.to_u(p);
+                }
                 a.type_.to_u(p);
                 a.t_semicolon.to_u(p);
                 a.expr.to_u(p);
                 a.t_delim_close.to_u(p);
             }
             TypeNoBounds::Slice(a) => {
-                a.t_delim_open.to_u(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    a.t_delim_open.to_u_one(p);
+                } else {
+                    a.t_delim_open.to_u(p);
+                }
                 a.type_.to_u(p);
                 a.t_delim_close.to_u(p);
             }
             TypeNoBounds::TypePath(a) => a.to_u(p),
             TypeNoBounds::QualifiedPathInType(a) => a.to_u(p),
-            TypeNoBounds::Never(t) => t.to_u(p),
+            TypeNoBounds::Never(t) => {
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    t.to_u_one(p);
+                } else {
+                    t.to_u(p);
+                }
+            }
             TypeNoBounds::BareFunction(a) => a.to_u(p),
             TypeNoBounds::MacroCall(a) => a.to_u(p),
         }
@@ -2856,20 +2963,40 @@ impl ToLang for TypeBareFunction {
         }
 
         if let Some(t) = &s.qualifier.t_unsafe {
-            t.to_u(p);
+            if p.no_first_before {
+                p.no_first_before = false;
+                t.to_u_one(p);
+            } else {
+                t.to_u(p);
+            }
         }
         if let Some((extern_, abi)) = &s.qualifier.t_extern {
-            extern_.to_u(p);
+            if p.no_first_before {
+                p.no_first_before = false;
+                extern_.to_u_one(p);
+            } else {
+                extern_.to_u(p);
+            }
             if let Some(abi) = abi {
                 abi.to_u(p);
             }
         }
 
         if let Some(t) = &s.t_func {
-            t.to_u(p);
+            if p.no_first_before {
+                p.no_first_before = false;
+                t.to_u_one(p);
+            } else {
+                t.to_u(p);
+            }
         }
 
-        s.t_paren_open.to_u(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_paren_open.to_u_one(p);
+        } else {
+            s.t_paren_open.to_u(p);
+        }
         for it in &s.params {
             it.outer_attrs.to_u(p);
             if let Some(name) = &it.name {
@@ -4158,5 +4285,20 @@ impl ToLang for ExprRange {
         if let Some(t) = &s.end {
             t.to_u(p);
         }
+    }
+}
+
+// -----------------------------------------------------------------------------
+fn show_before_not_first_blank(t: &Token, p: &mut LangFormatter) {
+    let list = &t.tokens_before;
+    if list.is_empty() {
+        return;
+    }
+    let first = &list[0];
+    if !matches!(&first.code, TokenCode::Blank) {
+        first.to_u_one(p);
+    }
+    for it in &list[1..] {
+        it.to_u_one(p);
     }
 }

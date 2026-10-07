@@ -149,3 +149,18 @@ fn f() {
     let (a, b): (i32, i32) = parse else {
     };
 }
+
+pub const async unsafe extern "C" fn f() {
+}
+
+fn f(&self, #[a] mut a: i32, mut b: i32, ...) -> i32 {
+}
+
+#[rustfmt::skip]
+fn f(
+    self: i32,
+    #[a]
+    a: i32,
+    b: i32,
+    mut a: i32,
+) {}
