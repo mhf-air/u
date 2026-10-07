@@ -2949,6 +2949,7 @@ pub struct StmtLet {
     pub expr: Option<Expr>,
     pub else_: Option<(Token, BlockExpr)>,
 
+    pub t_let: Token,
     pub t_eq: Token,
     pub t_first_in_pattern: Option<Token>,
     pub t_first_in_expr: Option<Token>,
@@ -2959,53 +2960,54 @@ impl ToLang for StmtLet {
 
         s.outer_attrs.to_u(p);
 
-        if let Some((name, _)) = &s.short {
-            name.to_u_before(p);
-        } else {
-            if let Some(t) = &s.t_first_in_expr {
-                t.to_u_before(p);
-            }
-        }
+        s.t_let.to_u_before(p);
 
-        // NOTE not considering the case when "let" is followed by new line
-        p.push_raw("let ");
         if let Some((name, t_mut)) = &s.short {
-            if let Some(t) = t_mut {
-                t.to_u_one(p);
-                t.to_u_before(p);
-            }
             name.to_u_one(p);
-        } else {
-            p.no_first_before = true;
-            s.pattern.to_u(p);
-            p.no_first_before = false;
-        }
-
-        if let Some(type_) = &s.type_ {
-            p.push_raw(":");
-            type_.to_u(p);
-        }
-        if let Some(expr) = &s.expr {
-            s.t_eq.to_u(p);
-
-            if let Some(t) = &s.t_first_in_pattern {
-                t.to_u_before(p);
+            if let Some(t) = t_mut {
+                t.to_u(p);
             }
-
-            if s.short.is_some() {
+            if let Some(type_) = &s.type_ {
+                type_.to_u(p);
+            }
+            if let Some(expr) = &s.expr {
+                s.t_eq.to_u_before(p);
+                p.push_raw(":=");
                 expr.to_u(p);
             } else {
-                p.no_first_before = true;
-                expr.to_u(p);
-                p.no_first_before = false;
+                p.push_raw(" :=;");
             }
-
-            if let Some((t, else_)) = &s.else_ {
-                t.to_u(p);
-                else_.to_u(p);
-            }
+            return;
         }
-        p.push_raw(";");
+
+        let Some(expr) = &s.expr else {
+            return;
+        };
+
+        p.no_first_before = true;
+        expr.to_u(p);
+        p.no_first_before = false;
+
+        s.t_eq.to_u_before(p);
+        p.push_raw("->");
+
+        if let Some(t) = &s.t_first_in_expr {
+            t.to_u_before(p);
+        }
+
+        p.no_first_before = true;
+        s.pattern.to_u(p);
+        p.no_first_before = false;
+
+        if let Some(type_) = &s.type_ {
+            p.push_raw(" let");
+            type_.to_u(p);
+        }
+
+        if let Some((t, else_)) = &s.else_ {
+            t.to_u(p);
+            else_.to_u(p);
+        }
     }
 }
 

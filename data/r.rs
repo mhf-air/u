@@ -128,3 +128,24 @@ impl<T> Clone for Person<T> where T: Clone {
 unsafe impl<T> !Clone for Person<T> where T: Clone {
     #![inner]
 }
+
+fn f() {
+    let a;
+    let a: i32;
+    let a = 1;
+    let a: i32 = 1;
+
+    let mut a;
+    let mut a: i32;
+    let mut a = 1;
+    let mut a: i32 = 1;
+
+    let Some(t) = s.t;
+    let Some(t) = s.t else {
+    };
+    let (a, mut b) = {
+        (a, b)
+    };
+    let (a, b): (i32, i32) = parse else {
+    };
+}

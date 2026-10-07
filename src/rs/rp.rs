@@ -490,37 +490,9 @@ impl Parse {
                     payload: ItemPayload::Macro(a),
                 });
             }
-            T![:=] => {
+            T![let] => {
                 let mut a = s.parse_let()?;
                 a.outer_attrs = outer_attrs;
-                stmt = Stmt::Let(a);
-            }
-            // Expr -> Pattern (let Type)? (else)?
-            T![->] => {
-                let mut a = StmtLet::default();
-                a.t_eq = special_token.clone();
-                a.t_eq.code = T![=];
-                a.outer_attrs = outer_attrs;
-
-                a.t_first_in_expr = Some(s.current().clone());
-                a.expr = Some(s.parse_expr()?);
-
-                s.expect(T![->])?;
-                a.t_first_in_pattern = Some(s.current().clone());
-                a.pattern = s.parse_pattern()?;
-                if matches!(&s.current().code, T![let]) {
-                    s.plusplus();
-                    a.type_ = Some(s.parse_type()?);
-                }
-                let token = s.current();
-                if matches!(&token.code, T![else]) {
-                    let t_else = token.clone();
-                    s.plusplus();
-                    let block = s.parse_block_expr()?;
-                    a.else_ = Some((t_else, block));
-                } else {
-                    s.expect(T![;])?;
-                }
                 stmt = Stmt::Let(a);
             }
             TokenCode::Keyword(keyword) => match keyword {
@@ -570,16 +542,8 @@ impl Parse {
                     });
                 }
                 Keyword::Fn => {
-                    // self param
-                    let mut self_param = None;
-                    if matches!(s.current().code, T!["("]) {
-                        self_param = Some(s.parse_func_self_param()?);
-                    }
-                    s.expect(T![func])?;
-
                     let mut a = s.parse_func()?;
                     a.vis = vis;
-                    a.self_param = self_param;
                     a.t_func = special_token.clone();
                     stmt = Stmt::Item(Item {
                         outer_attrs,
@@ -2956,39 +2920,61 @@ impl Parse {
         }
     }
 
-    // NAME mut? Type? := [;|Expr]?
+    // let PatternNoTopAlt ( : Type )?
+    // (
+    //      = Expr
+    //      = Expr else BlockExpr
+    // )? ;
     fn parse_let(&self) -> ParseResult<StmtLet> {
         let s = self;
 
-        let t_name = s.current().clone();
-        if !matches!(&t_name.code, TokenCode::Identifier(_)) {
-            return Err(s.panic(&t_name, &format!("expected identifier, but got {:?}", t_name)));
-        }
-        s.plusplus();
+        let mut r = StmtLet::default();
 
-        let token = s.current();
-        let t_mut = if matches!(token.code, T![mut]) {
-            s.plusplus();
-            Some(token.clone())
-        } else {
-            None
+        r.t_let = s.current().clone();
+        s.expect(T![let])?;
+
+        r.t_first_in_pattern = Some(s.current().clone());
+        let pat = s.parse_pattern_no_top_alt()?;
+
+        // check if it's the short form
+        if let PatternNoTopAlt::WithoutRange(pat) = &pat {
+            if let PatternWithoutRange::Identifier(a) = pat {
+                r.short = Some((a.name.clone(), a.t_mut.clone()));
+            } else if let PatternWithoutRange::Path(a) = pat
+                    && let PatternPath::Path(a) = a
+                    && a.items.len() == 1 {
+                let name = a.items[0].name.token.clone();
+                r.short = Some((name, None));
+            }
+        }
+        r.pattern = Pattern {
+            items: vec![(pat, None)],
         };
 
-        let mut r = StmtLet::default();
-        r.short = Some((t_name, t_mut));
-
+        // possible Type
         let token = s.current();
-        if !matches!(token.code, T![:=]) {
+        if matches!(token.code, T![:]) {
+            s.plusplus();
             r.type_ = Some(s.parse_type()?);
         }
-        r.t_eq = s.current().clone();
-        s.expect(T![:=])?;
-
         let token = s.current();
         if matches!(token.code, T![;]) {
             return Ok(r);
         }
+
+        r.t_eq = s.current().clone();
+        s.expect(T![=])?;
+
+        r.t_first_in_expr = Some(s.current().clone());
         r.expr = Some(s.parse_expr()?);
+
+        let token = s.current();
+        if matches!(&token.code, T![else]) {
+            let t_else = token.clone();
+            s.plusplus();
+            let block = s.parse_block_expr()?;
+            r.else_ = Some((t_else, block));
+        }
         s.expect(T![;])?;
         Ok(r)
     }
