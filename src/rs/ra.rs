@@ -3380,13 +3380,6 @@ impl ToLang for Conditions {
         for (it, t) in &s.items {
             it.to_u(p);
             if let Some(t) = t {
-                // for cases such as "if a -> b, c { }"
-                let has_blank = t.tokens_before
-                    .iter()
-                    .any(|it| it.code == TokenCode::Blank);
-                if !has_blank {
-                    p.push_raw(" ");
-                }
                 t.to_u(p);
             }
         }
@@ -3414,18 +3407,16 @@ impl ToLang for ConditionItem {
             ConditionItem::LetChain(a) => {
                 a.outer_attrs.to_u(p);
 
-                a.t_first_in_expr.to_u_before(p);
-                p.push_raw("let ");
-
+                a.t_first_in_pattern.to_u_before(p);
                 p.no_first_before = true;
-                a.pattern.to_u(p);
+                a.scrutinee.to_u(p);
                 p.no_first_before = false;
 
                 a.t_eq.to_u(p);
 
-                a.t_first_in_pattern.to_u_before(p);
+                a.t_first_in_expr.to_u_before(p);
                 p.no_first_before = true;
-                a.scrutinee.to_u(p);
+                a.pattern.to_u(p);
                 p.no_first_before = false;
             }
         }

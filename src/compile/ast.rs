@@ -3213,13 +3213,6 @@ impl ToLang for Conditions {
         for (it, t) in &s.items {
             it.to_rs(p);
             if let Some(t) = t {
-                // for cases such as "if a -> b, c { }"
-                let has_blank = t.tokens_before
-                    .iter()
-                    .any(|it| it.code == TokenCode::Blank);
-                if !has_blank {
-                    p.push_raw(" ");
-                }
                 t.to_rs(p);
             }
         }

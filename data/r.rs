@@ -231,3 +231,11 @@ fn f() {
     a = async |&a| 1;
     a = async |&a: &i32| 1;
 }
+
+fn f() {
+    if let Some(inner_opt) = outer_opt
+        && let Some(number) = inner_opt
+        && number == 1
+    {
+    }
+}

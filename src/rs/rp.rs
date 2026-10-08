@@ -39,8 +39,10 @@ pub struct Parse {
     end_tokens: Vec<Token>,
     index: Cell<usize>,
 
-    stop_on_brace_open: Cell<bool>,
     op_map: HashMap<TokenCode, u8>,
+    stop_on_brace_open: Cell<bool>,
+    in_conditions: Cell<bool>,
+    in_match_conditions: Cell<bool>,
 
     magic: bool, // for auto completion
 }
@@ -79,8 +81,10 @@ impl Parse {
             end_tokens: lex.end_tokens,
             index: Cell::new(0),
 
-            stop_on_brace_open: Cell::new(false),
             op_map: build_operator_precedence_map(),
+            stop_on_brace_open: Cell::new(false),
+            in_conditions: Cell::new(false),
+            in_match_conditions: Cell::new(false),
 
             magic: false,
         };
@@ -2678,12 +2682,11 @@ impl Parse {
             match &special_token.code {
                 // for Expr -> Patterns {
                 T![->] => {
-                    let conditions = s.parse_conditions()?;
+                    let conditions = s.parse_conditions(false)?;
                     r.payload = ExprLoopPayload::While(ExprLoopWhile { conditions });
                     r.t_for.code = T![while];
                 }
                 // for Pattern in Expr {
-                // for identifter, identifier in Expr {
                 T![in] => {
                     let pattern = s.parse_pattern()?;
                     let token = s.current();
@@ -2715,7 +2718,7 @@ impl Parse {
             }
         } else {
             // for Expr {
-            let conditions = s.parse_conditions()?;
+            let conditions = s.parse_conditions(false)?;
             r.payload = ExprLoopPayload::While(ExprLoopWhile { conditions });
             r.t_for.code = T![while];
         }
@@ -2730,27 +2733,82 @@ impl Parse {
         Ok(r)
     }
 
-    fn parse_conditions(&self) -> ParseResult<Conditions> {
+    fn parse_conditions(&self, is_match: bool) -> ParseResult<Conditions> {
         let s = self;
 
+        // the only difference when is_match == true is it allows ExprStruct
+
+        // find if the conditions contain let
+        let mut is_let = false;
+        let mut start = s.index.get();
+        while start < s.tokens.len() {
+            let token = &s.tokens[start];
+            start += 1;
+            match &token.code {
+                T![=>] => break,
+                T!["{"] => {
+                    if !is_match {
+                        break;
+                    }
+                }
+
+                T![;] if s.magic => break,
+
+                TokenCode::Pair(_) => {
+                    start = s.skip_pair(start, token)?;
+                }
+                T![let] => {
+                    is_let = true;
+                    break;
+                }
+
+                _ => (),
+            }
+        }
+
         let mut r = Vec::new();
+
+        if !is_let {
+            let expr = if is_match {
+                s.parse_expr()?
+            } else {
+                s.stop_on_brace_open.set(true);
+                let expr = s.parse_expr()?;
+                s.stop_on_brace_open.set(false);
+                expr
+            };
+            r.push((ConditionItem::Expr(expr), None));
+            return Ok(Conditions {
+                items: r,
+            });
+        }
+
         loop {
             let outer_attrs = s.parse_outer_attrs()?;
 
-            s.stop_on_brace_open.set(true);
-            let t_first_in_expr = s.current().clone();
-            let expr = s.parse_expr()?;
-            s.stop_on_brace_open.set(false);
-
             let token = s.current();
-            let item = if !matches!(&token.code, T![->]) {
-                ConditionItem::Expr(expr)
-            } else {
+            let item = if matches!(&token.code, T![let]) {
                 s.plusplus();
-                let mut t_eq = token.clone();
-                t_eq.code = T![=];
                 let t_first_in_pattern = s.current().clone();
-                let pattern = s.parse_match_arm_patterns_stop()?;
+                let pattern = s.parse_pattern()?;
+                let mut t_eq = token.clone();
+                t_eq.code = T![->];
+                s.expect(T![=])?;
+
+                // specially parse expr
+                let t_first_in_expr = s.current().clone();
+                if is_match {
+                    s.in_match_conditions.set(true);
+                } else {
+                    s.in_conditions.set(true);
+                }
+                let expr = s.parse_expr()?;
+                if is_match {
+                    s.in_match_conditions.set(false);
+                } else {
+                    s.in_conditions.set(false);
+                }
+
                 let a = LetChainCondition {
                     outer_attrs,
                     pattern,
@@ -2760,25 +2818,38 @@ impl Parse {
                     t_first_in_pattern,
                 };
                 ConditionItem::LetChain(a)
+            } else {
+                // specially parse expr
+                if is_match {
+                    s.in_match_conditions.set(true);
+                } else {
+                    s.in_conditions.set(true);
+                }
+                let expr = s.parse_expr()?;
+                if is_match {
+                    s.in_match_conditions.set(false);
+                } else {
+                    s.in_conditions.set(false);
+                }
+
+                ConditionItem::Expr(expr)
             };
 
             let token = s.current();
             match &token.code {
-                T![,] => {
-                    let mut t = token.clone();
-                    t.code = T![&&];
+                T![&&] => {
+                    let t = token.clone();
                     r.push((item, Some(t)));
                     s.plusplus();
                     continue;
                 }
-                // : for match arm
-                T!["{"] | T![:] => {
+                T!["{"] | T![=>] => {
                     r.push((item, None));
                     break;
                 }
                 _ => {
                     return Err(
-                        s.panic(token, &format!("expected , or {{ or : but got {:?}", token))
+                        s.panic(token, &format!("expected , or {{ or => but got {:?}", token))
                     );
                 }
             }
@@ -2789,7 +2860,6 @@ impl Parse {
         });
     }
 
-    // after if
     fn parse_if(&self) -> ParseResult<ExprIf> {
         let s = self;
 
@@ -2797,7 +2867,7 @@ impl Parse {
 
         r.t_if = s.current().clone();
         s.plusplus();
-        r.conditions = s.parse_conditions()?;
+        r.conditions = s.parse_conditions(false)?;
 
         // for auto completion
         if s.magic && matches!(&s.current().code, T![;]) {
@@ -2877,7 +2947,7 @@ impl Parse {
                 let t_if = token.clone();
                 s.plusplus();
                 r.arm.guard = Some(ExprMatchArmGuard {
-                    conditions: s.parse_conditions()?,
+                    conditions: s.parse_conditions(true)?,
                     t_if,
                 });
             }
@@ -2976,6 +3046,17 @@ impl Parse {
         let expr = s.parse_binary_expr()?;
         list.push(ExprOp::Expr(expr));
 
+        if s.in_conditions.get() || s.in_match_conditions.get() {
+            let token = s.current();
+            match &token.code {
+                T![&&] | T![||] | T![..] | T![..=] => {
+                    r.payload = to_op_expr(s, list)?.payload;
+                    return Ok(r);
+                }
+                _ => {}
+            }
+        }
+
         while s.has_more() {
             let token = s.current();
             match &token.code {
@@ -3004,6 +3085,17 @@ impl Parse {
                     list.push(ExprOp::Op(token.clone()));
                     let expr = s.parse_binary_expr()?;
                     list.push(ExprOp::Expr(expr));
+
+                    if s.in_conditions.get() || s.in_match_conditions.get() {
+                        let token = s.current();
+                        match &token.code {
+                            T![&&] | T![||] | T![..] | T![..=] => {
+                                r.payload = to_op_expr(s, list)?.payload;
+                                return Ok(r);
+                            }
+                            _ => {}
+                        }
+                    }
                 }
 
                 _ => {
@@ -3244,6 +3336,16 @@ impl Parse {
 
         while s.has_more() {
             let token = s.current();
+
+            if s.in_conditions.get() || s.in_match_conditions.get() {
+                match &token.code {
+                    T![=] | TokenCode::Assign(_) | T![..] => {
+                        return Ok(expr);
+                    }
+                    _ => {}
+                }
+            }
+
             s.plusplus();
             match &token.code {
                 // Expr = Expr
@@ -3693,11 +3795,10 @@ impl Parse {
                         // struct expr
                         T!["{"] => {
                             let t_brace_open = token.clone();
-                            if s.stop_on_brace_open.get() {
+                            if s.stop_on_brace_open.get() || s.in_conditions.get() {
                                 r.payload = ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Path(ExprPath::Path(path)),
                                 ));
-                                s.stop_on_brace_open.set(false);
                                 return Ok(r);
                             }
 
@@ -4991,106 +5092,6 @@ impl Parse {
     // --------------------------------------------------------------------------------
     // pattern
 
-    fn parse_match_arm_patterns_stop(&self) -> ParseResult<Pattern> {
-        let s = self;
-
-        // find the first } token, check if it is followed by a {,
-        // skipping pairs(parens, etc.) in the process
-        let mut stop_set = true;
-        let mut start = s.index.get();
-        while start < s.tokens.len() {
-            let token = &s.tokens[start];
-            start += 1;
-            match &token.code {
-                TokenCode::Pair(_) => {
-                    let brace = matches!(&token.code, T!["{"]);
-                    start = skip_all_pair(s, start, token)?;
-                    if brace {
-                        let token = &s.tokens[start];
-                        if matches!(&token.code, T!["{"]) {
-                            stop_set = false;
-                        }
-                        break;
-                    }
-                }
-                T![;] if s.magic => break,
-                _ => (),
-            }
-        }
-
-        if stop_set {
-            s.stop_on_brace_open.set(true);
-        }
-
-        let r = s.parse_pattern()?;
-
-        if stop_set {
-            s.stop_on_brace_open.set(false);
-        }
-        return Ok(r);
-
-        fn skip_all_pair(s: &Parse, start_index: usize, token: &Token) -> ParseResult<usize> {
-            let delim_open;
-            let delim_close;
-            match token.code {
-                T!["("] => {
-                    delim_open = Pair::ParenOpen;
-                    delim_close = Pair::ParenClose;
-                }
-                T!["["] => {
-                    delim_open = Pair::SquareOpen;
-                    delim_close = Pair::SquareClose;
-                }
-                T!["{"] => {
-                    delim_open = Pair::BraceOpen;
-                    delim_close = Pair::BraceClose;
-                }
-                T!["[`"] => {
-                    delim_open = Pair::ArrayOpen;
-                    delim_close = Pair::ArrayClose;
-                }
-                T!["#["] => {
-                    delim_open = Pair::OuterAttr;
-                    delim_close = Pair::SquareClose;
-                }
-                T!["#!["] => {
-                    delim_open = Pair::InnerAttr;
-                    delim_close = Pair::SquareClose;
-                }
-                _ => {
-                    return Err(s.panic(
-                        token,
-                        &format!("illegal token {:?} in skip_all_pair", token),
-                    ));
-                }
-            }
-
-            let mut start = start_index;
-            let mut delimiter_count = 1;
-            while start < s.tokens.len() {
-                let token = &s.tokens[start];
-                start += 1;
-                if let TokenCode::Pair(pair) = &token.code {
-                    if *pair == delim_open {
-                        delimiter_count += 1;
-                        continue;
-                    }
-                    if *pair == delim_close {
-                        delimiter_count -= 1;
-                        if delimiter_count == 0 {
-                            break;
-                        }
-                    }
-                }
-            }
-            if delimiter_count > 0 {
-                return Err(s.panic(token, "unclosed delimiter"));
-            }
-
-            Ok(start)
-        }
-    }
-
     fn parse_pattern(&self) -> ParseResult<Pattern> {
         let s = self;
 
@@ -5465,13 +5466,6 @@ impl Parse {
                         let mut path = PathInExpr { items };
                         match &token.code {
                             T!["{"] => {
-                                if s.stop_on_brace_open.get() {
-                                    s.stop_on_brace_open.set(false);
-                                    return Ok(PatternNoTopAlt::WithoutRange(
-                                        PatternWithoutRange::Path(PatternPath::Path(path)),
-                                    ));
-                                }
-
                                 s.plusplus();
                                 let mut a = parse_struct_pattern(s)?;
                                 a.path = path;

@@ -263,32 +263,6 @@ example
     a -> Pattern
 ```
 
-- **use , instead of && as separators between chains of conditions in if and while statements**
-```
-example
-
-    // use , instead of && as separators between chains of conditions,
-    // because && can be regarded as part of the expr
-    if a == b, c && d, #[some-attr] outer -> Some(inner),
-            inner -> Some(number),
-            number == 1 {
-    }
-    if a == b, c -> Some(n), n > 0 {
-    }
-
-    for v -> E..X(n) | E..Y(n) {
-    }
-    for a -> Some(b) {
-    }
-    for a == b, c && d, #[some-attr] outer -> Some(inner),
-            inner -> Some(number),
-            number == 1 {
-    }
-    for a == b, c -> Some(n), n > 0 {
-    }
-
-```
-
 - **use + instead of pub for exporting symbols**
 
     use + or ^ after symbol name
@@ -312,9 +286,32 @@ example
     }
 ```
 
+- **use special syntax for let chains in if, for and match**
+
+```
+example
+
+    if a -> b {
+    }
+
+    // if pattern contains Struct Pattern, use $ after ->
+    if a ->$ Person{ name } {
+    }
+    for a ->$ Person{ name } {
+    }
+    match s.p {
+        ?p if p ->$ Person{ name }: {}
+        -: {}
+    }
+
+    // you don't need $ in for in loop, but you do need for: if pattern contains Struct Pattern
+    for: Person{ name } in list {
+    }
+```
+
 - **use unified for syntax instead of loop, while, for**
 
-    but for struct patterns(because it uses {}), use "for: PATTERN in EXPR {}"
+    but for struct patterns in for-in(because it uses {}), use "for: PATTERN in EXPR {}"
 
 ```
 example

@@ -675,26 +675,37 @@ f func() {
 
     // use , instead of && as separators between chains of conditions,
     // because && can be regarded as part of the expr
-    if a == b, c && d, #[some-attr] outer -> Some(inner),
-            inner -> Some(number),
+    if a == b && c && d && #[some-attr] outer -> Some(inner) &&
+            inner -> Some(number) &&
             number == 1 {
     }
-    if a == b, c -> Some(n), n > 0 {
+    if a == b && c -> Some(n) && n > 0 {
     }
 
     for v -> E..X(n) | E..Y(n) {
     }
     for a -> Some(b) {
     }
-    for a == b, c && d, #[some-attr] outer -> Some(inner),
-            inner -> Some(number),
+    for a == b && c && d && #[some-attr] outer -> Some(inner) &&
+            inner -> Some(number) &&
             number == 1 {
     }
-    for a == b, c -> Some(n), n > 0 {
+    for a == b && c -> Some(n) && n > 0 {
     }
 
-    // for struct patterns, use for:
-    for: Order { id } in list {}
+    // if pattern contains Struct Pattern, use $ after ->
+    if a ->$ Person{ name } {
+    }
+    for a ->$ Person{ name } {
+    }
+    match s.p {
+        ?p if p ->$ Person{ name }: {}
+        -: {}
+    }
+
+    // you don't need $ in for in loop, but you do need for: if pattern contains Struct Pattern
+    for: Person{ name } in list {
+    }
 }
 
 f func() {
