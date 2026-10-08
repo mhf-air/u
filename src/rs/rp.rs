@@ -594,15 +594,6 @@ impl Parse {
                         payload: ItemPayload::Struct(a),
                     });
                 }
-                Keyword::Union => {
-                    let mut a = s.parse_union()?;
-                    a.vis = vis;
-                    a.t_union = special_token.clone();
-                    stmt = Stmt::Item(Item {
-                        outer_attrs,
-                        payload: ItemPayload::Union(a),
-                    });
-                }
                 Keyword::Type => {
                     let mut a = s.parse_type_alias()?;
                     a.vis = vis;
@@ -616,6 +607,19 @@ impl Parse {
                     return Err(s.panic(s.current(), "not a valid first_special_token"));
                 }
             },
+            TokenCode::Identifier(id) => {
+                if id.u == "union" {
+                    let mut a = s.parse_union()?;
+                    a.vis = vis;
+                    a.t_union = special_token.clone();
+                    stmt = Stmt::Item(Item {
+                        outer_attrs,
+                        payload: ItemPayload::Union(a),
+                    });
+                } else {
+                    return Err(s.panic(s.current(), "not a valid first_special_token"));
+                }
+            }
             _ => {
                 return Err(s.panic(s.current(), "not a valid first_special_token"));
             }
@@ -633,7 +637,7 @@ impl Parse {
 
         match &token.code {
             T![use] | T![struct] | T![enum] | T![trait] | T![fn] | T![impl] | T![let] |
-            T![mod] | T![static] | T![type] | T![union]
+            T![mod] | T![static] | T![type]
             => {
                 return Some(token);
             }
@@ -751,6 +755,9 @@ impl Parse {
                         if matches!(&token.code, T![!]) {
                             return Some(&token);
                         }
+                    }
+                    "union" => {
+                        return Some(&token);
                     }
                     _ => {}
                 }
@@ -1969,7 +1976,8 @@ impl Parse {
 
         let mut r = Union::default();
 
-        s.expect(T![union])?;
+        // union
+        s.plusplus();
 
         // name
         let token = s.current();

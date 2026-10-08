@@ -108,6 +108,7 @@ f func() {
     r#func := a
     r#ret := a
     r#macro := a
+    r#union := a
 
     // ""s to "".to_owned()
     ""s

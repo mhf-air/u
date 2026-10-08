@@ -1299,7 +1299,6 @@ impl Token {
                     Keyword::Override => "override",
                     Keyword::Priv => "priv",
                     Keyword::Typeof => "typeof",
-                    Keyword::Union => "union",
                     Keyword::Unsized => "unsized",
                     Keyword::Virtual => "virtual",
                     Keyword::Yield => "yield",
@@ -1555,7 +1554,7 @@ impl LiteralChar {
     }
 }
 
-pub const ALLOWED_KEYWORD_NAMES: &[&'static str] = &["func", "ret", "macro"];
+pub const ALLOWED_KEYWORD_NAMES: &[&'static str] = &["func", "ret", "macro", "union"];
 
 #[derive(Clone, Default, PartialEq, Eq, Hash)]
 pub struct Identifier {
@@ -1725,7 +1724,6 @@ pub enum Keyword {
     Override,
     Priv,
     Typeof,
-    Union,
     Unsized,
     Virtual,
     Yield,
@@ -1789,7 +1787,6 @@ impl fmt::Debug for Keyword {
             Self::Override => write!(f, "override"),
             Self::Priv => write!(f, "priv"),
             Self::Typeof => write!(f, "typeof"),
-            Self::Union => write!(f, "union"),
             Self::Unsized => write!(f, "unsized"),
             Self::Virtual => write!(f, "virtual"),
             Self::Yield => write!(f, "yield"),
@@ -1854,7 +1851,6 @@ impl FromStr for Keyword {
             "override" => Ok(Self::Override),
             "priv" => Ok(Self::Priv),
             "typeof" => Ok(Self::Typeof),
-            "union" => Ok(Self::Union),
             "unsized" => Ok(Self::Unsized),
             "virtual" => Ok(Self::Virtual),
             "yield" => Ok(Self::Yield),
@@ -2087,7 +2083,6 @@ macro_rules! T {
 	[ override ] => { TokenCode::Keyword(Keyword::Override) };
 	[ priv ] => { TokenCode::Keyword(Keyword::Priv) };
 	[ typeof ] => { TokenCode::Keyword(Keyword::Typeof) };
-	[ union ] => { TokenCode::Keyword(Keyword::Union) };
 	[ unsized ] => { TokenCode::Keyword(Keyword::Unsized) };
 	[ virtual ] => { TokenCode::Keyword(Keyword::Virtual) };
 	[ yield ] => { TokenCode::Keyword(Keyword::Yield) };

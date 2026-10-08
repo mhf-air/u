@@ -185,6 +185,11 @@ fn call<F>(f: F) where for<'a> F: Fn(&'a i32) {
     let func = 1;
     let ret = 1;
     let macro = 1;
+    let union = 1;
+
+    // should at \ after union here in u
+    let a = union
+        + 1;
 
     let Some(a) = b;
 }

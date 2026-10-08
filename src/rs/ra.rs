@@ -1059,7 +1059,7 @@ impl ToLang for Union {
         }
 
         s.name.to_u_before(p);
-        s.t_union.to_u_one(p);
+        p.push_raw("union");
 
         if let Some(where_) = &s.where_ {
             where_.to_u(p);

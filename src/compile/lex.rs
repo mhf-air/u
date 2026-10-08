@@ -1826,7 +1826,7 @@ impl LiteralChar {
     }
 }
 
-pub const ALLOWED_KEYWORD_NAMES: &[&'static str] = &["func", "ret", "macro"];
+pub const ALLOWED_KEYWORD_NAMES: &[&'static str] = &["func", "ret", "macro", "union"];
 
 #[derive(Clone, Default, PartialEq, Eq, Hash)]
 pub struct Identifier {
