@@ -2826,7 +2826,7 @@ impl Parse {
                 t_eq.code = T![=];
 
                 let mut has_struct_pat = false;
-                if matches!(&s.current().code, T![$]) {
+                if matches!(&s.current().code, T![:]) {
                     s.plusplus();
                     has_struct_pat = true;
                 }

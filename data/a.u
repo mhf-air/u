@@ -693,18 +693,16 @@ f func() {
     for a == b && c -> Some(n) && n > 0 {
     }
 
-    // if pattern contains Struct Pattern, use $ after ->
-    if a ->$ Person{ name } {
+    // if pattern contains Struct Pattern, have to use : before pattern
+    if a ->: Person{ name } {
     }
-    for a ->$ Person{ name } {
+    for a ->: Person{ name } {
+    }
+    for: Person{ name } in list {
     }
     match s.p {
-        ?p if p ->$ Person{ name }: {}
+        ?p if p ->: Person{ name }: {}
         -: {}
-    }
-
-    // you don't need $ in for in loop, but you do need for: if pattern contains Struct Pattern
-    for: Person{ name } in list {
     }
 }
 

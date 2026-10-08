@@ -286,7 +286,7 @@ example
     }
 ```
 
-- **use special syntax for let chains in if, for and match**
+- **use new syntax for Struct Pattern in if, for and match**
 
 ```
 example
@@ -294,17 +294,17 @@ example
     if a -> b {
     }
 
-    // if pattern contains Struct Pattern, use $ after ->
-    if a ->$ Person{ name } {
-    }
-    for a ->$ Person{ name } {
+    // if pattern contains Struct Pattern, have to use : before pattern.
+    // see there's a space between : and pattern, because : is not part of the pattern,
+    // it's for the compiler
+    if a ->: Person{ name } {
     }
     match s.p {
-        ?p if p ->$ Person{ name }: {}
+        ?p if p ->: Person{ name }: {}
         -: {}
     }
-
-    // you don't need $ in for in loop, but you do need for: if pattern contains Struct Pattern
+    for a ->: Person{ name } {
+    }
     for: Person{ name } in list {
     }
 ```
