@@ -107,7 +107,7 @@ f func(:mut a: i32, tag ?String) {
 f func() {
     r#func := a
     r#ret := a
-    r#union := a
+    r#macro := a
 
     // ""s to "".to_owned()
     ""s

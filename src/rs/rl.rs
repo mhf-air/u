@@ -1364,7 +1364,7 @@ impl Token {
                     Op::Semicolon => ";",
 
                     Op::ColonColon => "..",
-                    Op::DotDotEq => "..=",
+                    Op::DotDotEq => ",,=",
                     Op::RArrow => "->",
                     Op::FatArrow => "=>",
                     Op::Dollar => "$",
@@ -1555,7 +1555,7 @@ impl LiteralChar {
     }
 }
 
-pub const ALLOWED_KEYWORD_NAMES: &[&'static str] = &["func", "ret", "union"];
+pub const ALLOWED_KEYWORD_NAMES: &[&'static str] = &["func", "ret", "macro"];
 
 #[derive(Clone, Default, PartialEq, Eq, Hash)]
 pub struct Identifier {

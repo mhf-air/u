@@ -140,6 +140,8 @@ fn f() {
     let mut a = 1;
     let mut a: i32 = 1;
 
+    let a: fn(i32) -> i32;
+
     let Some(t) = s.t;
     let Some(t) = s.t else {
     };
@@ -170,3 +172,22 @@ fn f(
 macro_rules! abc {
     ($l:expr) => { bar!($l); }
 }
+
+type Point = [i32; 1];
+type Point = &[i32];
+type Point = fn(i32, i32) -> i32;
+type Point = fn(
+    i32,
+    i32,
+) -> i32;
+type Point = for<'a> unsafe extern "C" fn(i32, i32) -> i32;
+fn call<F>(f: F) where for<'a> F: Fn(&'a i32) {
+    let func = 1;
+    let ret = 1;
+    let macro = 1;
+
+    let Some(a) = b;
+}
+
+type Point = Option<i32>;
+type Point = Option<(i32, i32)>;

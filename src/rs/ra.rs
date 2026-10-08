@@ -1362,7 +1362,7 @@ impl ToLang for Macro {
     }
 }
 
-// tokens are pure Rust tokens, except identifers and "~" and "~="
+// tokens are pure U tokens
 #[derive(Debug, Default)]
 pub struct MacroCall {
     pub path: SimplePath,
@@ -1386,7 +1386,8 @@ impl ToLang for MacroCall {
         let s = self;
 
         s.path.to_u(p);
-        s.t_macro_call.to_u(p);
+        s.t_macro_call.to_u_before(p);
+        p.push_raw("_");
 
         let pairs = match s.delim {
             MacroCallDelim::Paren => ("(", ")"),
@@ -1405,9 +1406,6 @@ impl ToLang for MacroCall {
 
                 s.t_delim_close.to_u_before(p);
                 p.push_raw(pairs.1);
-                if s.is_stmt && !matches!(s.delim, MacroCallDelim::Brace) {
-                    p.push_raw(";");
-                }
             }
             MacroCallBody::Expr(list) => {
                 for it in list {
@@ -1415,9 +1413,6 @@ impl ToLang for MacroCall {
                 }
                 s.t_delim_close.to_u_before(p);
                 p.push_raw(pairs.1);
-                if s.is_stmt && !matches!(s.delim, MacroCallDelim::Brace) {
-                    p.push_raw(";");
-                }
             }
             MacroCallBody::Stmt(list) => {
                 for it in list {
@@ -2143,7 +2138,7 @@ impl Default for TypePathSegmentPayload {
 
 #[derive(Debug)]
 pub struct TypePathFunc {
-    pub inputs: Vec<(Type, Option<Token>)>,
+    pub inputs: Vec<(Type, bool)>,
     pub return_type: Option<Type>,
 
     pub t_paren_open: Token,
@@ -2154,10 +2149,10 @@ impl ToLang for TypePathFunc {
         let s = self;
 
         s.t_paren_open.to_u(p);
-        for (it, t) in &s.inputs {
+        for (it, show_comma) in &s.inputs {
             it.to_u(p);
-            if let Some(t) = t {
-                t.to_u(p);
+            if *show_comma {
+                p.push_raw(",");
             }
         }
         s.t_paren_close.to_u(p);
@@ -2224,6 +2219,11 @@ impl ToLang for GenericArg {
                 }
             }
         }
+    }
+}
+impl Default for GenericArg {
+    fn default() -> Self {
+        GenericArg::Lifetime(Lifetime::default())
     }
 }
 #[derive(Debug)]
@@ -2377,9 +2377,8 @@ impl ToLang for PatternWithoutRange {
                 } else {
                     a.t_sep.to_u_before(p);
                 }
-                p.push_raw("Some(");
+                p.push_raw("?");
                 a.pattern.to_u(p);
-                p.push_raw(")");
             }
             PatternWithoutRange::Struct(a) => {
                 a.path.to_u(p);
@@ -2790,11 +2789,13 @@ impl ToLang for TypeNoBounds {
                 a.t_paren_close.to_u(p);
             }
             TypeNoBounds::Optional(a) => {
-                // TODO
-                a.t_sep.to_u_before(p);
-                p.push_raw("Option<");
+                if p.no_first_before {
+                    p.no_first_before = false;
+                } else {
+                    a.t_sep.to_u_before(p);
+                }
+                p.push_raw("?");
                 a.type_.to_u(p);
-                p.push_raw(">");
             }
             TypeNoBounds::RawPointer(a) => {
                 if p.no_first_before {
@@ -3007,8 +3008,8 @@ impl ToLang for TypeBareFunction {
                 p.push_raw(": ");
             }
             it.type_.to_u(p);
-            if let Some(t) = &it.t_comma {
-                t.to_u(p);
+            if it.show_comma {
+                p.push_raw(",");
             }
         }
         if let Some(v) = &s.variadics {
@@ -3018,7 +3019,7 @@ impl ToLang for TypeBareFunction {
         s.t_paren_close.to_u(p);
 
         if let Some(return_type) = &s.return_type {
-            p.push_raw(" ->");
+            p.push_raw(":");
             return_type.to_u(p);
         }
     }
@@ -3033,7 +3034,7 @@ pub struct MaybeNamedParam {
     pub outer_attrs: Attrs,
     pub name: Option<Token>,
     pub type_: Type,
-    pub t_comma: Option<Token>,
+    pub show_comma: bool,
 }
 #[derive(Debug)]
 pub struct MaybeNamedParamVariadics {
