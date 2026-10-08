@@ -173,6 +173,9 @@ macro_rules! abc {
     ($l:expr) => { bar!($l); }
 }
 
+type Point = Option<i32>;
+type Point = Option<(i32, i32)>;
+
 type Point = [i32; 1];
 type Point = &[i32];
 type Point = fn(i32, i32) -> i32;
@@ -182,6 +185,9 @@ type Point = fn(
 ) -> i32;
 type Point = for<'a> unsafe extern "C" fn(i32, i32) -> i32;
 fn call<F>(f: F) where for<'a> F: Fn(&'a i32) {
+}
+
+fn f() {
     let func = 1;
     let ret = 1;
     let macro = 1;
@@ -192,7 +198,36 @@ fn call<F>(f: F) where for<'a> F: Fn(&'a i32) {
         + 1;
 
     let Some(a) = b;
+
+    let a = Person {
+        age: 20,
+        age: 20,
+        ..Default::default()
+    };
+    let a = Person {
+        age: 20,
+        ..b
+    };
 }
 
-type Point = Option<i32>;
-type Point = Option<(i32, i32)>;
+fn f() {
+    a(|| 1);
+    a(|a| 1);
+    a(|a: i32| 1);
+    a(|a, b| 1);
+    a(|a: i32, b: i32| 1);
+    a(|a| {
+        a.b;
+    });
+
+    a(|&a| 1);
+    a(|&a: &i32| -> i32 {});
+
+    a = |a| 1;
+    a = async |a| 1;
+    a = move |a| 1;
+    a = async move |a| 1;
+
+    a = async |&a| 1;
+    a = async |&a: &i32| 1;
+}

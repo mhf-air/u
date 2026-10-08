@@ -601,6 +601,7 @@ f func() {
 
     a(|a i32|: i32 { 1 })
     a(|:mut a: i32|: i32 { 1 })
+    a(|:mut a| 1)
     a(|[move]| { 1 })
     a(|[move] a, b| 1)
     a(|-| { p -> (a, b); })

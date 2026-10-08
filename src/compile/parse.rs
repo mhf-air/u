@@ -4134,15 +4134,13 @@ impl Parse {
                             s.plusplus();
                             param.pat = Some(s.parse_pattern_no_top_alt()?);
                             let token = s.current();
-                            if !matches!(&token.code, T![:]) {
-                                return Err(s.panic(
-                                    token,
-                                    &format!("expected ':' but got {:?}", token),
-                                ));
+                            if matches!(&token.code, T![:]) {
+                                s.plusplus();
+                                let type_ = s.parse_type()?;
+                                param.type_ = Some((Some(token.clone()), type_));
+                            } else {
+                                param.type_ = None;
                             }
-                            s.plusplus();
-                            let type_ = s.parse_type()?;
-                            param.type_ = Some((Some(token.clone()), type_));
                         }
                         _ => {
                             return Err(s.panic(
@@ -5369,9 +5367,8 @@ impl Parse {
                 }
 
                 let token = s.current();
-                let mut pat = s.parse_pattern()?;
-                let a = mem::take(&mut pat.items[0]);
-                let PatternNoTopAlt::WithoutRange(p) = a.0 else {
+                let pat = s.parse_pattern_no_top_alt()?;
+                let PatternNoTopAlt::WithoutRange(p) = pat else {
                     return Err(s.panic(token, "expected PatternWithoutRange"));
                 };
                 return Ok(PatternNoTopAlt::WithoutRange(

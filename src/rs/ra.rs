@@ -3059,12 +3059,7 @@ impl ToLang for Stmt {
         match &s {
             Stmt::Item(a) => a.to_u(p),
             Stmt::Let(a) => a.to_u(p),
-            Stmt::Expr(a) => {
-                a.to_u(p);
-                if matches!(a.payload, ExprPayload::WithoutBlock(_)) {
-                    p.push_raw(";");
-                }
-            }
+            Stmt::Expr(a) => a.to_u(p),
             Stmt::Value(a) => a.to_u(p),
         }
     }
@@ -3153,6 +3148,9 @@ impl ToLang for StmtValue {
 
         s.outer_attrs.to_u(p);
         s.expr.to_u(p);
+        if matches!(s.expr.payload, ExprPayload::WithoutBlock(_)) {
+            p.push_raw("\\");
+        }
     }
 }
 
@@ -3966,7 +3964,7 @@ impl ToLang for ExprTupleIndexing {
 #[derive(Debug, Default)]
 pub struct ExprStruct {
     pub path: PathInExpr,
-    pub fields: Vec<(ExprStructField, Option<Token>)>,
+    pub fields: Vec<(ExprStructField, bool)>,
     pub base: Option<(Token, Option<Expr>)>,
 
     pub t_brace_open: Token,
@@ -3978,18 +3976,16 @@ impl ToLang for ExprStruct {
 
         s.path.to_u(p);
         s.t_brace_open.to_u(p);
-        for (it, t) in &s.fields {
+        for (it, show_comma) in &s.fields {
             it.to_u(p);
-            if let Some(t) = t {
-                t.to_u(p);
+            if *show_comma {
+                p.push_raw(",");
             }
         }
         if let Some((t, expr)) = &s.base {
             t.to_u(p);
             if let Some(expr) = expr {
                 expr.to_u(p);
-            } else {
-                p.push_raw("Default::default()")
             }
         }
         s.t_brace_close.to_u(p);
@@ -4091,6 +4087,7 @@ pub struct ExprClosure {
     pub t_move: Option<Token>,
     pub t_delim_open: Token,
     pub t_delim_close: Token,
+    pub t_first: Token,
 }
 impl ToLang for ExprClosure {
     fn to_u(&self, p: &mut LangFormatter) {
@@ -4099,56 +4096,60 @@ impl ToLang for ExprClosure {
         if p.no_first_before {
             p.no_first_before = false;
         } else {
-            s.t_delim_open.to_u_before(p);
+            s.t_first.to_u_before(p);
         }
 
-        let mut is_first = true;
         // qualifier
+        let mut is_first = true;
+        if is_first {
+            s.t_delim_open.to_u_one(p);
+        } else {
+            s.t_delim_open.to_u(p);
+        }
+        if s.t_async.is_some() || s.t_move.is_some() {
+            p.push_raw("[");
+        }
         if let Some(t) = &s.t_async {
             if is_first {
                 t.to_u_one(p);
                 is_first = false;
             } else {
+                // p.push_raw(",");
                 t.to_u(p);
             }
         }
         if let Some(t) = &s.t_move {
             if is_first {
                 t.to_u_one(p);
-                is_first = false;
+                // is_first = false;
             } else {
+                p.push_raw(",");
                 t.to_u(p);
             }
         }
-
-        if !is_first {
-            p.push_raw(" ");
+        if s.t_async.is_some() || s.t_move.is_some() {
+            p.push_raw("]");
         }
-        s.t_delim_open.to_u_one(p);
+
         for (i, (it, t)) in s.params.iter().enumerate() {
             it.outer_attrs.to_u(p);
             if let Some(pat) = &it.pat {
+                if i == 0 {
+                    if s.t_async.is_some() || s.t_move.is_some() {
+                        // NOTE don't consider the case when the first param is on another line
+                        p.push_raw(" ");
+                    }
+                }
+                p.push_raw(":");
                 pat.to_u(p);
             } else {
                 if i == 0 {
                     if s.t_async.is_some() || s.t_move.is_some() {
                         // NOTE don't consider the case when the first param is on another line
-                        // let need = it.name.tokens_before.iter()
-                        //     .any(|it| {
-                        //         it.code == TokenCode::Blank && it.span.line != it.span.end_line
-                        //     });
-                        // if need {
-                        //     it.name.to_u(p);
-                        // } else {
-                        //     it.name.to_u_one(p);
-                        // }
-                        it.name.to_u_one(p);
-                    } else {
-                        it.name.to_u(p);
+                        p.push_raw(" ");
                     }
-                } else {
-                    it.name.to_u(p);
                 }
+                it.name.to_u(p);
             }
             if let Some((t, type_)) = &it.type_ {
                 if let Some(t) = t {
@@ -4165,7 +4166,7 @@ impl ToLang for ExprClosure {
         s.t_delim_close.to_u(p);
 
         if let Some(a) = &s.return_type {
-            p.push_raw(" ->");
+            p.push_raw(":");
             a.to_u(p);
         }
         s.expr.to_u(p);
@@ -4237,10 +4238,10 @@ impl ToLang for ExprReturn {
 
         if p.no_first_before {
             p.no_first_before = false;
-            s.t_return.to_u_one(p);
         } else {
-            s.t_return.to_u(p);
+            s.t_return.to_u_before(p);
         }
+        p.push_raw("ret");
         if let Some(expr) = &s.expr {
             expr.to_u(p);
         }
