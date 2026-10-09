@@ -474,7 +474,7 @@ impl Lex {
                         i = delta;
                         break;
                     }
-                    // no digit after INT. translates to INT and .
+                    // no digit after INT. translates to INT
                     if i == new_i {
                         let u = s.sub_str(start, i - 1);
                         s.add_token(TokenCode::Literal(Literal {
@@ -483,7 +483,7 @@ impl Lex {
                             suffix: None,
                             span: Span::default(),
                         }), u);
-                        s.add_token(TokenCode::Op(Op::Dot), ".".to_owned());
+                        i -= 1;
                         continue 'outer;
                     }
                     is_float = true;

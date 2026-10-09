@@ -363,13 +363,13 @@ f func(a fn(&mut App), b i32) {
     id = 1
     a = &id
     a = &mut id
-    a = &[raw] id
-    a = &[raw] mut id
+    a = &raw mut id
+    a = &raw const id
 
     a = &&id
     a = &&mut id
-    a = &&[raw] id
-    a = &&[raw] mut id
+    a = &&raw mut id
+    a = &&raw const id
 }
 
 const-c-void[T] func(r &T) *const c-void {
@@ -408,7 +408,7 @@ Pair[T, U] struct(+ T, + U)
 Pair[T, U] struct(^ T, U)
 Pair[T, U] struct(T, U)
 
-Foo[N const usize = 10 + 1] struct
+Foo[N const usize = 10] struct
 
 #[repr(u8)]
 Color enum {

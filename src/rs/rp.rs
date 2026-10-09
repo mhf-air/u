@@ -988,7 +988,37 @@ impl Parse {
             if token.code == T![=] {
                 let t_eq = token.clone();
                 s.plusplus();
-                let expr = s.parse_expr()?;
+
+                let token = s.current();
+                let expr = match &token.code {
+                    T!["{"] => {
+                        let a = s.parse_block_expr()?;
+                        ConstParamExpr::BlockExpr(a)
+                    }
+                    TokenCode::Identifier(_) => {
+                        s.plusplus();
+                        ConstParamExpr::Identifier(token.clone())
+                    }
+                    TokenCode::Literal(_) => {
+                        s.plusplus();
+                        ConstParamExpr::Literal((None, ExprLiteral(token.clone())))
+                    }
+                    T![-] => {
+                        let t_sep = Some(token.clone());
+                        s.plusplus();
+                        let token = s.current();
+                        if !matches!(&token.code, TokenCode::Literal(_)) {
+                            return Err(s.panic(token,
+                                &format!("illegal token {:?} after - for const param", token)));
+                        }
+                        s.plusplus();
+                        ConstParamExpr::Literal((t_sep, ExprLiteral(token.clone())))
+                    }
+                    _ => {
+                        return Err(s.panic(token,
+                            &format!("illegal token {:?} for const param", token)));
+                    }
+                };
                 r.expr = Some((t_eq, expr));
             }
             let token = s.current();
@@ -3679,7 +3709,7 @@ impl Parse {
                 while s.has_more() {
                     let token = s.current();
 
-                    if matches!(&token.code, T!["`]"]) {
+                    if matches!(&token.code, T!["]"]) {
                         let mut t_delim_close = token.clone();
                         t_delim_close.code = T!["`]"];
                         s.plusplus();
@@ -4055,29 +4085,22 @@ impl Parse {
             r.t_ref = ref_token.clone();
 
             let token = s.current();
-            if matches!(&token.code, T!["["]) {
-                s.plusplus();
-                let token = s.current();
-                let TokenCode::Identifier(ident) = &token.code else {
-                    return Err(
-                        s.panic(token, &format!("illegal token {:?} for borrow expr", token))
-                    );
-                };
-                if ident.id != "raw" {
-                    return Err(
-                        s.panic(token, &format!("illegal id {:?} for borrow expr", ident.id))
-                    );
-                }
-                r.t_raw = Some(token.clone());
-                s.plusplus();
-                s.expect(T!["]"])?;
-            }
-
-            let token = s.current();
             if matches!(&token.code, T![mut]) {
                 r.t_mut = Some(token.clone());
                 s.plusplus();
+            } else if let TokenCode::Identifier(a) = &token.code
+                && a.prefix.is_none()
+                && a.id == "raw"
+            {
+                r.t_raw = Some(token.clone());
+                s.plusplus();
+                let token = s.current();
+                if matches!(&token.code, T![mut] | T![const]) {
+                    r.t_mut = Some(token.clone());
+                    s.plusplus();
+                }
             }
+
             r.expr = s.parse_expr()?;
             return Ok(r);
         }
@@ -4119,7 +4142,7 @@ impl Parse {
 
     fn at_range_end(&self, code: &TokenCode) -> bool {
         matches!(code,
-            T![")"] | T!["`]"] | T!["{"] | T![;] | T![,] |
+            T![")"] | T!["]"] | T!["{"] | T![;] | T![,] |
             T![==] | T![!=] | T![>] | T![>=] | T![<=] |
             T![=] | T![+=] | T![-=] | T![*=] | T![/=] | T![%=] |
             T![&=] | T![|=] | T![^=] | T![<<=] | T![>>=]

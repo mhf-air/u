@@ -1701,9 +1701,40 @@ pub struct TypeParam {
 pub struct ConstParam {
     pub name: Token,
     pub type_: Type,
-    pub expr: Option<(Token, Expr)>,
+    pub expr: Option<(Token, ConstParamExpr)>,
 
     pub t_const: Token,
+}
+#[derive(Debug)]
+pub enum ConstParamExpr {
+    BlockExpr(BlockExpr),
+    Identifier(Token),
+    Literal((Option<Token>, ExprLiteral)),
+}
+impl Default for ConstParamExpr {
+    fn default() -> Self {
+        Self::Identifier(Token::default())
+    }
+}
+impl ToLang for ConstParamExpr {
+    fn to_u(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        match s {
+            Self::BlockExpr(a) => {
+                a.to_u(p);
+            }
+            Self::Identifier(a) => {
+                a.to_u(p);
+            }
+            Self::Literal(a) => {
+                if let Some(t) = &a.0 {
+                    t.to_u(p);
+                }
+                a.1.to_u(p);
+            }
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
