@@ -1329,8 +1329,11 @@ impl ToLang for MacroCall {
                 }
             }
             MacroCallBody::Expr(list) => {
-                for it in list {
+                for (it, t) in list {
                     it.to_rs(p);
+                    if let Some(t) = t {
+                        t.to_rs(p);
+                    }
                 }
                 s.t_delim_close.to_rs_before(p);
                 p.push_raw(pairs.1);
@@ -1338,8 +1341,9 @@ impl ToLang for MacroCall {
                     p.push_raw(";");
                 }
             }
-            MacroCallBody::Stmt(list) => {
-                for it in list {
+            MacroCallBody::Stmt(a) => {
+                a.inner_attrs.to_rs(p);
+                for it in &a.stmts {
                     it.to_rs(p);
                 }
                 s.t_delim_close.to_rs_before(p);
@@ -1351,13 +1355,18 @@ impl ToLang for MacroCall {
 #[derive(Debug)]
 pub enum MacroCallBody {
     Token(Vec<Token>), // _{} _[p]{} _[s]{}
-    Expr(Vec<Expr>),   // _() _[b]() _[s]()
-    Stmt(Vec<Stmt>),   // _[stmt]{}
+    Expr(Vec<(Expr, Option<Token>)>),   // _() _[b]() _[s]()
+    Stmt(MacroCallBodyStmt), // _[stmt]{}
 }
 impl Default for MacroCallBody {
     fn default() -> Self {
         MacroCallBody::Token(Vec::new())
     }
+}
+#[derive(Debug, Default)]
+pub struct MacroCallBodyStmt {
+    pub inner_attrs: Attrs,
+    pub stmts: Vec<Stmt>,
 }
 
 // transform all tokens in U that are different in Rust to their Rust form

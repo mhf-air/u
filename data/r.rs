@@ -276,3 +276,31 @@ fn f() {
         _ => {}
     }
 }
+
+#[rustfmt::skip]
+fn f() {
+    vec!(a);
+    vec!{a}
+
+    vec![a];
+    vec![a, b, c];
+    vec![
+        a,
+        b,
+        c,
+    ];
+
+    abc!{ a b c }
+    abc!( a b c );
+    abc![ a b c ];
+
+    stmt!{
+        let a = 1;
+    }
+    stmt!(
+        let a = 1;
+    );
+    stmt![
+        let a = 1;
+    ];
+}

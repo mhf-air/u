@@ -14,11 +14,6 @@
 #![allow(unused-uses)]
 
 // todo
-// - in rust-to-u, when parsing macro_call!,
-//      - try parsing it into Vec[Expr], if ok, then it's macro-call_() or [s]() or [b]()
-//      - try parsing it into Vec[Stmt], if ok, then it's macro-call_{} or [s]{} or [p]{}
-//      - otherwise, it's macro-call_[p]{} or macro-call_[s]{}
-//
 // - goto-definition jump to the correct position in u
 
 extern crate+ self
@@ -155,6 +150,15 @@ call_{
     }
 
     fn abc(count: i32, ...);
+}
+call_[stmt](
+    a := 1
+)
+call_[stmt][
+    a := 1
+]
+call_[stmt]{
+    a := 1
 }
 call_[stmt]{
     name--c+ const &str = "hello"

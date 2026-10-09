@@ -1368,7 +1368,6 @@ pub struct MacroCall {
     pub path: SimplePath,
     pub body: MacroCallBody,
     pub delim: MacroCallDelim,
-    pub is_stmt: bool,
 
     pub t_macro_call: Token,
     pub t_delim_open: Token,
@@ -1389,37 +1388,61 @@ impl ToLang for MacroCall {
         s.t_macro_call.to_u_before(p);
         p.push_raw("_");
 
-        let pairs = match s.delim {
-            MacroCallDelim::Paren => ("(", ")"),
-            MacroCallDelim::Square => ("[", "]"),
-            MacroCallDelim::Brace => ("{", "}"),
-        };
-        s.t_delim_open.to_u_before(p);
-        p.push_raw(pairs.0);
-
         match &s.body {
             MacroCallBody::Token(list) => {
+                match s.delim {
+                    MacroCallDelim::Paren => {
+                        p.push_raw("[p]");
+                    }
+                    MacroCallDelim::Square => {
+                        p.push_raw("[s]");
+                    }
+                    MacroCallDelim::Brace => {
+                    }
+                }
+
+                s.t_delim_open.to_u_before(p);
+                p.push_raw("{");
                 let new_list = transform_macro_tokens(&list);
                 for it in new_list {
                     it.to_u(p);
                 }
 
                 s.t_delim_close.to_u_before(p);
-                p.push_raw(pairs.1);
+                p.push_raw("}");
             }
             MacroCallBody::Expr(list) => {
-                for it in list {
+                match s.delim {
+                    MacroCallDelim::Paren => {
+                    }
+                    MacroCallDelim::Square => {
+                        p.push_raw("[s]");
+                    }
+                    MacroCallDelim::Brace => {
+                        p.push_raw("[b]");
+                    }
+                }
+
+                s.t_delim_open.to_u_before(p);
+                p.push_raw("(");
+                for (it, show_comma) in list {
                     it.to_u(p);
+                    if *show_comma {
+                        p.push_raw(",");
+                    }
                 }
                 s.t_delim_close.to_u_before(p);
-                p.push_raw(pairs.1);
+                p.push_raw(")");
             }
-            MacroCallBody::Stmt(list) => {
-                for it in list {
+            MacroCallBody::Stmt(a) => {
+                p.push_raw("[stmt]");
+
+                s.t_delim_open.to_u(p);
+                a.inner_attrs.to_u(p);
+                for it in &a.stmts {
                     it.to_u(p);
                 }
-                s.t_delim_close.to_u_before(p);
-                p.push_raw(pairs.1);
+                s.t_delim_close.to_u(p);
             }
         }
     }
@@ -1427,13 +1450,18 @@ impl ToLang for MacroCall {
 #[derive(Debug)]
 pub enum MacroCallBody {
     Token(Vec<Token>), // _{} _[p]{} _[s]{}
-    Expr(Vec<Expr>),   // _() _[b]() _[s]()
-    Stmt(Vec<Stmt>),   // _[stmt]{}
+    Expr(Vec<(Expr, bool)>),   // _() _[b]() _[s]()
+    Stmt(MacroCallBodyStmt),
 }
 impl Default for MacroCallBody {
     fn default() -> Self {
         MacroCallBody::Token(Vec::new())
     }
+}
+#[derive(Debug, Default)]
+pub struct MacroCallBodyStmt {
+    pub inner_attrs: Attrs,
+    pub stmts: Vec<Stmt>,
 }
 
 // transform all tokens in Rust that are different in U to their U form
@@ -3148,7 +3176,10 @@ impl ToLang for StmtValue {
 
         s.outer_attrs.to_u(p);
         s.expr.to_u(p);
-        if matches!(s.expr.payload, ExprPayload::WithoutBlock(_)) {
+        if let ExprPayload::WithoutBlock(a) = &s.expr.payload &&
+            let ExprWithoutBlock::MacroCall(a) = a.as_ref() &&
+            !matches!(a.delim, MacroCallDelim::Brace)
+        {
             p.push_raw("\\");
         }
     }
