@@ -157,6 +157,7 @@ impl Lex {
             },
             TokenCode::Op(op) => match op {
                 Op::PlusPlus | Op::MinusMinus | Op::Question | Op::Dot | Op::DotDot => true,
+                Op::Star => add_semicolon_after_star(s),
                 _ => false,
             },
             TokenCode::Pair(pair) => match pair {
@@ -184,6 +185,53 @@ impl Lex {
                 u: String::new(),
             };
             s.tokens.push(new_token);
+        }
+
+        // when to add ; for *\n
+        //
+        // don't consider this case:
+        //      c = a + *
+        //          b;
+        //
+        // add ; in the following cases:
+        //      use *
+        //      use path..*
+        //      use+ *
+        //      use^ *
+        //      use+(super) *
+        //      use+(in crate..path) *
+        fn add_semicolon_after_star(s: &Lex) -> bool {
+            let mut i = s.tokens.len() - 2;
+            let ch = &s.tokens[i];
+            if matches!(&ch.code, T![..] | T![use] | T![+] | T![^]) {
+                return true;
+            }
+            if !matches!(&ch.code, T![")"]) {
+                return false;
+            }
+            loop {
+                if i == 0 {
+                    return false;
+                }
+                i -= 1;
+                let ch = &s.tokens[i];
+                if !matches!(
+                    &ch.code,
+                    T![use] | T![+] | T![in] | T!["("] | T![")"] | T![..] |
+                    T![super] | T![self] | T![crate] | TokenCode::Identifier(_),
+                ) {
+                    return false;
+                }
+                if !matches!(&ch.code, T!["("]) {
+                    continue;
+                }
+                if i <= 1 {
+                    return false;
+                }
+                let ch1 = &s.tokens[i];
+                let ch2 = &s.tokens[i - 1];
+                return matches!(&ch1.code, T![+]) && matches!(&ch2.code, T![use]);
+            }
         }
     }
 

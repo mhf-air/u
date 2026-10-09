@@ -402,7 +402,7 @@ impl Parse {
             }
 
             let token = s.current();
-            match s.parse_stmt() {
+            match s.parse_stmt(items.len()) {
                 Err(err) => {
                     return Err(vec![err]);
                 }
@@ -445,7 +445,7 @@ impl Parse {
                 s.plusplus();
                 break;
             }
-            let stmt = s.parse_stmt()?;
+            let stmt = s.parse_stmt(r.stmts.len())?;
             r.stmts.push(stmt);
             s.skip_semicolons();
             if !s.has_more() {
@@ -458,8 +458,18 @@ impl Parse {
 
     // --------------------------------------------------------------------------------
     // item, let, expr
-    fn parse_stmt(&self) -> ParseResult<Stmt> {
+    fn parse_stmt(&self, stmt_len: usize) -> ParseResult<Stmt> {
         let s = self;
+
+        // check if the stmt before ends with ; or "}"
+        if stmt_len > 1 {
+            s.minusminus();
+            let t_last = s.current().clone();
+            s.plusplus();
+            if !matches!(t_last.code, T![;] | T!["}"]) {
+                return Err(s.panic(&t_last, "expected ; or }} for ending Stmt"));
+            }
+        }
 
         // parse item's outer_attrs
         let outer_attrs = s.parse_outer_attrs()?;
@@ -1176,7 +1186,7 @@ impl Parse {
                 s.plusplus();
                 break;
             }
-            let stmt = s.parse_stmt()?;
+            let stmt = s.parse_stmt(r.items.len())?;
             let Stmt::Item(item) = stmt else {
                 return Err(s.panic(token, "expected Item"));
             };
@@ -1252,12 +1262,6 @@ impl Parse {
                     s.plusplus(); // identifier
                     return Ok(r);
                 }
-                if matches!(&token.code, T![*]) {
-                    s.plusplus();
-                    // needed this, because there's no auto-added ';' after '*'
-                    r.paths.push(token.clone());
-                    return Ok(r);
-                }
                 if matches!(&token.code, T![;] | T![,] | T!["}"]) {
                     return Ok(r);
                 }
@@ -1292,12 +1296,12 @@ impl Parse {
                 let it = parse_use_item(s)?;
 
                 let token = s.current();
+                s.plusplus();
                 match &token.code {
                     T![,] => {
                         let next_token = s.nth(1);
                         let show_comma = next_token.span.line == token.span.line;
                         r.items.push((it, show_comma));
-                        s.plusplus();
                         let token = s.current();
                         if matches!(&token.code, T!["}"]) {
                             r.t_brace_close = token.clone();
@@ -1308,7 +1312,6 @@ impl Parse {
                     T!["}"] => {
                         r.items.push((it, false));
                         r.t_brace_close = token.clone();
-                        s.plusplus();
                         return Ok(r);
                     }
                     _ => {}
@@ -1353,7 +1356,7 @@ impl Parse {
                 break;
             }
             let token = s.current();
-            let stmt = s.parse_stmt()?;
+            let stmt = s.parse_stmt(r.items.len())?;
             match stmt {
                 Stmt::Item(item) => match item.payload {
                     ItemPayload::Func(a) => {
@@ -2175,7 +2178,7 @@ impl Parse {
                 break;
             }
             let token = s.current();
-            let stmt = s.parse_stmt()?;
+            let stmt = s.parse_stmt(r.items.len())?;
             match stmt {
                 Stmt::Item(item) => match item.payload {
                     ItemPayload::Func(f) => {
@@ -2281,7 +2284,7 @@ impl Parse {
                 s.plusplus();
                 break;
             }
-            let stmt = s.parse_stmt()?;
+            let stmt = s.parse_stmt(r.items.len())?;
             if let Stmt::Item(item) = stmt {
                 let payload = match item.payload {
                     ItemPayload::Func(f) => AssociatedItemPayload::Func(*f),
@@ -2467,6 +2470,7 @@ impl Parse {
         let i_cur = s.index.get();
         let start = s.skip_pair(i_cur)?;
         let tokens: Vec<Token> = s.tokens[i_cur + 1..start - 1].to_vec();
+        s.index.set(start - 1);
         r.t_delim_close = s.current().clone();
         s.plusplus();
         r.body = MacroCallBody::Token(tokens);
@@ -2511,7 +2515,7 @@ impl Parse {
                 if let TokenCode::Pair(pair) = &token.code && *pair == *delim_close {
                     return Ok(r);
                 }
-                let stmt = s.parse_stmt()?;
+                let stmt = s.parse_stmt(r.stmts.len())?;
                 r.stmts.push(stmt);
                 s.skip_semicolons();
                 if !s.has_more() {

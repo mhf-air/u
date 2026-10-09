@@ -1,6 +1,6 @@
 use crate::compile::ast::*;
 use crate::compile::lex::{
-    Token, TokenCode, Span, Keyword, Pair, Op, Assign, Lex, Literal, LiteralPayload, T,
+    Token, TokenCode, Keyword, Pair, Op, Assign, Lex, Literal, LiteralPayload, T,
 };
 use serde::Serialize;
 use std::cell::Cell;
@@ -381,7 +381,7 @@ impl Parse {
             }
 
             let token = s.current();
-            match s.parse_stmt() {
+            match s.parse_stmt(items.len()) {
                 Err(err) => {
                     return Err(vec![err]);
                 }
@@ -424,7 +424,7 @@ impl Parse {
                 s.plusplus();
                 break;
             }
-            let stmt = s.parse_stmt()?;
+            let stmt = s.parse_stmt(r.stmts.len())?;
             r.stmts.push(stmt);
             s.skip_semicolons();
             if !s.has_more() {
@@ -437,8 +437,18 @@ impl Parse {
 
     // --------------------------------------------------------------------------------
     // item, let, expr
-    fn parse_stmt(&self) -> ParseResult<Stmt> {
+    fn parse_stmt(&self, stmt_len: usize) -> ParseResult<Stmt> {
         let s = self;
+
+        // check if the stmt before ends with ; or "}"
+        if stmt_len > 1 {
+            s.minusminus();
+            let t_last = s.current().clone();
+            s.plusplus();
+            if !matches!(t_last.code, T![;] | T!["}"]) {
+                return Err(s.panic(&t_last, "expected ; or }} for ending Stmt"));
+            }
+        }
 
         // parse item's outer_attrs
         let outer_attrs = s.parse_outer_attrs()?;
@@ -1253,7 +1263,7 @@ impl Parse {
                 s.plusplus();
                 break;
             }
-            let stmt = s.parse_stmt()?;
+            let stmt = s.parse_stmt(r.items.len())?;
             let Stmt::Item(item) = stmt else {
                 return Err(s.panic(token, "expected Item"));
             };
@@ -1328,12 +1338,6 @@ impl Parse {
                     s.plusplus(); // identifier
                     return Ok(r);
                 }
-                if matches!(&token.code, T![*]) {
-                    s.plusplus();
-                    // needed this, because there's no auto-added ';' after '*'
-                    r.paths.push(token.clone());
-                    return Ok(r);
-                }
                 if matches!(&token.code, T![;] | T![,] | T!["}"]) {
                     return Ok(r);
                 }
@@ -1367,33 +1371,7 @@ impl Parse {
             while s.has_more() {
                 let it = parse_use_item(s)?;
 
-                s.minusminus();
-                let before_token = s.current();
-                s.plusplus();
                 let token = s.current();
-                // add ',' after '*' if the next token after '*' is not at the same line
-                if matches!(&before_token.code, T![*]) &&
-                            token.span.line > before_token.span.line {
-                    let span = before_token.span;
-                    let t = Token {
-                        code: T![,],
-                        span: Span {
-                            column: span.column + 1,
-                            end_column: span.end_column + 1,
-                            ..span
-                        },
-                        tokens_before: Vec::new(),
-                        u: ",".to_owned(),
-                    };
-                    r.items.push((it, Some(t)));
-                    if matches!(&token.code, T!["}"]) {
-                        r.t_brace_close = token.clone();
-                        s.plusplus();
-                        return Ok(r);
-                    }
-                    continue;
-                }
-
                 s.plusplus();
                 match &token.code {
                     T![,] => {
@@ -1469,7 +1447,7 @@ impl Parse {
                 break;
             }
             let token = s.current();
-            let stmt = s.parse_stmt()?;
+            let stmt = s.parse_stmt(r.items.len())?;
             match stmt {
                 Stmt::Item(item) => match item.payload {
                     ItemPayload::Func(a) => {
@@ -2192,7 +2170,7 @@ impl Parse {
                 break;
             }
             let token = s.current();
-            let stmt = s.parse_stmt()?;
+            let stmt = s.parse_stmt(r.items.len())?;
             match stmt {
                 Stmt::Item(item) => match item.payload {
                     ItemPayload::Func(f) => {
@@ -2302,7 +2280,7 @@ impl Parse {
                 s.plusplus();
                 break;
             }
-            let stmt = s.parse_stmt()?;
+            let stmt = s.parse_stmt(r.items.len())?;
             if let Stmt::Item(item) = stmt {
                 let payload = match item.payload {
                     ItemPayload::Func(f) => AssociatedItemPayload::Func(*f),
@@ -2554,7 +2532,7 @@ impl Parse {
                 if let TokenCode::Pair(pair) = &token.code && *pair == *delim_close {
                     return Ok(r);
                 }
-                let stmt = s.parse_stmt()?;
+                let stmt = s.parse_stmt(r.stmts.len())?;
                 r.stmts.push(stmt);
                 s.skip_semicolons();
                 if !s.has_more() {

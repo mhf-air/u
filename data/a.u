@@ -57,6 +57,8 @@ use std..env..consts\
     as env-consts
 use super..Api-result as Result
 use std..option..{ Option, Option..Some, Option..None as nil }
+use std..option..{ Option..*, Option }
+use *
 
 f func() {
     use -..crate-abc..Abc
