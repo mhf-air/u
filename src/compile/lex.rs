@@ -262,11 +262,11 @@ impl Lex {
 
         let total_len = s.chars.len();
         if new_i >= total_len {
-            return (None, 0);
+            return (None, new_i);
         }
         let c_first = s.chars[new_i];
-        if !(c_first.is_alphabetic() || c_first != '-') {
-            return (None, 0);
+        if !(c_first.is_alphabetic() || c_first == '-') {
+            return (None, new_i);
         }
         let mut end = new_i;
         for k in new_i..total_len {
@@ -1767,8 +1767,8 @@ impl fmt::Debug for Literal {
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct LiteralString {
-    raw_count: usize, // number of pound sign
-    text: String,
+    pub raw_count: usize, // number of pound sign
+    pub text: String,
 }
 impl LiteralString {
     fn to_rs_string(&self) -> String {

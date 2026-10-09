@@ -1392,10 +1392,10 @@ impl ToLang for MacroCall {
             MacroCallBody::Token(list) => {
                 match s.delim {
                     MacroCallDelim::Paren => {
-                        p.push_raw("[p]");
+                        p.push_raw("\"()\"");
                     }
                     MacroCallDelim::Square => {
-                        p.push_raw("[s]");
+                        p.push_raw("\"[]\"");
                     }
                     MacroCallDelim::Brace => {
                     }
@@ -1412,30 +1412,41 @@ impl ToLang for MacroCall {
                 p.push_raw("}");
             }
             MacroCallBody::Expr(list) => {
+                s.t_delim_open.to_u_before(p);
                 match s.delim {
                     MacroCallDelim::Paren => {
+                        p.push_raw("(");
                     }
                     MacroCallDelim::Square => {
-                        p.push_raw("[s]");
+                        p.push_raw("[");
                     }
                     MacroCallDelim::Brace => {
-                        p.push_raw("[b]");
+                        p.push_raw("\"{}\"(");
                     }
                 }
 
-                s.t_delim_open.to_u_before(p);
-                p.push_raw("(");
                 for (it, show_comma) in list {
                     it.to_u(p);
                     if *show_comma {
                         p.push_raw(",");
                     }
                 }
+
                 s.t_delim_close.to_u_before(p);
-                p.push_raw(")");
+                match s.delim {
+                    MacroCallDelim::Paren => {
+                        p.push_raw(")");
+                    }
+                    MacroCallDelim::Square => {
+                        p.push_raw("]");
+                    }
+                    MacroCallDelim::Brace => {
+                        p.push_raw(")");
+                    }
+                }
             }
             MacroCallBody::Stmt(a) => {
-                p.push_raw("[stmt]");
+                p.push_raw("\"stmt\"");
 
                 s.t_delim_open.to_u(p);
                 a.inner_attrs.to_u(p);

@@ -118,49 +118,29 @@ f func() {
     $tag
 }
 
+// this will throw an error, because (a b) is not an expr list
+// vec_(a b)
+// similarly, {a b} is not a stmt list
+// vec_"stmt"{a b}
+
+vec_(1, 2, 3)
+vec_[1, 2, 3]
 call_(1, 2, 3)
-call_[s](1, 2, 3)
-call_[b](1, 2, 3)
-call_[p]{ select a from b }
-call_[s]{ select a from b }
+call_"s"(1, 2, 3)
+call_"b"(1, 2, 3)
+call_"p"{ select a from b }
+call_"s"{ select a from b }
 call_{ select a from b }
-call_{
-    let a = 1.1;
-    if a > 0 {
-        return;
-    }
-    #[derive(Debug)]
-    pub struct Order-item {
-        name: String,
-        age: i32,
-    }
-
-    pub fn api-config() -> api::Api-config {
-        let mut list = vec![1, 2, 3];
-        list[0] = 10;
-
-        let func = 1;
-        let macro = 1;
-        let ret = 1;
-
-        let a = api::Api-config {
-            ..Default::default()
-        };
-        a
-    }
-
-    fn abc(count: i32, ...);
-}
-call_[stmt](
+call_"stmt"(
     a := 1
 )
-call_[stmt][
+call_"stmt"[
     a := 1
 ]
-call_[stmt]{
+call_"stmt"{
     a := 1
 }
-call_[stmt]{
+call_"stmt"{
     name--c+ const &str = "hello"
     ~1
 
@@ -194,6 +174,47 @@ bar"
 name = "foo"
 # see more
 "#
+}
+call_{
+    let a = 1.1;
+    if a > 0 {
+        return;
+    }
+    #[derive(Debug)]
+    pub struct Order-item {
+        name: String,
+        age: i32,
+    }
+
+    pub fn api-config() -> api::Api-config {
+        let mut list = vec![1, 2, 3];
+        list[0] = 10;
+
+        let func = 1;
+        let macro = 1;
+        let ret = 1;
+
+        let a = api::Api-config {
+            ..Default::default()
+        };
+        a
+    }
+
+    fn abc(count: i32, ...);
+}
+
+f func() {
+    vec_(1)
+}
+vec_(1)
+Clone trait {
+    vec_(1)
+}
+impl Person {
+    vec_(1)
+}
+extern {
+    vec_(1)
 }
 
 f func() {
@@ -518,9 +539,9 @@ extern+[unsafe] "C" {
     name--c static[safe] mut i32
     call_(1)
     call_{1}
-    call_[p]{1}
-    call_[s]{1}
-    call_[stmt]{}
+    call_"p"{1}
+    call_"s"{1}
+    call_"stmt"{}
 }
 
 #[no-mangle]

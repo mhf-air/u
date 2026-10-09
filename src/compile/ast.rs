@@ -310,7 +310,12 @@ impl ToLang for ItemPayload {
             A::Trait(a) => a.to_rs(p),
             A::Impl(a) => a.to_rs(p),
             A::Macro(a) => a.to_rs(p),
-            A::MacroCall(a) => a.to_rs(p),
+            A::MacroCall(a) => {
+                a.to_rs(p);
+                if !matches!(a.delim, MacroCallDelim::Brace) {
+                    p.push_raw(";");
+                }
+            }
         }
     }
 }
@@ -1145,7 +1150,12 @@ impl ToLang for AssociatedItem {
             A::Func(a) => a.to_rs(p),
             A::Const(a) => a.to_rs(p),
             A::TypeAlias(a) => a.to_rs(p),
-            A::MacroCall(a) => a.to_rs(p),
+            A::MacroCall(a) => {
+                a.to_rs(p);
+                if !matches!(a.delim, MacroCallDelim::Brace) {
+                    p.push_raw(";");
+                }
+            }
         }
     }
 }
@@ -1287,7 +1297,6 @@ pub struct MacroCall {
     pub path: SimplePath,
     pub body: MacroCallBody,
     pub delim: MacroCallDelim,
-    pub is_stmt: bool,
 
     pub t_macro_call: Token,
     pub t_delim_open: Token,
@@ -1324,9 +1333,6 @@ impl ToLang for MacroCall {
 
                 s.t_delim_close.to_rs_before(p);
                 p.push_raw(pairs.1);
-                if s.is_stmt && !matches!(s.delim, MacroCallDelim::Brace) {
-                    p.push_raw(";");
-                }
             }
             MacroCallBody::Expr(list) => {
                 for (it, t) in list {
@@ -1337,9 +1343,6 @@ impl ToLang for MacroCall {
                 }
                 s.t_delim_close.to_rs_before(p);
                 p.push_raw(pairs.1);
-                if s.is_stmt && !matches!(s.delim, MacroCallDelim::Brace) {
-                    p.push_raw(";");
-                }
             }
             MacroCallBody::Stmt(a) => {
                 a.inner_attrs.to_rs(p);
@@ -1443,7 +1446,12 @@ impl ToLang for ExternalBlockItem {
         match &s.payload {
             ExternalBlockItemPayload::Func(a) => a.to_rs(p),
             ExternalBlockItemPayload::Static(a) => a.to_rs(p),
-            ExternalBlockItemPayload::MacroCall(a) => a.to_rs(p),
+            ExternalBlockItemPayload::MacroCall(a) => {
+                a.to_rs(p);
+                if !matches!(a.delim, MacroCallDelim::Brace) {
+                    p.push_raw(";");
+                }
+            }
         }
     }
 }

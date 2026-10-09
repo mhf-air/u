@@ -2490,8 +2490,10 @@ impl Parse {
                     let next_token = s.current();
                     let show_comma = next_token.span.line == token.span.line;
                     r.push((expr, show_comma));
-                } else {
+                } else if let TokenCode::Pair(pair) = &token.code && *pair == *delim_close {
                     r.push((expr, false));
+                } else {
+                    return Err(s.panic(&token, "expected , or delim_close for ending exprs"));
                 }
             }
 

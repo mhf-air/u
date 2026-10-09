@@ -290,9 +290,9 @@ fn f() {
         c,
     ];
 
-    abc!{ a b c }
-    abc!( a b c );
-    abc![ a b c ];
+    token!{ a b c }
+    token!( a b c );
+    token![ a b c ];
 
     stmt!{
         let a = 1;

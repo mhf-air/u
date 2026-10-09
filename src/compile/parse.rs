@@ -471,8 +471,7 @@ impl Parse {
             }
 
             if let ExprPayload::WithoutBlock(b) = expr.payload {
-                if let ExprWithoutBlock::MacroCall(mut call) = *b {
-                    call.is_stmt = true;
+                if let ExprWithoutBlock::MacroCall(call) = *b {
                     return Ok(Stmt::Item(Item {
                         outer_attrs,
                         payload: ItemPayload::MacroCall(call),
@@ -2217,8 +2216,7 @@ impl Parse {
                         };
                         r.items.push(a);
                     }
-                    ItemPayload::MacroCall(mut f) => {
-                        f.is_stmt = true;
+                    ItemPayload::MacroCall(f) => {
                         let a = AssociatedItem {
                             outer_attrs: item.outer_attrs,
                             payload: AssociatedItemPayload::MacroCall(f),
@@ -2440,11 +2438,14 @@ impl Parse {
         let mut delim = None;
 
         let token = s.current();
-        if matches!(&token.code, T!["["]) {
+        if let TokenCode::Literal(a) = &token.code &&
+            a.prefix.is_none() &&
+            a.suffix.is_none() &&
+            let LiteralPayload::String(b) = &a.payload &&
+            b.raw_count == 0
+        {
             s.plusplus();
-            // [stmt] [p] [s] [b]
-            let token = s.current();
-            match token.u.as_ref() {
+            match b.text.as_ref() {
                 "p" => {
                     delim = Some(MacroCallDelim::Paren);
                 }
@@ -2456,8 +2457,8 @@ impl Parse {
                 }
                 "stmt" => {
                     is_stmt = true;
-                    let t2 = s.nth(2);
-                    r.delim = match &t2.code {
+                    let token = s.current();
+                    r.delim = match &token.code {
                         T!["("] => MacroCallDelim::Paren,
                         T!["["] => MacroCallDelim::Square,
                         T!["{"] => MacroCallDelim::Brace,
@@ -2476,23 +2477,22 @@ impl Parse {
                     ));
                 }
             }
-            s.plusplus();
-            s.expect(T!["]"])?;
         }
 
+        let token = s.current();
+        let delim_close = match &token.code {
+            T!["("] => Pair::ParenClose,
+            T!["["] => Pair::SquareClose,
+            T!["{"] => Pair::BraceClose,
+            _ => {
+                return Err(s.panic(
+                    token,
+                    &format!("expected (, [ or {{, but got {:?}", token),
+                ));
+            }
+        };
+
         if is_stmt {
-            let token = s.current();
-            let delim_close = match &token.code {
-                T!["("] => Pair::ParenClose,
-                T!["["] => Pair::SquareClose,
-                T!["{"] => Pair::BraceClose,
-                _ => {
-                    return Err(s.panic(
-                        token,
-                        &format!("expected (, [ or {{, but got {:?}", token),
-                    ));
-                }
-            };
             let block = parse_stmts(s, &delim_close)?;
             r.body = MacroCallBody::Stmt(block);
             r.t_delim_close = s.current().clone();
@@ -2502,15 +2502,20 @@ impl Parse {
 
         let token = s.current();
         match &token.code {
-            T!["("] => {
+            T!["("] | T!["["] => {
                 if let Some(delim) = delim {
                     r.delim = delim;
                 } else {
-                    r.delim = MacroCallDelim::Paren;
+                    if matches!(&token.code, T!["("]) {
+                        r.delim = MacroCallDelim::Paren;
+                    } else {
+                        r.delim = MacroCallDelim::Square;
+                    }
                 }
                 r.t_delim_open = token.clone();
                 // (expr, expr, ...)
-                let exprs = parse_exprs(s)?;
+                // [expr, expr, ...]
+                let exprs = parse_exprs(s, &delim_close)?;
                 r.body = MacroCallBody::Expr(exprs);
                 r.t_delim_close = s.current().clone();
                 s.plusplus();
@@ -2531,7 +2536,7 @@ impl Parse {
             _ => {
                 return Err(s.panic(
                     token,
-                    &format!("expected ( or {{, but got {:?}", token),
+                    &format!("expected (, [ or {{, but got {:?}", token),
                 ));
             }
         }
@@ -2560,19 +2565,23 @@ impl Parse {
             return Ok(r);
         }
 
-        fn parse_exprs(s: &Parse) -> ParseResult<Vec<(Expr, Option<Token>)>> {
+        fn parse_exprs(s: &Parse, delim_close: &Pair) -> ParseResult<Vec<(Expr, Option<Token>)>> {
             let mut r = Vec::new();
 
             s.plusplus();
 
             while s.has_more() {
                 let token = s.current();
-                if matches!(&token.code, T![")"]) {
+                if let TokenCode::Pair(pair) = &token.code && *pair == *delim_close {
                     return Ok(r);
                 }
 
                 let expr = s.parse_expr()?;
                 let token = s.current();
+                if let TokenCode::Pair(pair) = &token.code && *pair == *delim_close {
+                    r.push((expr, None));
+                    return Ok(r);
+                }
                 if matches!(&token.code, T![,]) {
                     s.plusplus();
                     r.push((expr, Some(token.clone())));
@@ -2582,7 +2591,7 @@ impl Parse {
                     t.code = T![,];
                     r.push((expr, Some(t)));
                 } else {
-                    r.push((expr, None));
+                    return Err(s.panic(&token, "expected , or delim_close for ending exprs"));
                 }
             }
 

@@ -187,11 +187,11 @@ impl Lex {
 
         let total_len = s.chars.len();
         if new_i >= total_len {
-            return (None, 0);
+            return (None, new_i);
         }
         let c_first = s.chars[new_i];
         if !(c_first.is_alphabetic() || c_first != '_') {
-            return (None, 0);
+            return (None, new_i);
         }
         let mut end = new_i;
         for k in new_i..total_len {
