@@ -2627,100 +2627,45 @@ impl Parse {
         Ok(r)
     }
 
-    // after for
     fn parse_for(&self) -> ParseResult<ExprLoop> {
         let s = self;
 
         let mut r = ExprLoop::default();
 
-        r.t_for = s.current().clone();
-        s.plusplus();
-
-        // for {
         let token = s.current();
-        if matches!(&token.code, T!["{"]) {
-            r.payload = ExprLoopPayload::Loop;
-            r.body = s.parse_block_expr()?;
-            r.t_for.code = T![loop];
-            return Ok(r);
-        }
-
-        // used to indicate it's a for in expression
-        let mut fake_in_token = Token::default();
-        fake_in_token.code = T![in];
-
-        // get the tokens from after for to the first opening brace({) or semicolon(;),
-        // skipping pairs(parens, etc.) in the process
-        let mut first_special_token: Option<&Token> = None;
-        if matches!(&token.code, T![:]) {
-            first_special_token = Some(&fake_in_token);
-            s.plusplus();
-        } else {
-            let mut start = s.index.get();
-            while start < s.tokens.len() {
-                let token = &s.tokens[start];
-                start += 1;
-                match &token.code {
-                    T!["{"] => break,
-
-                    T![;] if s.magic => break,
-
-                    TokenCode::Pair(_) => {
-                        start = s.skip_pair(start, token)?;
-                    }
-                    T![->] | T![in] => {
-                        first_special_token = Some(token);
-                        break;
-                    }
-
-                    _ => (),
-                }
+        r.t_for = token.clone();
+        r.t_for.code = T![for];
+        s.plusplus();
+        match &token.code {
+            T![loop] => {
+                r.payload = ExprLoopPayload::Loop;
             }
-        }
-
-        if let Some(special_token) = first_special_token {
-            match &special_token.code {
-                // for Expr -> Patterns {
-                T![->] => {
-                    let conditions = s.parse_conditions(false)?;
-                    r.payload = ExprLoopPayload::While(ExprLoopWhile { conditions });
-                    r.t_for.code = T![while];
-                }
-                // for Pattern in Expr {
-                T![in] => {
-                    let pattern = s.parse_pattern()?;
-                    let token = s.current();
-                    let t_in = token.clone();
-                    if !matches!(&token.code, T![in]) {
-                        return Err(s.panic(
-                            s.current(),
-                            &format!("expected 'in' but got '{:?}'", special_token),
-                        ));
-                    }
-                    s.plusplus();
-
-                    s.stop_on_brace_open.set(true);
-                    let in_expr = s.parse_expr()?;
-                    s.stop_on_brace_open.set(false);
-
-                    r.payload = ExprLoopPayload::In(ExprLoopIn {
-                        pattern,
-                        in_expr,
-                        t_in,
-                    });
-                }
-                _ => {
-                    return Err(s.panic(
-                        s.current(),
-                        &format!("illegal special token {:?}", special_token),
-                    ));
-                }
+            T![while] => {
+                let conditions = s.parse_conditions(false)?;
+                r.payload = ExprLoopPayload::While(ExprLoopWhile { conditions });
             }
-        } else {
-            // for Expr {
-            let conditions = s.parse_conditions(false)?;
-            r.payload = ExprLoopPayload::While(ExprLoopWhile { conditions });
-            r.t_for.code = T![while];
+            T![for] => {
+                let i_start = s.index.get();
+                let pattern = s.parse_pattern()?;
+                let i_end = s.index.get();
+                let pat_has_brace = s.tokens[i_start..i_end]
+                    .iter().any(|it| matches!(it.code, T!["{"]));
+                let t_in = s.current().clone();
+                s.expect(T![in])?;
+
+                s.stop_on_brace_open.set(true);
+                let in_expr = s.parse_expr()?;
+                s.stop_on_brace_open.set(false);
+
+                r.payload = ExprLoopPayload::In(ExprLoopIn {
+                    pattern,
+                    in_expr,
+                    pat_has_brace,
+                    t_in,
+                });
+            }
+            _ => {
+            }
         }
 
         // for auto completion
@@ -2790,7 +2735,11 @@ impl Parse {
             let item = if matches!(&token.code, T![let]) {
                 s.plusplus();
                 let t_first_in_pattern = s.current().clone();
+                let i_start = s.index.get();
                 let pattern = s.parse_pattern()?;
+                let i_end = s.index.get();
+                let pat_has_brace = s.tokens[i_start..i_end]
+                    .iter().any(|it| matches!(it.code, T!["{"]));
                 let mut t_eq = token.clone();
                 t_eq.code = T![->];
                 s.expect(T![=])?;
@@ -2814,6 +2763,7 @@ impl Parse {
                     pattern,
                     scrutinee: expr,
                     t_eq,
+                    pat_has_brace,
                     t_first_in_expr,
                     t_first_in_pattern,
                 };
@@ -2898,7 +2848,6 @@ impl Parse {
         Ok(r)
     }
 
-    // after match
     fn parse_match(&self) -> ParseResult<ExprMatch> {
         let s = self;
 
@@ -2959,12 +2908,10 @@ impl Parse {
                 return Ok(r);
             }
             r.t_sep = token.clone();
-            r.t_sep.code = T![=>];
-            s.expect(T![:])?;
+            s.expect(T![=>])?;
 
             // expr
             r.expr = s.parse_expr()?;
-            s.skip_semicolons();
             if matches!(s.current().code, T![,]) {
                 s.plusplus();
             }
@@ -3628,7 +3575,7 @@ impl Parse {
                 s.expect(T![:])?;
 
                 let token = s.current();
-                if matches!(token.code, T![for]) {
+                if matches!(token.code, T![for] | T![loop] | T![while]) {
                     let mut for_ = s.parse_for()?;
                     for_.label = label;
                     r.payload =
@@ -3971,7 +3918,7 @@ impl Parse {
                             },
                         )));
                     }
-                    Keyword::For => {
+                    Keyword::For | Keyword::Loop | Keyword::While => {
                         s.minusminus();
                         let a = s.parse_for()?;
                         r.payload =

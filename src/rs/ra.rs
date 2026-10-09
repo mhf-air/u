@@ -3338,6 +3338,9 @@ impl ToLang for ExprLoop {
                 a.conditions.to_u(p);
             }
             ExprLoopPayload::In(a) => {
+                if a.pat_has_brace {
+                    p.push_raw(":");
+                }
                 a.pattern.to_u(p);
                 a.t_in.to_u(p);
                 a.in_expr.to_u(p);
@@ -3365,6 +3368,7 @@ pub struct ExprLoopWhile {
 pub struct ExprLoopIn {
     pub pattern: Pattern,
     pub in_expr: Expr, // except struct expression
+    pub pat_has_brace: bool,
 
     pub t_in: Token,
 }
@@ -3413,6 +3417,9 @@ impl ToLang for ConditionItem {
                 p.no_first_before = false;
 
                 a.t_eq.to_u(p);
+                if a.pat_has_brace {
+                    p.push_raw(":");
+                }
 
                 a.t_first_in_expr.to_u_before(p);
                 p.no_first_before = true;
@@ -3428,6 +3435,7 @@ pub struct LetChainCondition {
     pub pattern: Pattern,
     pub scrutinee: Expr,
     pub t_eq: Token,
+    pub pat_has_brace: bool,
     pub t_first_in_expr: Token,
     pub t_first_in_pattern: Token,
 }
@@ -3500,18 +3508,13 @@ impl ToLang for ExprMatch {
         for it in &s.arms {
             it.arm.to_u(p);
 
-            let has_blank = it.t_sep.tokens_before
-                .iter()
-                .any(|it| it.code == TokenCode::Blank);
-            if !has_blank {
-                p.push_raw(" ");
+            let before = &it.t_sep.tokens_before;
+            if !(before.len() == 1 && before[0].u == " ") {
+                it.t_sep.to_u_before(p);
             }
-            it.t_sep.to_u(p);
+            p.push_raw(":");
 
             it.expr.to_u(p);
-            if matches!(&it.expr.payload, ExprPayload::WithoutBlock(_)) {
-                p.push_raw(",");
-            }
         }
         s.t_brace_close.to_u(p);
     }

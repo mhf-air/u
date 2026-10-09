@@ -236,6 +236,43 @@ fn f() {
     if let Some(inner_opt) = outer_opt
         && let Some(number) = inner_opt
         && number == 1
+        && let Person { name } = a
     {
+    }
+
+    while let Some(inner_opt) = outer_opt
+        && let Some(number) = inner_opt
+        && number == 1
+        && let Person { name } = a
+    {
+    }
+
+    loop {}
+
+    for it in list {
+    }
+    for (it, t) in list {
+    }
+    for Some(it) in list {
+    }
+    for Person { name } in list {
+    }
+
+    'a: loop {
+        break 'a 1;
+    }
+    'a: while a {
+        break 'a;
+    }
+    'a: for it in list {
+        break 'a;
+    }
+}
+
+fn f() {
+    match a {
+        Some(xs) if let Person { x } = xs &&
+            x < 0 => {}
+        _ => {}
     }
 }
