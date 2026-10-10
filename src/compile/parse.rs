@@ -465,31 +465,32 @@ impl Parse {
 
         if first_special_token.is_none() {
             // parse expr
-            let expr = s.parse_expr()?;
-            s.skip_semicolons();
+            let mut expr = s.parse_expr()?;
+            expr.outer_attrs = outer_attrs;
 
-            if let ExprPayload::WithoutBlock(b) = expr.payload {
-                if let ExprWithoutBlock::MacroCall(call) = *b {
-                    return Ok(Stmt::Item(Item {
-                        outer_attrs,
-                        payload: ItemPayload::MacroCall(call),
-                    }));
-                } else {
-                    return Ok(Stmt::Expr(Expr {
-                        outer_attrs: expr.outer_attrs,
-                        payload: ExprPayload::WithoutBlock(b),
-                    }));
-                }
-            } else {
-                let token = s.current();
-                if matches!(&token.code, T!["}"]) {
-                    return Ok(Stmt::Value(StmtValue {
-                        outer_attrs,
-                        expr,
-                    }));
-                }
-                return Ok(Stmt::Expr(expr));
+            // stmt value
+            let token = s.current();
+            if matches!(&token.code, T!["}"]) {
+                return Ok(Stmt::Value(StmtValue { expr }));
             }
+
+            // macro call
+            let mut is_macro_call = false;
+            if let ExprPayload::WithoutBlock(b) = &expr.payload {
+                if let ExprWithoutBlock::MacroCall(_) = b.as_ref() {
+                    is_macro_call = true;
+                }
+            }
+            if is_macro_call {
+                return Ok(Stmt::Item(Item {
+                    outer_attrs: Attrs::default(),
+                    payload: ItemPayload::MacroCall(expr),
+                }));
+            }
+
+            // expr
+            s.skip_semicolons();
+            return Ok(Stmt::Expr(expr));
         }
 
         let stmt: Stmt;
@@ -1511,6 +1512,26 @@ impl Parse {
                     }
                     _ => return Err(s.panic(token, "illegal extern stmt item")),
                 },
+                // the same as in rp.rs, in case for
+                // extern {
+                //     call_{}\
+                // }
+                Stmt::Value(item) => {
+                    let mut is_macro_call = false;
+                    if let ExprPayload::WithoutBlock(b) = &item.expr.payload {
+                        if let ExprWithoutBlock::MacroCall(_) = b.as_ref() {
+                            is_macro_call = true;
+                        }
+                    }
+                    if is_macro_call {
+                        r.items.push(ExternalBlockItem {
+                            outer_attrs: Attrs::default(),
+                            payload: ExternalBlockItemPayload::MacroCall(item.expr),
+                        });
+                    } else {
+                        return Err(s.panic(token, "illegal extern stmt value"));
+                    }
+                }
                 _ => return Err(s.panic(token, "illegal extern stmt")),
             }
 

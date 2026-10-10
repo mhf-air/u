@@ -92,8 +92,11 @@ impl<'a> TagField<'a> {
         p
     }
 
-    fn set_access(&mut self, vis: &ua::VisibilityPayload) {
+    fn set_access(&mut self, vis: Option<&ua::VisibilityPayload>) {
         let s = self;
+        let Some(vis) = vis else {
+            return;
+        };
         match vis {
             ua::VisibilityPayload::Pub => {
                 s.access = Some("public");
@@ -320,7 +323,7 @@ fn parse_items(p: &mut String, pa: &Parse, items: &[ua::Item], filepath: &str, m
             field.signature = Some(generics);
         } */
 
-        field.set_access(&item.vis.payload);
+        field.set_access(item.vis());
         p.push_str(&field.to_string());
         p.push('\n');
 
@@ -371,7 +374,7 @@ fn generics_text(a: &Option<ua::Generics>) -> Option<String> {
             }
             match &item.payload {
                 ua::GenericParamPayload::Lifetime(a) => {
-                    p.push_str(&a.lifetime.u);
+                    p.push_str(&a.lifetime.name.u);
                 }
                 ua::GenericParamPayload::Type(a) => {
                     p.push_str(&a.name.u);
@@ -452,8 +455,11 @@ fn struct_fields(a: &ua::Struct, filepath: &str, mod_: &Vec<&str>, pa: &Parse) -
         return String::new();
     }
 
+    let Some((payload, _, _)) = &a.payload else {
+        return String::new();
+    };
     let mut p = String::new();
-    match a.payload.as_ref().unwrap() {
+    match payload {
         ua::StructPayload::Struct(f) => {
             for item in f {
                 p.push_str(&format!(
@@ -467,7 +473,7 @@ fn struct_fields(a: &ua::Struct, filepath: &str, mod_: &Vec<&str>, pa: &Parse) -
                 let ctype = nested_ctype(mod_, &a.name.u, &a.generics);
                 field.ctype = Some(&ctype);
 
-                field.set_access(&item.vis.payload);
+                field.set_access(Some(&item.vis.payload));
                 let type_ = &to_u(&item.type_, pa);
                 field.type_ = Some(type_);
                 p.push_str(&field.to_string());
@@ -484,7 +490,7 @@ fn struct_fields(a: &ua::Struct, filepath: &str, mod_: &Vec<&str>, pa: &Parse) -
                 let ctype = nested_ctype(mod_, &a.name.u, &a.generics);
                 field.ctype = Some(&ctype);
 
-                field.set_access(&item.vis.payload);
+                field.set_access(Some(&item.vis.payload));
                 let type_ = &to_u(&item.type_, pa);
                 field.type_ = Some(type_);
                 p.push_str(&field.to_string());
@@ -510,8 +516,11 @@ fn enum_fields(a: &ua::Enum, filepath: &str, mod_: &Vec<&str>, pa: &Parse) -> St
         let ctype = nested_ctype(mod_, &a.name.u, &a.generics);
         field.ctype = Some(&ctype);
 
+        let Some((payload, _, _)) = &item.payload else {
+            return String::new();
+        };
         let mut a = String::new();
-        match &item.payload {
+        match payload {
             ua::EnumItemPayload::Struct(f) => {
                 a.push('(');
                 for (i, item) in f.iter().enumerate() {
@@ -533,7 +542,6 @@ fn enum_fields(a: &ua::Enum, filepath: &str, mod_: &Vec<&str>, pa: &Parse) -> St
                 }
                 a.push(')');
             }
-            _ => {}
         }
         if !a.is_empty() {
             field.signature = Some(&a);
@@ -560,7 +568,7 @@ fn union_fields(a: &ua::Union, filepath: &str, mod_: &Vec<&str>, pa: &Parse) -> 
         let ctype = nested_ctype(mod_, &a.name.u, &a.generics);
         field.ctype = Some(&ctype);
 
-        field.set_access(&item.vis.payload);
+        field.set_access(Some(&item.vis.payload));
         let type_ = &to_u(&item.type_, pa);
         field.type_ = Some(type_);
         p.push_str(&field.to_string());
@@ -615,7 +623,7 @@ fn interface_fields(a: &ua::Trait, filepath: &str, mod_: &Vec<&str>, pa: &Parse)
             ua::AssociatedItemPayload::MacroCall(_) => {}
         }
 
-        field.set_access(&item.vis.payload);
+        field.set_access(item.vis());
         p.push_str(&field.to_string());
         p.push('\n');
     }
@@ -688,7 +696,7 @@ fn extern_items(
             field.signature = Some(generics);
         }
 
-        field.set_access(&item.vis.payload);
+        field.set_access(item.vis());
 
         p.push_str(&field.to_string());
         p.push('\n');
@@ -770,7 +778,7 @@ fn impl_items(p: &mut String, a: &ua::Impl, filepath: &str, mod_: &Vec<&str>, pa
             field.signature = Some(generics);
         }
 
-        field.set_access(&item.vis.payload);
+        field.set_access(item.vis());
 
         p.push_str(&field.to_string());
         p.push('\n');

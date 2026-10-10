@@ -568,7 +568,7 @@ fn f() {
     }
 
     unsafe {
-        dangerous();
+        dangerous()
     }
 
     a = unsafe {
@@ -581,11 +581,11 @@ fn f() {
     };
 
     const {
-        1;
+        1
     }
 
     a = const {
-        1;
+        1
     };
 }
 

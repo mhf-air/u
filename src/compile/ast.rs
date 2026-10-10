@@ -265,6 +265,30 @@ impl ToLang for Item {
         s.payload.to_rs(p);
     }
 }
+impl Item {
+    pub fn vis(&self) -> Option<&VisibilityPayload> {
+        let s = self;
+        use ItemPayload as A;
+
+        match &s.payload {
+            A::Mod(a) => Some(&a.vis.payload),
+            A::Crate(a) => Some(&a.vis.payload),
+            A::Extern(a) => Some(&a.vis.payload),
+            A::Use(a) => Some(&a.vis.payload),
+            A::Func(a) => Some(&a.vis.payload),
+            A::TypeAlias(a) => Some(&a.vis.payload),
+            A::Struct(a) => Some(&a.vis.payload),
+            A::Enum(a) => Some(&a.vis.payload),
+            A::Union(a) => Some(&a.vis.payload),
+            A::Const(a) => Some(&a.vis.payload),
+            A::Static(a) => Some(&a.vis.payload),
+            A::Trait(a) => Some(&a.vis.payload),
+            A::Impl(_) => None,
+            A::Macro(_) => None,
+            A::MacroCall(_) => None,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum ItemPayload {
@@ -282,7 +306,7 @@ pub enum ItemPayload {
     Trait(Trait),
     Impl(Impl),
     Macro(Macro),
-    MacroCall(MacroCall),
+    MacroCall(Expr),
 }
 impl Default for ItemPayload {
     fn default() -> Self {
@@ -312,9 +336,7 @@ impl ToLang for ItemPayload {
             A::Macro(a) => a.to_rs(p),
             A::MacroCall(a) => {
                 a.to_rs(p);
-                if !matches!(a.delim, MacroCallDelim::Brace) {
-                    p.push_raw(";");
-                }
+                a.add_semicolon_for_macro_call(p);
             }
         }
     }
@@ -1152,10 +1174,21 @@ impl ToLang for AssociatedItem {
             A::TypeAlias(a) => a.to_rs(p),
             A::MacroCall(a) => {
                 a.to_rs(p);
-                if !matches!(a.delim, MacroCallDelim::Brace) {
-                    p.push_raw(";");
-                }
+                a.add_semicolon_for_macro_call(p);
             }
+        }
+    }
+}
+impl AssociatedItem {
+    pub fn vis(&self) -> Option<&VisibilityPayload> {
+        let s = self;
+        use AssociatedItemPayload as A;
+
+        match &s.payload {
+            A::Func(a) => Some(&a.vis.payload),
+            A::TypeAlias(a) => Some(&a.vis.payload),
+            A::Const(a) => Some(&a.vis.payload),
+            A::MacroCall(_) => None,
         }
     }
 }
@@ -1165,7 +1198,7 @@ pub enum AssociatedItemPayload {
     Func(Func),
     Const(Const),
     TypeAlias(TypeAlias),
-    MacroCall(MacroCall),
+    MacroCall(Expr),
 }
 
 // --------------------------------------------------------------------------------
@@ -1448,9 +1481,7 @@ impl ToLang for ExternalBlockItem {
             ExternalBlockItemPayload::Static(a) => a.to_rs(p),
             ExternalBlockItemPayload::MacroCall(a) => {
                 a.to_rs(p);
-                if !matches!(a.delim, MacroCallDelim::Brace) {
-                    p.push_raw(";");
-                }
+                a.add_semicolon_for_macro_call(p);
             }
         }
     }
@@ -1459,7 +1490,19 @@ impl ToLang for ExternalBlockItem {
 pub enum ExternalBlockItemPayload {
     Func(Func),
     Static(Static),
-    MacroCall(MacroCall),
+    MacroCall(Expr),
+}
+impl ExternalBlockItem {
+    pub fn vis(&self) -> Option<&VisibilityPayload> {
+        let s = self;
+        use ExternalBlockItemPayload as A;
+
+        match &s.payload {
+            A::Func(a) => Some(&a.vis.payload),
+            A::Static(a) => Some(&a.vis.payload),
+            A::MacroCall(_) => None,
+        }
+    }
 }
 
 // --------------------------------------------------------------------------------
@@ -3023,14 +3066,12 @@ impl ToLang for StmtLet {
 
 #[derive(Debug)]
 pub struct StmtValue {
-    pub outer_attrs: Attrs,
     pub expr: Expr,
 }
 impl ToLang for StmtValue {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.outer_attrs.to_rs(p);
         s.expr.to_rs(p);
     }
 }
@@ -3049,6 +3090,16 @@ impl ToLang for Expr {
         match &s.payload {
             ExprPayload::WithBlock(a) => a.to_rs(p),
             ExprPayload::WithoutBlock(a) => a.to_rs(p),
+        }
+    }
+}
+impl Expr {
+    fn add_semicolon_for_macro_call(&self, p: &mut LangFormatter) {
+        if let ExprPayload::WithoutBlock(b) = &self.payload
+            && let ExprWithoutBlock::MacroCall(b) = b.as_ref()
+            && !matches!(b.delim, MacroCallDelim::Brace)
+        {
+            p.push_raw(";");
         }
     }
 }

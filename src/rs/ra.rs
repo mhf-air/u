@@ -271,7 +271,7 @@ pub enum ItemPayload {
     Trait(Trait),
     Impl(Impl),
     Macro(Macro),
-    MacroCall(MacroCall),
+    MacroCall(Expr),
 }
 impl Default for ItemPayload {
     fn default() -> Self {
@@ -1240,7 +1240,7 @@ pub enum AssociatedItemPayload {
     Func(Func),
     Const(Const),
     TypeAlias(TypeAlias),
-    MacroCall(MacroCall),
+    MacroCall(Expr),
 }
 
 // --------------------------------------------------------------------------------
@@ -1567,7 +1567,7 @@ impl ToLang for ExternalBlockItem {
 pub enum ExternalBlockItemPayload {
     Func(Func),
     Static(Static),
-    MacroCall(MacroCall),
+    MacroCall(Expr),
 }
 
 // --------------------------------------------------------------------------------
@@ -3219,19 +3219,15 @@ impl ToLang for StmtLet {
 
 #[derive(Debug)]
 pub struct StmtValue {
-    pub outer_attrs: Attrs,
     pub expr: Expr,
+    pub need_backslash: bool,
 }
 impl ToLang for StmtValue {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.outer_attrs.to_u(p);
         s.expr.to_u(p);
-        if let ExprPayload::WithoutBlock(a) = &s.expr.payload &&
-            let ExprWithoutBlock::MacroCall(a) = a.as_ref() &&
-            !matches!(a.delim, MacroCallDelim::Brace)
-        {
+        if s.need_backslash {
             p.push_raw("\\");
         }
     }

@@ -149,7 +149,7 @@ fn u_cargo_lint(args: Vec<String>) -> io::Result<()> {
 
 fn compile_to_rust_lint(filepath: &str) -> io::Result<Vec<SpanPair>> {
     let p = compile_file(filepath)?;
-    match p.to_rust() {
+    match p.to_rs() {
         Err(_) => Err(io::Error::new(io::ErrorKind::Other, "parse error")),
         Ok(f) => Ok(f.span_pairs),
     }
