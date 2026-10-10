@@ -1,4 +1,4 @@
-use crate::rs::rl::{ Token, TokenCode, Span, Keyword, Pair, Op, T };
+use crate::rs::rl::{ Token, TokenCode, Span, Keyword, Pair, Op, Assign, LiteralPayload, T };
 use std::convert::TryFrom;
 use std::mem;
 
@@ -3815,6 +3815,27 @@ impl ToLang for ExprOperator {
             }
             ExprOperator::CompoundAssignment(a) => {
                 a.left.to_u(p);
+
+                // Expr += 1 to Expr++
+                // Expr -= 1 to Expr~~
+                if matches!(a.op.code, T![+=] | T![-=]) {
+                    if let ExprPayload::WithoutBlock(b) = &a.right.payload
+                        && let ExprWithoutBlock::Literal(ExprLiteral(b)) = b.as_ref()
+                        && let TokenCode::Literal(lit) = &b.code
+                        && let LiteralPayload::Int(n) = &lit.payload
+                        && lit.prefix.is_none()
+                        && lit.suffix.is_none()
+                        && n == "1"
+                    {
+                        if matches!(a.op.code, T![+=]) {
+                            p.push_raw("++");
+                        } else {
+                            p.push_raw("~~");
+                        }
+                        return;
+                    }
+                }
+
                 a.op.to_u(p);
                 a.right.to_u(p);
             }
@@ -4127,6 +4148,31 @@ impl ToLang for ExprMethodCall {
         let s = self;
 
         s.left.to_u(p);
+
+        // "".to_owned() to ""s
+        // "".to_string() to ""st
+        let seg = &s.path_expr_segment;
+        if s.params.is_empty()
+            && matches!(seg.name.token.u.as_ref(), "to_owned" | "to_string")
+            && seg.t_sep.is_none()
+            && seg.generic_args.items.is_empty()
+            && let ExprPayload::WithoutBlock(a) = &s.left.payload
+            && let ExprWithoutBlock::Literal(ExprLiteral(a)) = a.as_ref()
+            && let TokenCode::Literal(a) = &a.code
+            && let LiteralPayload::String(_) = &a.payload
+        {
+            match s.path_expr_segment.name.token.u.as_ref() {
+                "to_owned" => {
+                    p.push_raw("s");
+                }
+                "to_string" => {
+                    p.push_raw("st");
+                }
+                _ => {}
+            }
+            return;
+        }
+
         s.t_dot.to_u(p);
         s.path_expr_segment.to_u(p);
         s.t_paren_open.to_u(p);

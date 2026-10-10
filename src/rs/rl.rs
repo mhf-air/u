@@ -190,7 +190,7 @@ impl Lex {
             return (None, new_i);
         }
         let c_first = s.chars[new_i];
-        if !(c_first.is_alphabetic() || c_first != '_') {
+        if !(c_first.is_alphabetic() || c_first == '_') {
             return (None, new_i);
         }
         let mut end = new_i;
