@@ -3425,11 +3425,12 @@ impl Parse {
 
                         let token = s.current();
                         if matches!(&token.code, T![,]) {
-                            let t = token.clone();
                             s.plusplus();
-                            params.push((expr, Some(t)));
+                            let next_token = s.current();
+                            let show_comma = next_token.span.line == token.span.line;
+                            params.push((expr, show_comma));
                         } else {
-                            params.push((expr, None));
+                            params.push((expr, false));
                         }
                     }
                 }
@@ -3611,11 +3612,12 @@ impl Parse {
 
                 let token = s.current();
                 if matches!(&token.code, T![,]) {
-                    let t = token.clone();
                     s.plusplus();
-                    r.params.push((expr, Some(t)));
+                    let next_token = s.current();
+                    let show_comma = next_token.span.line == token.span.line;
+                    r.params.push((expr, show_comma));
                 } else {
-                    r.params.push((expr, None));
+                    r.params.push((expr, false));
                 }
             }
 
@@ -3667,13 +3669,13 @@ impl Parse {
             T!["("] => {
                 let t_paren_open = token.clone();
 
-                let mut items: Vec<(Expr, Option<Token>)> = Vec::new();
+                let mut items: Vec<(Expr, bool)> = Vec::new();
                 while s.has_more() {
                     let token = s.current();
                     if matches!(&token.code, T![")"]) {
                         let t_paren_close = token.clone();
                         s.plusplus();
-                        if items.len() == 1 && items[0].1.is_none() {
+                        if items.len() == 1 && !items[0].1 {
                             let expr = mem::take(&mut items[0]).0;
                             r.payload = ExprPayload::WithoutBlock(Box::new(
                                 ExprWithoutBlock::Grouped(ExprGrouped {
@@ -3697,13 +3699,13 @@ impl Parse {
                     let expr = s.parse_expr()?;
 
                     let token = s.current();
-                    if matches!(&token.code, T![,] | T![;]) {
-                        let mut t = token.clone();
-                        t.code = T![,];
-                        items.push((expr, Some(t)));
+                    if matches!(&token.code, T![,]) {
                         s.plusplus();
+                        let next_token = s.current();
+                        let show_comma = next_token.span.line == token.span.line;
+                        items.push((expr, show_comma));
                     } else {
-                        items.push((expr, None));
+                        items.push((expr, false));
                     }
                 }
             }
@@ -3749,16 +3751,17 @@ impl Parse {
                     return Ok(r);
                 }
 
-                let t_comma = if matches!(&token.code, T![,]) {
-                    let t = token.clone();
+                let show_comma = if matches!(&token.code, T![,]) {
                     s.plusplus();
-                    Some(t)
+                    let next_token = s.current();
+                    let show_comma = next_token.span.line == token.span.line;
+                    show_comma
                 } else {
-                    None
+                    false
                 };
 
                 // [ Expr([,;] Expr)* ]
-                let mut items: Vec<(Expr, Option<Token>)> = vec![(first_expr, t_comma)];
+                let mut items: Vec<(Expr, bool)> = vec![(first_expr, show_comma)];
                 while s.has_more() {
                     let token = s.current();
 
@@ -3780,11 +3783,12 @@ impl Parse {
 
                     let token = s.current();
                     if matches!(&token.code, T![,]) {
-                        let t = token.clone();
-                        items.push((expr, Some(t)));
                         s.plusplus();
+                        let next_token = s.current();
+                        let show_comma = next_token.span.line == token.span.line;
+                        items.push((expr, show_comma));
                     } else {
-                        items.push((expr, None));
+                        items.push((expr, false));
                     }
                 }
             }
@@ -5262,7 +5266,7 @@ impl Parse {
             // grouped or tuple
             T!["("] => {
                 let t_paren_open = token.clone();
-                let mut list: Vec<(Pattern, Option<Token>)> = Vec::new();
+                let mut list: Vec<(Pattern, bool)> = Vec::new();
                 while s.has_more() {
                     let token = s.current();
                     if matches!(&token.code, T![")"]) {
@@ -5272,7 +5276,7 @@ impl Parse {
 
                         s.plusplus();
                         // grouped
-                        if list.len() == 1 && list[0].1.is_none() {
+                        if list.len() == 1 && !list[0].1 {
                             let a = mem::take(&mut list[0]);
                             return Ok(PatternNoTopAlt::WithoutRange(
                                 PatternWithoutRange::Grouped(PatternGrouped {
@@ -5295,54 +5299,48 @@ impl Parse {
                     let pat = s.parse_pattern()?;
 
                     let token = s.current();
-                    let t_comma = if matches!(&token.code, T![,]) {
+                    let show_comma = if matches!(&token.code, T![,]) {
                         s.plusplus();
-                        Some(token.clone())
+                        let next_token = s.current();
+                        let show_comma = next_token.span.line == token.span.line;
+                        show_comma
                     } else {
-                        None
+                        false
                     };
-                    list.push((pat, t_comma));
+                    list.push((pat, show_comma));
                 }
             }
             // slice
             T!["["] => {
-                let next_token = s.current();
                 let mut t_square_open = token.clone();
                 t_square_open.code = T!["[`"];
-                let mut t_square_close = next_token.clone();
-                t_square_close.code = T!["`]"];
-                if matches!(&next_token.code, T!["]"]) {
-                    return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Slice(
-                        PatternSlice {
-                            items: Vec::new(),
-                            t_square_open,
-                            t_square_close,
-                        },
-                    )));
-                }
-                let mut items: Vec<(Pattern, Option<Token>)> = Vec::new();
+                let mut items: Vec<(Pattern, bool)> = Vec::new();
                 while s.has_more() {
+                    let token = s.current();
+                    if matches!(&token.code, T!["]"]) {
+                        s.plusplus();
+                        let mut t_square_close = token.clone();
+                        t_square_close.code = T!["`]"];
+                        return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Slice(
+                            PatternSlice {
+                                items,
+                                t_square_open,
+                                t_square_close,
+                            },
+                        )));
+                    }
                     let pat = s.parse_pattern()?;
                     let token = s.current();
-                    if !matches!(&token.code, T![,]) {
-                        items.push((pat, None));
-                        break;
-                    }
-                    let t_comma = Some(token.clone());
-                    items.push((pat, t_comma));
-                    s.plusplus();
+                    let show_comma = if matches!(&token.code, T![,]) {
+                        s.plusplus();
+                        let next_token = s.current();
+                        let show_comma = next_token.span.line == token.span.line;
+                        show_comma
+                    } else {
+                        false
+                    };
+                    items.push((pat, show_comma));
                 }
-                let next_token = s.current();
-                s.expect(T!["]"])?;
-                let mut t_square_close = next_token.clone();
-                t_square_close.code = T!["`]"];
-                return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Slice(
-                    PatternSlice {
-                        items,
-                        t_square_open,
-                        t_square_close,
-                    },
-                )));
             }
             // reference
             T![&] | T![&&] => {
@@ -5610,7 +5608,7 @@ impl Parse {
                                 t_colon,
                                 t_tuple_index: token.clone(),
                             }),
-                            t_comma: None,
+                            show_comma: false,
                         }
                     }
                     TokenCode::Identifier(_) => {
@@ -5625,7 +5623,7 @@ impl Parse {
                                     t_colon,
                                     pattern,
                                 }),
-                                t_comma: None,
+                                show_comma: false,
                             }
                         } else {
                             let mut c = PatternStructFieldC::default();
@@ -5633,7 +5631,7 @@ impl Parse {
                             PatternStructField {
                                 outer_attrs,
                                 payload: PatternStructFieldPayload::C(c),
-                                t_comma: None,
+                                show_comma: false,
                             }
                         }
                     }
@@ -5658,7 +5656,7 @@ impl Parse {
                         PatternStructField {
                             outer_attrs,
                             payload: PatternStructFieldPayload::C(c),
-                            t_comma: None,
+                            show_comma: false,
                         }
                     }
                     T![mut] => {
@@ -5677,7 +5675,7 @@ impl Parse {
                         PatternStructField {
                             outer_attrs,
                             payload: PatternStructFieldPayload::C(c),
-                            t_comma: None,
+                            show_comma: false,
                         }
                     }
                     _ => {
@@ -5688,11 +5686,11 @@ impl Parse {
                 };
 
                 let token = s.current();
-                if matches!(&token.code, T![,] | T![;]) {
+                if matches!(&token.code, T![,]) {
                     s.plusplus();
-                    let mut t = token.clone();
-                    t.code = T![,];
-                    r.t_comma = Some(t);
+                    let next_token = s.current();
+                    let show_comma = next_token.span.line == token.span.line;
+                    r.show_comma = show_comma;
                 }
 
                 Ok(PatternStructItem::Field(r))
@@ -5712,13 +5710,15 @@ impl Parse {
                 }
                 let pat = s.parse_pattern()?;
                 let token = s.current();
-                let t_comma = if matches!(&token.code, T![,]) {
+                let show_comma = if matches!(&token.code, T![,]) {
                     s.plusplus();
-                    Some(token.clone())
+                    let next_token = s.current();
+                    let show_comma = next_token.span.line == token.span.line;
+                    show_comma
                 } else {
-                    None
+                    false
                 };
-                r.items.push((pat, t_comma));
+                r.items.push((pat, show_comma));
             }
 
             Ok(r)

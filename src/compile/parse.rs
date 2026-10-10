@@ -5375,18 +5375,20 @@ impl Parse {
             }
             // slice
             T!["[`"] => {
-                let next_token = s.current();
-                if matches!(&next_token.code, T!["`]"]) {
-                    return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Slice(
-                        PatternSlice {
-                            items: Vec::new(),
-                            t_square_open: token.clone(),
-                            t_square_close: next_token.clone(),
-                        },
-                    )));
-                }
+                let t_square_open = token.clone();
                 let mut items: Vec<(Pattern, Option<Token>)> = Vec::new();
                 while s.has_more() {
+                    let token = s.current();
+                    if matches!(&token.code, T!["`]"]) {
+                        s.plusplus();
+                        return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Slice(
+                            PatternSlice {
+                                items: Vec::new(),
+                                t_square_open,
+                                t_square_close: token.clone(),
+                            },
+                        )));
+                    }
                     let pat = s.parse_pattern()?;
                     let token = s.current();
                     if !matches!(&token.code, T![,]) {
@@ -5397,15 +5399,6 @@ impl Parse {
                     items.push((pat, t_comma));
                     s.plusplus();
                 }
-                let next_token = s.current();
-                s.expect(T!["`]"])?;
-                return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Slice(
-                    PatternSlice {
-                        items,
-                        t_square_open: token.clone(),
-                        t_square_close: next_token.clone(),
-                    },
-                )));
             }
             // reference
             T![&] | T![&&] => {

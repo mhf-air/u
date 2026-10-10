@@ -337,6 +337,11 @@ example
 
 - **allow semicolon(;) as separators in addition to comma(,) in multi-line pairs**
 
+    all comma separated list are supported except the following cases:
+
+    - all types
+    - closure expressions
+
 ```
 example
 

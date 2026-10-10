@@ -2473,10 +2473,10 @@ impl ToLang for PatternWithoutRange {
             PatternWithoutRange::TupleStruct(a) => {
                 a.path.to_u(p);
                 a.t_paren_open.to_u(p);
-                for (it, t) in &a.items {
+                for (it, show_comma) in &a.items {
                     it.to_u(p);
-                    if let Some(t) = t {
-                        t.to_u(p);
+                    if *show_comma {
+                        p.push_raw(",");
                     }
                 }
                 a.t_paren_close.to_u(p);
@@ -2488,10 +2488,10 @@ impl ToLang for PatternWithoutRange {
                 } else {
                     a.t_paren_open.to_u(p);
                 }
-                for (pat, t) in &a.items {
+                for (pat, show_comma) in &a.items {
                     pat.to_u(p);
-                    if let Some(t) = t {
-                        t.to_u(p);
+                    if *show_comma {
+                        p.push_raw(",");
                     }
                 }
                 a.t_paren_close.to_u(p);
@@ -2513,10 +2513,10 @@ impl ToLang for PatternWithoutRange {
                 } else {
                     a.t_square_open.to_u(p);
                 }
-                for (it, t) in &a.items {
+                for (it, show_comma) in &a.items {
                     it.to_u(p);
-                    if let Some(t) = t {
-                        t.to_u(p);
+                    if *show_comma {
+                        p.push_raw(",");
                     }
                 }
                 a.t_square_close.to_u(p);
@@ -2623,8 +2623,8 @@ impl ToLang for PatternStructItem {
                         c.name.to_u(p);
                     }
                 }
-                if let Some(t) = &f.t_comma {
-                    t.to_u(p);
+                if f.show_comma {
+                    p.push_raw(",");
                 }
             }
             PatternStructItem::Etc(t) => {
@@ -2638,7 +2638,7 @@ impl ToLang for PatternStructItem {
 pub struct PatternStructField {
     pub outer_attrs: Attrs,
     pub payload: PatternStructFieldPayload,
-    pub t_comma: Option<Token>,
+    pub show_comma: bool,
 }
 #[derive(Debug)]
 pub enum PatternStructFieldPayload {
@@ -2674,14 +2674,14 @@ pub struct PatternStructFieldC {
 #[derive(Debug, Default)]
 pub struct PatternTupleStruct {
     pub path: PathInExpr,
-    pub items: Vec<(Pattern, Option<Token>)>,
+    pub items: Vec<(Pattern, bool)>,
 
     pub t_paren_open: Token,
     pub t_paren_close: Token,
 }
 #[derive(Debug)]
 pub struct PatternTuple {
-    pub items: Vec<(Pattern, Option<Token>)>,
+    pub items: Vec<(Pattern, bool)>,
 
     pub t_paren_open: Token,
     pub t_paren_close: Token,
@@ -2695,7 +2695,7 @@ pub struct PatternGrouped {
 }
 #[derive(Debug)]
 pub struct PatternSlice {
-    pub items: Vec<(Pattern, Option<Token>)>,
+    pub items: Vec<(Pattern, bool)>,
 
     pub t_square_open: Token,
     pub t_square_close: Token,
@@ -3958,10 +3958,10 @@ impl ToLang for ExprArray {
                 a.len.to_u(p);
             }
             ExprArrayPayload::Many(a) => {
-                for (it, t) in &a.0 {
+                for (it, show_comma) in &a.0 {
                     it.to_u(p);
-                    if let Some(t) = t {
-                        t.to_u(p);
+                    if *show_comma {
+                        p.push_raw(",");
                     }
                 }
             }
@@ -3982,7 +3982,7 @@ pub struct ExprArrayOne {
     pub t_semicolon: Token,
 }
 #[derive(Debug)]
-pub struct ExprArrayMany(pub Vec<(Expr, Option<Token>)>);
+pub struct ExprArrayMany(pub Vec<(Expr, bool)>);
 
 #[derive(Debug)]
 pub struct ExprAwait {
@@ -4021,7 +4021,7 @@ impl ToLang for ExprIndex {
 }
 #[derive(Debug)]
 pub struct ExprTuple {
-    pub items: Vec<(Expr, Option<Token>)>,
+    pub items: Vec<(Expr, bool)>,
 
     pub t_paren_open: Token,
     pub t_paren_close: Token,
@@ -4036,10 +4036,10 @@ impl ToLang for ExprTuple {
         } else {
             s.t_paren_open.to_u(p);
         }
-        for (it, t) in &s.items {
+        for (it, show_comma) in &s.items {
             it.to_u(p);
-            if let Some(t) = t {
-                t.to_u(p);
+            if *show_comma {
+                p.push_raw(",");
             }
         }
         s.t_paren_close.to_u(p);
@@ -4113,7 +4113,7 @@ impl ToLang for ExprStructField {
 #[derive(Debug)]
 pub struct ExprCall {
     pub left: Expr,
-    pub params: Vec<(Expr, Option<Token>)>,
+    pub params: Vec<(Expr, bool)>,
 
     pub t_paren_open: Token,
     pub t_paren_close: Token,
@@ -4124,10 +4124,10 @@ impl ToLang for ExprCall {
 
         s.left.to_u(p);
         s.t_paren_open.to_u(p);
-        for (it, t) in &s.params {
+        for (it, show_comma) in &s.params {
             it.to_u(p);
-            if let Some(t) = t {
-                t.to_u(p);
+            if *show_comma {
+                p.push_raw(",");
             }
         }
         s.t_paren_close.to_u(p);
@@ -4137,7 +4137,7 @@ impl ToLang for ExprCall {
 pub struct ExprMethodCall {
     pub left: Expr,
     pub path_expr_segment: PathExprSegment,
-    pub params: Vec<(Expr, Option<Token>)>,
+    pub params: Vec<(Expr, bool)>,
 
     pub t_dot: Token,
     pub t_paren_open: Token,
@@ -4176,10 +4176,10 @@ impl ToLang for ExprMethodCall {
         s.t_dot.to_u(p);
         s.path_expr_segment.to_u(p);
         s.t_paren_open.to_u(p);
-        for (it, t) in &s.params {
+        for (it, show_comma) in &s.params {
             it.to_u(p);
-            if let Some(t) = t {
-                t.to_u(p);
+            if *show_comma {
+                p.push_raw(",");
             }
         }
         s.t_paren_close.to_u(p);
@@ -4256,7 +4256,7 @@ impl ToLang for ExprClosure {
             p.push_raw("]");
         }
 
-        for (i, (it, t)) in s.params.iter().enumerate() {
+        for (i, (it, t_comma)) in s.params.iter().enumerate() {
             it.outer_attrs.to_u(p);
             if let Some(pat) = &it.pat {
                 if i == 0 {
@@ -4284,7 +4284,7 @@ impl ToLang for ExprClosure {
                 }
                 type_.to_u(p);
             }
-            if let Some(t) = t {
+            if let Some(t) = &t_comma {
                 t.to_u(p);
             }
         }
