@@ -4269,6 +4269,9 @@ impl ToLang for ExprClosure {
                 }
                 p.push_raw(":");
                 pat.to_u(p);
+                if it.type_.is_some() {
+                    p.push_raw(":");
+                }
             } else {
                 if i == 0 {
                     if s.t_async.is_some() || s.t_move.is_some() {
@@ -4278,12 +4281,7 @@ impl ToLang for ExprClosure {
                 }
                 it.name.to_u(p);
             }
-            if let Some((t, type_)) = &it.type_ {
-                if let Some(t) = t {
-                    t.to_u(p);
-                } else {
-                    p.push_raw(":");
-                }
+            if let Some(type_) = &it.type_ {
                 type_.to_u(p);
             }
             if let Some(t) = &t_comma {
@@ -4307,7 +4305,7 @@ pub struct FuncParamOptionalType {
     pub outer_attrs: Attrs,
     pub name: Token,
     pub pat: Option<PatternNoTopAlt>,
-    pub type_: Option<(Option<Token>, Type)>,
+    pub type_: Option<Type>,
 }
 
 #[derive(Debug, Default)]

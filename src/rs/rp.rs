@@ -4274,7 +4274,7 @@ impl Parse {
                     if matches!(&token.code, T![:]) {
                         s.plusplus();
                         let type_ = s.parse_type()?;
-                        param.type_ = Some((Some(token.clone()), type_));
+                        param.type_ = Some(type_);
                     } else {
                         param.type_ = None;
                     }

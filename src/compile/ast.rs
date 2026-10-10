@@ -4022,12 +4022,8 @@ impl ToLang for ExprClosure {
                     it.name.to_rs(p);
                 }
             }
-            if let Some((t, type_)) = &it.type_ {
-                if let Some(t) = t {
-                    t.to_rs(p);
-                } else {
-                    p.push_raw(":");
-                }
+            if let Some(type_) = &it.type_ {
+                p.push_raw(":");
                 type_.to_rs(p);
             }
             if let Some(t) = t {
@@ -4048,7 +4044,7 @@ pub struct FuncParamOptionalType {
     pub outer_attrs: Attrs,
     pub name: Token,
     pub pat: Option<PatternNoTopAlt>,
-    pub type_: Option<(Option<Token>, Type)>,
+    pub type_: Option<Type>,
 }
 
 #[derive(Debug, Default)]

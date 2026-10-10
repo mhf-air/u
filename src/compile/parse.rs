@@ -524,7 +524,11 @@ impl Parse {
                     let block = s.parse_block_expr()?;
                     a.else_ = Some((t_else, block));
                 } else {
-                    s.expect(T![;])?;
+                    let token = s.current();
+                    if !matches!(&token.code, T![;] | T!["}"]) {
+                        return Err(s.panic(token, "expected ; or '}' after -> expr"));
+                    }
+                    s.skip_semicolons();
                 }
                 stmt = Stmt::Let(a);
             }
@@ -4284,16 +4288,13 @@ impl Parse {
                             s.plusplus();
 
                             let token = s.current();
-                            let t_colon = if matches!(&token.code, T![:]) {
+                            if matches!(&token.code, T![:]) {
                                 s.plusplus();
-                                Some(token.clone())
-                            } else {
-                                None
-                            };
+                            }
 
                             if !matches!(&token.code, T![,] | T![|]) {
                                 let type_ = s.parse_type()?;
-                                param.type_ = Some((t_colon, type_));
+                                param.type_ = Some(type_);
                             }
                         }
                         T![:] => {
@@ -4303,7 +4304,7 @@ impl Parse {
                             if matches!(&token.code, T![:]) {
                                 s.plusplus();
                                 let type_ = s.parse_type()?;
-                                param.type_ = Some((Some(token.clone()), type_));
+                                param.type_ = Some(type_);
                             } else {
                                 param.type_ = None;
                             }
