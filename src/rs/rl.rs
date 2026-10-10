@@ -1385,6 +1385,8 @@ impl Token {
                     Op::FatArrow => "=>",
                     Op::Dollar => "$",
                     Op::Backslash => "",
+
+                    Op::UComaComma => "::",
                 }
             }
             TokenCode::Pair(pair) => {
@@ -1645,9 +1647,7 @@ impl Identifier {
                     }
                 }
             } else {
-                // aA to aA--r
-                p.push_str(id);
-                p.push_str("--r");
+                to_custom(&mut p, id);
             }
             return p;
         }
@@ -1669,6 +1669,12 @@ impl Identifier {
             return p;
         }
 
+        let a = chars.iter().any(|it| *it == '_');
+        if a {
+            to_custom(&mut p, id);
+            return p;
+        }
+
         // SnakeCase to Snake-case
         p.push(chars[0]);
         for c in &chars[1..] {
@@ -1681,6 +1687,12 @@ impl Identifier {
         }
 
         return p;
+
+        fn to_custom(p: &mut String, id: &str) {
+            let a = id.replace("_", "-");
+            p.push_str(&a);
+            p.push_str("--r");
+        }
     }
 }
 
@@ -1954,6 +1966,8 @@ pub enum Op {
     FatArrow,
     Dollar,
     Backslash,
+
+    UComaComma,
 }
 
 impl fmt::Debug for Op {
@@ -1999,6 +2013,8 @@ impl fmt::Debug for Op {
             Self::FatArrow => write!(f, "=>"),
             Self::Dollar => write!(f, "$"),
             Self::Backslash => write!(f, "\\"),
+
+            Self::UComaComma => write!(f, "::"),
         }
     }
 }
@@ -2177,5 +2193,7 @@ macro_rules! T {
 	[ "`]" ] => { TokenCode::Pair(Pair::ArrayClose) };
 	[ "#[" ] => { TokenCode::Pair(Pair::OuterAttr) };
 	[ "#![" ] => { TokenCode::Pair(Pair::InnerAttr) };
+
+	[ "u:::" ] => { TokenCode::Op(Op::UComaComma) };
 }
 pub(crate) use T;

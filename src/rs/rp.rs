@@ -1523,6 +1523,8 @@ impl Parse {
         if r.self_param.is_some() && !a.stmts.is_empty() {
             // check if the first stmt is
             // let s = self;
+            r.qualifier.no_s = true;
+            r.qualifier.exist = true;
             let first = &a.stmts[0];
             if let Stmt::Let(a) = first &&
                 let Some((name, None)) = &a.short &&
@@ -1538,13 +1540,14 @@ impl Parse {
                     a.generic_args.items.is_empty() &&
                     matches!(a.name.token.code, T![self])
                 {
-                    r.qualifier.no_s = true;
-                    r.qualifier.exist = true;
+                    r.qualifier.no_s = false;
+                    r.qualifier.exist = false;
                 }
             }
-        }
-        if r.qualifier.no_s {
-            a.stmts.remove(0);
+
+            if !r.qualifier.no_s {
+                a.stmts.remove(0);
+            }
         }
         r.body = Some(a);
 
@@ -2761,14 +2764,14 @@ impl Parse {
 
             let token = s.current();
             let item = if matches!(&token.code, T![let]) {
+                let t_let = token.clone();
                 s.plusplus();
-                let t_first_in_pattern = s.current().clone();
                 let i_start = s.index.get();
                 let pattern = s.parse_pattern()?;
                 let i_end = s.index.get();
                 let pat_has_brace = s.tokens[i_start..i_end]
                     .iter().any(|it| matches!(it.code, T!["{"]));
-                let mut t_eq = token.clone();
+                let mut t_eq = s.current().clone();
                 t_eq.code = T![->];
                 s.expect(T![=])?;
 
@@ -2793,7 +2796,7 @@ impl Parse {
                     t_eq,
                     pat_has_brace,
                     t_first_in_expr,
-                    t_first_in_pattern,
+                    t_let,
                 };
                 ConditionItem::LetChain(a)
             } else {

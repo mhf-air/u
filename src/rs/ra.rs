@@ -872,11 +872,8 @@ impl ToLang for Struct {
                     if let Some(where_) = &s.where_ {
                         where_.to_u(p);
                     }
-                    p.push_raw(";");
                 }
             }
-        } else {
-            p.push_raw(";");
         }
     }
 }
@@ -1494,6 +1491,8 @@ fn transform_macro_tokens(tokens: &[Token]) -> Vec<Token> {
         let mut t = it.clone();
         t.code = match &it.code {
             T![..] => T![,,],
+            T![..=] => T![,,=],
+            T![::] => T!["u:::"],
             _ => t.code,
         };
         r.push(t);
@@ -2296,7 +2295,6 @@ impl ToLang for GenericArg {
             GenericArg::Bounds(a) => {
                 a.path_seg.to_u(p);
                 if !a.bounds.items.is_empty() {
-                    p.push_raw(":");
                     a.bounds.to_u(p);
                 }
             }
@@ -3340,8 +3338,9 @@ impl ToLang for ExprAsyncBlock {
             s.t_async.to_u(p);
         }
         if let Some(t) = &s.t_move {
-            p.push_raw(" ");
-            t.to_u(p);
+            p.push_raw("[");
+            t.to_u_one(p);
+            p.push_raw("]");
         }
         s.block.to_u(p);
     }
@@ -3496,7 +3495,7 @@ impl ToLang for ConditionItem {
             ConditionItem::LetChain(a) => {
                 a.outer_attrs.to_u(p);
 
-                a.t_first_in_pattern.to_u_before(p);
+                a.t_let.to_u_before(p);
                 p.no_first_before = true;
                 a.scrutinee.to_u(p);
                 p.no_first_before = false;
@@ -3522,7 +3521,7 @@ pub struct LetChainCondition {
     pub t_eq: Token,
     pub pat_has_brace: bool,
     pub t_first_in_expr: Token,
-    pub t_first_in_pattern: Token,
+    pub t_let: Token,
 }
 
 #[derive(Debug, Default)]
@@ -4224,15 +4223,18 @@ impl ToLang for ExprClosure {
             s.t_first.to_u_before(p);
         }
 
+        let mut push_bar = false;
+
         // qualifier
         let mut is_first = true;
-        if is_first {
-            s.t_delim_open.to_u_one(p);
-        } else {
-            s.t_delim_open.to_u(p);
-        }
         if s.t_async.is_some() || s.t_move.is_some() {
+            if matches!(&s.t_delim_open.code, T![||]) {
+                push_bar = true;
+            }
+            p.push_raw("|");
             p.push_raw("[");
+        } else {
+            s.t_delim_open.to_u_one(p);
         }
         if let Some(t) = &s.t_async {
             if is_first {
@@ -4289,6 +4291,9 @@ impl ToLang for ExprClosure {
             }
         }
         s.t_delim_close.to_u(p);
+        if push_bar {
+            p.push_raw("|");
+        }
 
         if let Some(a) = &s.return_type {
             p.push_raw(":");

@@ -307,9 +307,10 @@ identifier func() {
     name--c = "name--c"
 
     Order = "Order"
-    Order- = "Order-"
+    Order---r = "Order_"
     Order-item = "Order-item"
-    Order-item--r = "Order-item--r"
+    Order-item--r = "Order_item"
+    a-A--r = "a-A";
 
     order = "order"
     submit-order = "submit-order"
@@ -370,6 +371,7 @@ f func(a fn(&mut App), b i32) {
     a = &&mut id
     a = &&raw mut id
     a = &&raw const id
+    &raw const id
 }
 
 const-c-void[T] func(r &T) *const c-void {
@@ -541,9 +543,8 @@ extern+[unsafe] "C" {
     name--c static[safe] mut i32
     call_(1)
     call_{1}
-    call_"{}"{1}
-    call_"[]"{1}
-    call_"stmt"{}
+    call_[1]
+    call_{}
 }
 
 #[no-mangle]
@@ -631,7 +632,7 @@ f func() {
     a(|:mut a| 1)
     a(|[move]| { 1 })
     a(|[move] a, b| 1)
-    a(|-| { p -> (a, b); })
+    a(|-| { p -> (a, b) })
     a(|| {
         {} -> (a, b)
     })

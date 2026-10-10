@@ -306,9 +306,10 @@ fn identifier() {
     NAME = "name--c";
 
     Order = "Order";
-    Order_ = "Order-";
+    Order_ = "Order---r";
     OrderItem = "Order-item";
     Order_item = "Order-item--r";
+    a_A = "a-A--r";
 
     order = "order";
     submit_order = "submit-order";
@@ -362,13 +363,14 @@ fn f(a: fn(&mut App), b: i32) {
     id = 1;
     a = &id;
     a = &mut id;
-    a = &raw id;
     a = &raw mut id;
+    a = &raw const id;
 
     a = &&id;
     a = &&mut id;
-    a = &&raw id;
     a = &&raw mut id;
+    a = &&raw const id;
+    &raw const id;
 }
 
 fn const_c_void<T>(r: &T) -> *const c_void {
@@ -494,7 +496,7 @@ impl Person {
     pub fn m_sf(mut self, a: &str) {}
 
     pub fn typ(self: crate::Abc, a: &str) {}
-    pub fn m_typ(mut self:  crate::Abc, a: &str) {}
+    pub fn m_typ(mut self: crate::Abc, a: &str) {}
 
     pub(self) fn p_self(self, a: &str) {}
     pub(crate) fn p_crate(self, a: &str) {}
@@ -544,7 +546,6 @@ pub unsafe extern "C" {
     safe static mut NAME: i32;
     call!(1);
     call!{1}
-    call!(1);
     call![1];
     call!{}
 }

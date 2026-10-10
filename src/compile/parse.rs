@@ -775,11 +775,23 @@ impl Parse {
                     match keyword {
                         Keyword::Const => {
                             if start >= 2 {
-                                // for case like that:
+                                // for case like:
                                 // ret r as *const T as *const c-void
                                 let last_token = &s.tokens[start - 2];
                                 if matches!(&last_token.code, T![*]) {
                                     continue;
+                                }
+                                // for case like:
+                                // &raw const id
+                                // &&raw const id
+                                if start >= 3 {
+                                    let t2 = &s.tokens[start - 3];
+                                    if let TokenCode::Identifier(a) = &last_token.code
+                                        && a.u == "raw"
+                                        && matches!(&t2.code, T![&] | T![&&])
+                                    {
+                                        continue;
+                                    }
                                 }
                             }
                             let next_token = &s.tokens[start];
