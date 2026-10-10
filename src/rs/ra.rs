@@ -1098,7 +1098,7 @@ impl ToLang for Const {
         s.vis.to_u(p);
 
         s.name.to_u_before(p);
-        p.push_raw("const");
+        s.t_const.to_u_one(p);
         s.type_.to_u(p);
         if let Some((t_eq, expr)) = &s.expr {
             t_eq.to_u(p);
@@ -1134,7 +1134,8 @@ impl ToLang for Static {
 
         s.name.to_u_one(p);
         s.vis.to_u(p);
-        s.t_static.to_u(p);
+        s.name.to_u_before(p);
+        s.t_static.to_u_one(p);
 
         if let Some(safe) = &s.t_safe {
             p.push_raw("[");
@@ -1412,6 +1413,17 @@ impl ToLang for MacroCall {
                 p.push_raw("}");
             }
             MacroCallBody::Expr(list) => {
+                // call!{} to call_{} directly
+                // call!{a} to call_{a} directly
+                if list.len() < 2 {
+                    s.t_delim_open.to_u(p);
+                    for (it, _) in list {
+                        it.to_u(p);
+                    }
+                    s.t_delim_close.to_u(p);
+                    return;
+                }
+
                 s.t_delim_open.to_u_before(p);
                 match s.delim {
                     MacroCallDelim::Paren => {

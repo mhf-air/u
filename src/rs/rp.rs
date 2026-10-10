@@ -40,7 +40,16 @@ pub struct Parse {
     index: Cell<usize>,
 
     op_map: HashMap<TokenCode, u8>,
+
     stop_on_brace_open: Cell<bool>,
+    // prevent the following case, when {}(a) is intepreted as an expr.
+    // not happening in u-to-rs, because {} always has an auto added semicolon after it
+    //
+    // match tuple {
+    //     1 => {}
+    //     (a) => {}
+    // }
+    stop_on_block_expr: Cell<bool>,
     in_conditions: Cell<bool>,
     in_match_conditions: Cell<bool>,
 
@@ -50,6 +59,7 @@ pub struct Parse {
 struct SavedState {
     index: usize,
 
+    stop_on_block_expr: bool,
     stop_on_brace_open: bool,
     in_conditions: bool,
     in_match_conditions: bool,
@@ -90,7 +100,9 @@ impl Parse {
             index: Cell::new(0),
 
             op_map: build_operator_precedence_map(),
+
             stop_on_brace_open: Cell::new(false),
+            stop_on_block_expr: Cell::new(false),
             in_conditions: Cell::new(false),
             in_match_conditions: Cell::new(false),
 
@@ -151,6 +163,7 @@ impl Parse {
         SavedState {
             index: s.index.get(),
             stop_on_brace_open: s.stop_on_brace_open.get(),
+            stop_on_block_expr: s.stop_on_block_expr.get(),
             in_conditions: s.in_conditions.get(),
             in_match_conditions: s.in_match_conditions.get(),
         }
@@ -159,6 +172,7 @@ impl Parse {
         let s = self;
         s.index.set(a.index);
         s.stop_on_brace_open.set(a.stop_on_brace_open);
+        s.stop_on_block_expr.set(a.stop_on_block_expr);
         s.in_conditions.set(a.in_conditions);
         s.in_match_conditions.set(a.in_match_conditions);
     }
@@ -462,7 +476,7 @@ impl Parse {
         let s = self;
 
         // check if the stmt before ends with ; or "}"
-        if stmt_len > 1 {
+        if stmt_len > 0 {
             s.minusminus();
             let t_last = s.current().clone();
             s.plusplus();
@@ -487,19 +501,7 @@ impl Parse {
         let Some(first_special_token) = s.get_first_special_token() else {
             // parse expr
             let expr = s.parse_expr()?;
-            let token = s.current();
-            match &token.code {
-                T![;] => {
-                    s.plusplus();
-                }
-                T!["}"] => {
-                    return Ok(Stmt::Value(StmtValue {
-                        outer_attrs,
-                        expr,
-                    }));
-                }
-                _ => {}
-            }
+            s.skip_semicolons();
 
             if let ExprPayload::WithoutBlock(b) = expr.payload {
                 if let ExprWithoutBlock::MacroCall(call) = *b {
@@ -514,6 +516,13 @@ impl Parse {
                     }));
                 }
             } else {
+                let token = s.current();
+                if matches!(&token.code, T!["}"]) {
+                    return Ok(Stmt::Value(StmtValue {
+                        outer_attrs,
+                        expr,
+                    }));
+                }
                 return Ok(Stmt::Expr(expr));
             }
         };
@@ -1092,15 +1101,17 @@ impl Parse {
                 let t_use = token.clone();
                 s.plusplus();
                 let token = s.current();
-                let t_square_open = token.clone();
-                s.expect(T!["["])?;
+                let mut t_square_open = token.clone();
+                t_square_open.code = T!["["];
+                s.expect(T![<])?;
                 let mut items = Vec::new();
                 while s.has_more() {
                     let token = s.current();
 
-                    if matches!(&token.code, T!["]"]) {
+                    if matches!(&token.code, T![>]) {
                         s.plusplus();
-                        let t_square_close = token.clone();
+                        let mut t_square_close = token.clone();
+                        t_square_close.code = T!["]"];
                         let use_bound = UseBound {
                             items,
                             t_use,
@@ -1119,7 +1130,7 @@ impl Parse {
                         if matches!(&token.code, T![,]) {
                             items.push((one_token, Some(token.clone())));
                             s.plusplus();
-                        } else if matches!(&token.code, T!["]"]) {
+                        } else if matches!(&token.code, T![>]) {
                             items.push((one_token, None));
                         }
                     } else {
@@ -1407,9 +1418,9 @@ impl Parse {
                             payload: ExternalBlockItemPayload::MacroCall(a),
                         });
                     }
-                    _ => return Err(s.panic(token, "illegal extern item")),
+                    _ => return Err(s.panic(token, "illegal extern stmt item")),
                 },
-                _ => return Err(s.panic(token, "illegal extern item")),
+                _ => return Err(s.panic(token, "illegal extern stmt")),
             }
 
             s.skip_semicolons();
@@ -2928,7 +2939,9 @@ impl Parse {
             s.expect(T![=>])?;
 
             // expr
+            s.stop_on_block_expr.set(true);
             r.expr = s.parse_expr()?;
+            s.stop_on_block_expr.set(false);
             if matches!(s.current().code, T![,]) {
                 s.plusplus();
             }
@@ -3008,6 +3021,13 @@ impl Parse {
         let mut list: Vec<ExprOp> = Vec::new();
 
         let expr = s.parse_binary_expr()?;
+        if s.stop_on_block_expr.get() {
+            if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
+                list.push(ExprOp::Expr(expr));
+                r.payload = to_op_expr(s, list)?.payload;
+                return Ok(r);
+            }
+        }
         list.push(ExprOp::Expr(expr));
 
         if s.in_conditions.get() || s.in_match_conditions.get() {
@@ -3045,8 +3065,35 @@ impl Parse {
                 | T![||]
                 | T![..]
                 | T![..=] => {
+                    // NOTE because ">>" is two '>' tokens in lexer
+                    let t = match &token.code {
+                        T![>] => {
+                            let t1 = s.nth(1);
+                            if matches!(&t1.code, T![>]) {
+                                s.plusplus();
+                                let mut t = token.clone();
+                                t.code = T![>>];
+                                t
+                            } else {
+                                token.clone()
+                            }
+                        }
+                        T![<] => {
+                            let t1 = s.nth(1);
+                            if matches!(&t1.code, T![<]) {
+                                s.plusplus();
+                                let mut t = token.clone();
+                                t.code = T![<<];
+                                t
+                            } else {
+                                token.clone()
+                            }
+                        }
+                        _ => token.clone(),
+                    };
+                    list.push(ExprOp::Op(t));
+
                     s.plusplus();
-                    list.push(ExprOp::Op(token.clone()));
                     let expr = s.parse_binary_expr()?;
                     list.push(ExprOp::Expr(expr));
 
@@ -3297,6 +3344,12 @@ impl Parse {
         let mut r = Expr::default();
 
         let mut expr = s.parse_sub_expr()?;
+
+        if s.stop_on_block_expr.get() {
+            if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
+                return Ok(expr);
+            }
+        }
 
         while s.has_more() {
             let token = s.current();
@@ -5381,7 +5434,7 @@ impl Parse {
                         s.plusplus();
                         let start = Some(PatternRangeBound::Path(PathInExpr { items }));
                         let next_token = s.current();
-                        if matches!(next_token.code, T![:]) {
+                        if !can_start_a_range_bound(&next_token.code) {
                             return Ok(PatternNoTopAlt::WithRange(PatternRange {
                                 start,
                                 end: None,
@@ -5482,6 +5535,20 @@ impl Parse {
         }
 
         return Err(s.panic(token, "not a pattern"));
+
+        fn can_start_a_range_bound(code: &TokenCode) -> bool {
+            matches!(code,
+                T![-]
+                | TokenCode::Literal(_)
+                | T![<]
+                | T![::]
+                | TokenCode::Identifier(_)
+                | T![super]
+                | T![self]
+                | T![Self]
+                | T![crate]
+            )
+        }
 
         fn parse_range_pattern_bound(s: &Parse) -> ParseResult<PatternRangeBound> {
             use PatternNoTopAlt as A;

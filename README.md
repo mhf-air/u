@@ -149,7 +149,7 @@ example
     - when to manually add semicolon
         - a :=;
         - a [`i32; 3`] := [`1; 3`]
-        - vec_(1; 3)
+        - vec_[1; 3]
 
     note: semicolons are also inserted after line-ending . or ..
 
@@ -357,10 +357,10 @@ example
         a
         b
     `]
-    vec_(
+    vec_[
         a
         b
-    )
+    ]
     a := Person {
         name: "a"
         age: 20
@@ -400,10 +400,17 @@ example
 example
 
     custom_()
-        anything in () are treated as expressions. like
+    custom_[]
+        anything in () or [] are treated as expressions. like
             vec_(1, 2, 3)
 
-    custom_[stmt]{}
+        custom_"{}"()
+        custom_"{}"[]
+            these are for Rust code that have parameters as expressions, but use {} as delimiters
+
+    custom_"stmt"()
+    custom_"stmt"[]
+    custom_"stmt"{}
         anything in {} are treated as declarations or statements. like
             thread-local_[stmt]{
                 foo--g+ static Ref-cell[u32] = Ref-cell..new()
@@ -417,14 +424,9 @@ example
             clap::arg!{ [name] "Optional name" }
             clap::arg!{ - c - - config < FILE > "Sets a file" }
 
-        dev note(for myself)
-            custom_{} always translates to custom!{}, so there's no need to add a trailling semicolon
-            even if it stands alone as a stmt. (as the Rust spec states,
-                MacroInvocationSemi:
-                    SimplePath ! ( TokenTree* ) ;
-                    SimplePath ! [ TokenTree* ] ;
-                    SimplePath ! { TokenTree* }
-            see https://doc.rust-lang.org/nightly/reference/macros.html#macro-invocation)
+        custom_"()"{}
+        custom_"[]"{}
+            these are for Rust code that have parameters as expressions, but use () or [] as delimiters
 
 ```
 

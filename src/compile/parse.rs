@@ -441,7 +441,7 @@ impl Parse {
         let s = self;
 
         // check if the stmt before ends with ; or "}"
-        if stmt_len > 1 {
+        if stmt_len > 0 {
             s.minusminus();
             let t_last = s.current().clone();
             s.plusplus();
@@ -466,19 +466,7 @@ impl Parse {
         if first_special_token.is_none() {
             // parse expr
             let expr = s.parse_expr()?;
-            let token = s.current();
-            match &token.code {
-                T![;] => {
-                    s.plusplus();
-                }
-                T!["}"] => {
-                    return Ok(Stmt::Value(StmtValue {
-                        outer_attrs,
-                        expr,
-                    }));
-                }
-                _ => {}
-            }
+            s.skip_semicolons();
 
             if let ExprPayload::WithoutBlock(b) = expr.payload {
                 if let ExprWithoutBlock::MacroCall(call) = *b {
@@ -493,6 +481,13 @@ impl Parse {
                     }));
                 }
             } else {
+                let token = s.current();
+                if matches!(&token.code, T!["}"]) {
+                    return Ok(Stmt::Value(StmtValue {
+                        outer_attrs,
+                        expr,
+                    }));
+                }
                 return Ok(Stmt::Expr(expr));
             }
         }
@@ -1498,9 +1493,9 @@ impl Parse {
                             payload: ExternalBlockItemPayload::MacroCall(a),
                         });
                     }
-                    _ => return Err(s.panic(token, "illegal extern item")),
+                    _ => return Err(s.panic(token, "illegal extern stmt item")),
                 },
-                _ => return Err(s.panic(token, "illegal extern item")),
+                _ => return Err(s.panic(token, "illegal extern stmt")),
             }
 
             s.skip_semicolons();
@@ -2454,13 +2449,13 @@ impl Parse {
         {
             s.plusplus();
             match b.text.as_ref() {
-                "p" => {
+                "()" => {
                     delim = Some(MacroCallDelim::Paren);
                 }
-                "s" => {
+                "[]" => {
                     delim = Some(MacroCallDelim::Square);
                 }
-                "b" => {
+                "{}" => {
                     delim = Some(MacroCallDelim::Brace);
                 }
                 "stmt" => {
@@ -2481,7 +2476,7 @@ impl Parse {
                 _ => {
                     return Err(s.panic(
                         token,
-                        &format!("expected stmt, p, s, or b, but got {:?}", token.u),
+                        &format!("expected stmt, (), [], or {{}}, but got {:?}", token.u),
                     ));
                 }
             }
@@ -5500,7 +5495,7 @@ impl Parse {
                         s.plusplus();
                         let start = Some(PatternRangeBound::Path(PathInExpr { items }));
                         let next_token = s.current();
-                        if matches!(next_token.code, T![:]) {
+                        if !can_start_a_range_bound(&next_token.code) {
                             return Ok(PatternNoTopAlt::WithRange(PatternRange {
                                 start,
                                 end: None,
@@ -5581,6 +5576,20 @@ impl Parse {
         }
 
         return Err(s.panic(token, "not a pattern"));
+
+        fn can_start_a_range_bound(code: &TokenCode) -> bool {
+            matches!(code,
+                T![~]
+                | TokenCode::Literal(_)
+                | T!["["]
+                | T![..]
+                | TokenCode::Identifier(_)
+                | T![super]
+                | T![self]
+                | T![Self]
+                | T![crate]
+            )
+        }
 
         fn parse_range_pattern_bound(s: &Parse) -> ParseResult<PatternRangeBound> {
             use PatternNoTopAlt as A;

@@ -128,10 +128,10 @@ f func() {
 vec_(1, 2, 3)
 vec_[1, 2, 3]
 call_(1, 2, 3)
-call_"s"(1, 2, 3)
-call_"b"(1, 2, 3)
-call_"p"{ select a from b }
-call_"s"{ select a from b }
+call_[1, 2, 3]
+call_"{}"(1, 2, 3)
+call_"()"{ select a from b }
+call_"[]"{ select a from b }
 call_{ select a from b }
 call_"stmt"(
     a := 1
@@ -541,8 +541,8 @@ extern+[unsafe] "C" {
     name--c static[safe] mut i32
     call_(1)
     call_{1}
-    call_"p"{1}
-    call_"s"{1}
+    call_"{}"{1}
+    call_"[]"{1}
     call_"stmt"{}
 }
 

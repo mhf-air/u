@@ -9,6 +9,10 @@ use std::mem;
 use std::path::{Path, PathBuf};
 use std::process;
 
+// pub const U_TO_RS: bool = true;
+pub const U_TO_RS: bool = false;
+
+// -----------------------------------------------------------------------------
 macro_rules! io_func {
     ($call:expr, $ctx:expr) => {
         match $call {
@@ -100,10 +104,7 @@ impl CmdNone {
 
             // CmdFmt::new(vec!["data/f.u".to_string()]).run()?;
 
-            // let u_to_rs = true;
-            let u_to_rs = false;
-
-            let buf = if u_to_rs {
+            let buf = if U_TO_RS {
                 let filepath = "data/a.u";
                 compile_to_rs(filepath).unwrap()
             } else {

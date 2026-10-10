@@ -933,6 +933,11 @@ impl Lex {
                                         s.add_token(TokenCode::Op(Op::DotDotDot), "...".to_owned());
                                         i += 2;
                                     }
+                                    '=' => {
+                                        // ..=
+                                        s.add_token(TokenCode::Op(Op::DotDotEq), "..=".to_owned());
+                                        i += 2;
+                                    }
                                     _ => {
                                         // ..
                                         s.add_token(TokenCode::Op(Op::DotDot), "..".to_owned());
@@ -965,8 +970,14 @@ impl Lex {
                                 s.add_token(TokenCode::Assign(Assign::LeftShift), "<<=".to_owned());
                                 i += 2;
                             } else {
-                                // <<
-                                s.add_token(TokenCode::Op(Op::LeftShift), "<<".to_owned());
+                                // // <<
+                                // s.add_token(TokenCode::Op(Op::LeftShift), "<<".to_owned());
+                                // i += 1;
+
+                                // NOTE to deal with Option<<T as A>::B>
+                                // deal with Expr << Expr in parser
+                                s.add_token(TokenCode::Op(Op::Less), "<".to_owned());
+                                s.add_token(TokenCode::Op(Op::Less), "<".to_owned());
                                 i += 1;
                             }
                         }
@@ -995,8 +1006,14 @@ impl Lex {
                                 s.add_token(TokenCode::Assign(Assign::RightShift), ">>=".to_owned());
                                 i += 2;
                             } else {
-                                // >>
-                                s.add_token(TokenCode::Op(Op::RightShift), ">>".to_owned());
+                                // // >>
+                                // s.add_token(TokenCode::Op(Op::RightShift), ">>".to_owned());
+                                // i += 1;
+
+                                // NOTE to deal with Option<Option<i32>>
+                                // deal with Expr >> Expr in parser
+                                s.add_token(TokenCode::Op(Op::Greater), ">".to_owned());
+                                s.add_token(TokenCode::Op(Op::Greater), ">".to_owned());
                                 i += 1;
                             }
                         }

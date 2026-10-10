@@ -1357,9 +1357,9 @@ impl ToLang for MacroCall {
 }
 #[derive(Debug)]
 pub enum MacroCallBody {
-    Token(Vec<Token>), // _{} _[p]{} _[s]{}
-    Expr(Vec<(Expr, Option<Token>)>),   // _() _[b]() _[s]()
-    Stmt(MacroCallBodyStmt), // _[stmt]{}
+    Token(Vec<Token>), // _{} _"{}"{} _"[]"{}
+    Expr(Vec<(Expr, Option<Token>)>),   // _() _[] _"{}"()
+    Stmt(MacroCallBodyStmt), // _"stmt"{}
 }
 impl Default for MacroCallBody {
     fn default() -> Self {

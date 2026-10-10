@@ -1137,4 +1137,9 @@ fn f() {
     stmt![
         let a = 1;
     ];
+
+    // special cases
+    call!(a);
+    call![a];
+    call!{a}
 }
