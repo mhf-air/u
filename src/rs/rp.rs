@@ -41,7 +41,7 @@ pub struct Parse {
 
     op_map: HashMap<TokenCode, u8>,
 
-    stop_on_brace_open: Cell<bool>,
+    stop_on_struct_brace: Cell<bool>,
     // prevent the following case, when {}(a) is intepreted as an expr.
     // not happening in u-to-rs, because {} always has an auto added semicolon after it
     //
@@ -60,7 +60,7 @@ struct SavedState {
     index: usize,
 
     stop_on_block_expr: bool,
-    stop_on_brace_open: bool,
+    stop_on_struct_brace: bool,
     in_conditions: bool,
     in_match_conditions: bool,
 }
@@ -101,7 +101,7 @@ impl Parse {
 
             op_map: build_operator_precedence_map(),
 
-            stop_on_brace_open: Cell::new(false),
+            stop_on_struct_brace: Cell::new(false),
             stop_on_block_expr: Cell::new(false),
             in_conditions: Cell::new(false),
             in_match_conditions: Cell::new(false),
@@ -162,7 +162,7 @@ impl Parse {
         let s = self;
         SavedState {
             index: s.index.get(),
-            stop_on_brace_open: s.stop_on_brace_open.get(),
+            stop_on_struct_brace: s.stop_on_struct_brace.get(),
             stop_on_block_expr: s.stop_on_block_expr.get(),
             in_conditions: s.in_conditions.get(),
             in_match_conditions: s.in_match_conditions.get(),
@@ -171,7 +171,7 @@ impl Parse {
     fn restore_state(&self, a: &SavedState) {
         let s = self;
         s.index.set(a.index);
-        s.stop_on_brace_open.set(a.stop_on_brace_open);
+        s.stop_on_struct_brace.set(a.stop_on_struct_brace);
         s.stop_on_block_expr.set(a.stop_on_block_expr);
         s.in_conditions.set(a.in_conditions);
         s.in_match_conditions.set(a.in_match_conditions);
@@ -2707,8 +2707,12 @@ impl Parse {
                 r.payload = ExprLoopPayload::Loop;
             }
             T![while] => {
+                let i_start = s.index.get();
                 let conditions = s.parse_conditions(false)?;
-                r.payload = ExprLoopPayload::While(ExprLoopWhile { conditions });
+                let i_end = s.index.get();
+                let has_brace = s.tokens[i_start..i_end]
+                    .iter().any(|it| matches!(it.code, T!["{"]));
+                r.payload = ExprLoopPayload::While(ExprLoopWhile { conditions, has_brace });
             }
             T![for] => {
                 let i_start = s.index.get();
@@ -2719,9 +2723,9 @@ impl Parse {
                 let t_in = s.current().clone();
                 s.expect(T![in])?;
 
-                s.stop_on_brace_open.set(true);
+                s.stop_on_struct_brace.set(true);
                 let in_expr = s.parse_expr()?;
-                s.stop_on_brace_open.set(false);
+                s.stop_on_struct_brace.set(false);
 
                 r.payload = ExprLoopPayload::In(ExprLoopIn {
                     pattern,
@@ -2783,9 +2787,9 @@ impl Parse {
             let expr = if is_match {
                 s.parse_expr()?
             } else {
-                s.stop_on_brace_open.set(true);
+                s.stop_on_struct_brace.set(true);
                 let expr = s.parse_expr()?;
-                s.stop_on_brace_open.set(false);
+                s.stop_on_struct_brace.set(false);
                 expr
             };
             r.push((ConditionItem::Expr(expr), None));
@@ -2919,9 +2923,9 @@ impl Parse {
 
         let mut r = ExprMatch::default();
 
-        s.stop_on_brace_open.set(true);
+        s.stop_on_struct_brace.set(true);
         r.expr = s.parse_expr()?;
-        s.stop_on_brace_open.set(false);
+        s.stop_on_struct_brace.set(false);
 
         // for auto completion
         if s.magic && matches!(&s.current().code, T![;]) {
@@ -3854,7 +3858,7 @@ impl Parse {
                         // struct expr
                         T!["{"] => {
                             let t_brace_open = token.clone();
-                            if s.stop_on_brace_open.get() || s.in_conditions.get() {
+                            if s.stop_on_struct_brace.get() || s.in_conditions.get() {
                                 r.payload = ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Path(ExprPath::Path(path)),
                                 ));

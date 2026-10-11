@@ -735,6 +735,9 @@ fn f() {
         Some(p) if let Person{ name } = p => {}
         _ => {}
     }
+
+    while { true } {
+    }
 }
 
 fn f() {

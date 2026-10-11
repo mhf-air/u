@@ -765,6 +765,11 @@ f func() {
         ?p if p ->: Person{ name }: {}
         -: {}
     }
+
+    // when condition contains {}, have to use "for while",
+    // but that's very rare
+    for while { true } {
+    }
 }
 
 f func() {

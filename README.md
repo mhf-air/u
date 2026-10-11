@@ -341,6 +341,11 @@ example
     }
     for: Person{ name } in list {
     }
+
+    // if condition contains {}, then have to use "for while"
+    // but that is very rare
+    for while { true } {
+    }
 ```
 
 - **use unified for syntax instead of loop, while, for**

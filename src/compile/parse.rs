@@ -40,7 +40,7 @@ pub struct Parse {
     index: Cell<usize>,
 
     op_map: HashMap<TokenCode, u8>,
-    stop_on_brace_open: Cell<bool>,
+    stop_on_struct_brace: Cell<bool>,
     in_conditions: Cell<bool>,
     in_match_conditions: Cell<bool>,
 
@@ -50,7 +50,7 @@ pub struct Parse {
 struct SavedState {
     index: usize,
 
-    stop_on_brace_open: bool,
+    stop_on_struct_brace: bool,
     in_conditions: bool,
     in_match_conditions: bool,
 }
@@ -65,7 +65,7 @@ impl Parse {
             index: Cell::new(0),
 
             op_map: build_operator_precedence_map(),
-            stop_on_brace_open: Cell::new(false),
+            stop_on_struct_brace: Cell::new(false),
             in_conditions: Cell::new(false),
             in_match_conditions: Cell::new(false),
 
@@ -125,7 +125,7 @@ impl Parse {
         let s = self;
         SavedState {
             index: s.index.get(),
-            stop_on_brace_open: s.stop_on_brace_open.get(),
+            stop_on_struct_brace: s.stop_on_struct_brace.get(),
             in_conditions: s.in_conditions.get(),
             in_match_conditions: s.in_match_conditions.get(),
         }
@@ -133,7 +133,7 @@ impl Parse {
     fn restore_state(&self, a: &SavedState) {
         let s = self;
         s.index.set(a.index);
-        s.stop_on_brace_open.set(a.stop_on_brace_open);
+        s.stop_on_struct_brace.set(a.stop_on_struct_brace);
         s.in_conditions.set(a.in_conditions);
         s.in_match_conditions.set(a.in_match_conditions);
     }
@@ -2750,6 +2750,19 @@ impl Parse {
         r.t_for = s.current().clone();
         s.plusplus();
 
+        // for while
+        // when condition contains {}
+        let token = s.current();
+        if matches!(&token.code, T![while]) {
+            s.plusplus();
+            let conditions = s.parse_conditions(false)?;
+            r.payload = ExprLoopPayload::While(ExprLoopWhile { conditions });
+            r.t_for.code = T![while];
+            s.skip_semicolons();
+            r.body = s.parse_block_expr()?;
+            return Ok(r);
+        }
+
         // for {
         let token = s.current();
         if matches!(&token.code, T!["{"]) {
@@ -2814,9 +2827,9 @@ impl Parse {
                     }
                     s.plusplus();
 
-                    s.stop_on_brace_open.set(true);
+                    s.stop_on_struct_brace.set(true);
                     let in_expr = s.parse_expr()?;
-                    s.stop_on_brace_open.set(false);
+                    s.stop_on_struct_brace.set(false);
 
                     r.payload = ExprLoopPayload::In(ExprLoopIn {
                         pattern,
@@ -2890,9 +2903,9 @@ impl Parse {
             let expr = if is_match {
                 s.parse_expr()?
             } else {
-                s.stop_on_brace_open.set(true);
+                s.stop_on_struct_brace.set(true);
                 let expr = s.parse_expr()?;
-                s.stop_on_brace_open.set(false);
+                s.stop_on_struct_brace.set(false);
                 expr
             };
             r.push((ConditionItem::Expr(expr), None));
@@ -2936,9 +2949,9 @@ impl Parse {
                 let pattern = if has_struct_pat {
                     s.parse_pattern()?
                 } else {
-                    s.stop_on_brace_open.set(true);
+                    s.stop_on_struct_brace.set(true);
                     let pattern = s.parse_pattern()?;
-                    s.stop_on_brace_open.set(false);
+                    s.stop_on_struct_brace.set(false);
                     pattern
                 };
 
@@ -3029,9 +3042,9 @@ impl Parse {
 
         let mut r = ExprMatch::default();
 
-        s.stop_on_brace_open.set(true);
+        s.stop_on_struct_brace.set(true);
         r.expr = s.parse_expr()?;
-        s.stop_on_brace_open.set(false);
+        s.stop_on_struct_brace.set(false);
 
         // for auto completion
         if s.magic && matches!(&s.current().code, T![;]) {
@@ -3923,7 +3936,7 @@ impl Parse {
                         // struct expr
                         T!["{"] => {
                             let t_brace_open = token.clone();
-                            if s.stop_on_brace_open.get() || s.in_conditions.get() {
+                            if s.stop_on_struct_brace.get() || s.in_conditions.get() {
                                 r.payload = ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Path(ExprPath::Path(path)),
                                 ));
@@ -5579,8 +5592,8 @@ impl Parse {
                         let path = PathInExpr { items };
                         match &token.code {
                             T!["{"] => {
-                                if s.stop_on_brace_open.get() {
-                                    s.stop_on_brace_open.set(false);
+                                if s.stop_on_struct_brace.get() {
+                                    s.stop_on_struct_brace.set(false);
                                     return Ok(PatternNoTopAlt::WithoutRange(
                                         PatternWithoutRange::Path(PatternPath::Path(path)),
                                     ));

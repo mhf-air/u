@@ -3415,6 +3415,9 @@ impl ToLang for ExprLoop {
             ExprLoopPayload::Loop => {
             }
             ExprLoopPayload::While(a) => {
+                if a.has_brace {
+                    p.push_raw(" while");
+                }
                 a.conditions.to_u(p);
             }
             ExprLoopPayload::In(a) => {
@@ -3442,6 +3445,7 @@ pub enum ExprLoopPayload {
 #[derive(Debug)]
 pub struct ExprLoopWhile {
     pub conditions: Conditions,
+    pub has_brace: bool,
 }
 // in
 #[derive(Debug)]
