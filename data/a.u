@@ -53,7 +53,7 @@ use -..crate-abc..a
 use std
 use std..env
 use std..env..consts as env-consts
-use std..env..consts\
+use std..env..consts
     as env-consts
 use super..Api-result as Result
 use std..option..{ Option, Option..Some, Option..None as nil }
@@ -658,6 +658,39 @@ f func() {
     a mut i32 := 1
 
     a fn(i32, ...) :=;
+}
+
+// special cases for auto-added semicolons
+f func() {
+    if a
+    {
+    }
+
+    for a
+    {
+    }
+
+    match a
+    {
+    }
+
+    a
+    ->
+    mut a
+
+    use std..env..consts
+        as env-consts
+
+    a -> ?a
+    else {
+    }
+
+    if a
+    {
+    }
+    else
+    {
+    }
 }
 
 f func() {

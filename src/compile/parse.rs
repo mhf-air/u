@@ -2843,6 +2843,11 @@ impl Parse {
             return Ok(r);
         }
 
+        // allow '{' in a seperate line
+        // for a
+        // {
+        // }
+        s.skip_semicolons();
         r.body = s.parse_block_expr()?;
 
         Ok(r)
@@ -2988,6 +2993,11 @@ impl Parse {
         if s.magic && matches!(&s.current().code, T![;]) {
             return Ok(r);
         }
+        // allow '{' in a seperate line
+        // if a
+        // {
+        // }
+        s.skip_semicolons();
         r.body = s.parse_block_expr()?;
 
         let token = s.current();
@@ -3027,6 +3037,11 @@ impl Parse {
         if s.magic && matches!(&s.current().code, T![;]) {
             return Ok(r);
         }
+        // allow '{' in a seperate line
+        // for a
+        // {
+        // }
+        s.skip_semicolons();
 
         r.t_brace_open = s.current().clone();
         s.expect(T!["{"])?;
@@ -5863,6 +5878,12 @@ impl Parse {
                             square_count -= 1;
                         } else {
                             break;
+                        }
+                    }
+                    T![;] => {
+                        if token.is_added_semicolon() {
+                            s.plusplus();
+                            continue;
                         }
                     }
                     _ => {}

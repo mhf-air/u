@@ -42,6 +42,7 @@ impl Lex {
 
     fn add_token(&mut self, code: TokenCode, u: String) {
         let s = self;
+        s.remove_last_auto_semicolon(&code);
         s.add_token_inner(code, u, false, false);
     }
     // for string
@@ -112,29 +113,52 @@ impl Lex {
         s.column = end_column + 1;
     }
 
-    // find the last real token(blank, comment)
-    fn last_real_token(&self) -> Result<&Token, ParseError> {
+    // for those tokens that can't start a stmt
+    fn remove_last_auto_semicolon(&mut self, code: &TokenCode) {
         let s = self;
-        if !s.tokens.is_empty() {
-            return Ok(s.tokens.last().unwrap());
+        if s.tokens.is_empty() {
+            return;
+        }
+        if !matches!(code,
+            T![.]
+            | T![->]
+            | T![:]
+            | T![==]
+            | T![!=]
+            | T![>]
+            | T![<]
+            | T![>=]
+            | T![<=]
+            | T![<<]
+            | T![>>]
+            | T![+]
+            | T![/]
+            | T![%]
+            | T![^]
+            | T![as]
+            | T![else]
+            | T![let]
+            | T![in]
+            | T![where]
+            | TokenCode::Assign(_)
+        ) {
+            return;
         }
 
-        let e = ParseError {
-            line: s.line,
-            column: s.column,
-            width: 1,
-            text: "cannot find the last non-comment token".to_string(),
-        };
-        Err(e)
+        let last_token = s.tokens.last().unwrap();
+        if last_token.is_added_semicolon() {
+            s.tokens.pop();
+        }
     }
 
     // add semicolon at line end where neccessary
     // after '\n' or before EOF
     fn may_add_semicolon(&mut self) {
         let s = self;
-        let Ok(last_token) = s.last_real_token() else {
+        if s.tokens.is_empty() {
             return;
-        };
+        }
+        let last_token = s.tokens.last().unwrap();
         let need = match &last_token.code {
             TokenCode::Identifier(_)
             | TokenCode::Lifetime(_)
@@ -1144,10 +1168,6 @@ impl Lex {
                                 .map()
                         */
                         _ => {
-                            let last_token = s.last_real_token()?;
-                            if last_token.is_added_semicolon() {
-                                s.tokens.pop();
-                            }
                             s.add_token(TokenCode::Op(Op::Dot), ".".to_owned());
                         }
                     }

@@ -151,7 +151,7 @@ example
         - a [`i32; 3`] := [`1; 3`]
         - vec_[1; 3]
 
-    note: semicolons are also inserted after line-ending . or ..
+    note: semicolons are also inserted after line-ending . or .. (for auto-completion)
 
     note: write semicolons in macro definitions, as in regular Rust code
 
@@ -168,10 +168,44 @@ example
         ~b\
     }
 
+    // if the starting token at the next line is '.' or "as",
+    // drop the auto-added ; in the last line
     a := some-func()
         .some-method()
         .b
         .c
+
+    use std..env..consts
+        as env-consts
+
+    // allow '{' in a separate line in if, for, match
+    if a
+    {
+    }
+
+    for a
+    {
+    }
+
+    match a
+    {
+    }
+
+    // allow this
+    a
+    ->
+    mut a
+
+    a -> ?a
+    else {
+    }
+
+    if a
+    {
+    }
+    else
+    {
+    }
 ```
 
 - **use .. instead of :: for path separator**
