@@ -770,6 +770,9 @@ f func() {
     // but that's very rare
     for while { true } {
     }
+
+    for a -> ?a && (Abc{ n: 1 }.n > 1) {
+    }
 }
 
 f func() {

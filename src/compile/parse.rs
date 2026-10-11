@@ -40,19 +40,12 @@ pub struct Parse {
     index: Cell<usize>,
 
     op_map: HashMap<TokenCode, u8>,
-    stop_on_struct_brace: Cell<bool>,
-    in_conditions: Cell<bool>,
-    in_match_conditions: Cell<bool>,
 
     magic: bool, // for auto completion
 }
 
 struct SavedState {
     index: usize,
-
-    stop_on_struct_brace: bool,
-    in_conditions: bool,
-    in_match_conditions: bool,
 }
 
 impl Parse {
@@ -65,9 +58,6 @@ impl Parse {
             index: Cell::new(0),
 
             op_map: build_operator_precedence_map(),
-            stop_on_struct_brace: Cell::new(false),
-            in_conditions: Cell::new(false),
-            in_match_conditions: Cell::new(false),
 
             magic: false,
         };
@@ -125,17 +115,11 @@ impl Parse {
         let s = self;
         SavedState {
             index: s.index.get(),
-            stop_on_struct_brace: s.stop_on_struct_brace.get(),
-            in_conditions: s.in_conditions.get(),
-            in_match_conditions: s.in_match_conditions.get(),
         }
     }
     fn restore_state(&self, a: &SavedState) {
         let s = self;
         s.index.set(a.index);
-        s.stop_on_struct_brace.set(a.stop_on_struct_brace);
-        s.in_conditions.set(a.in_conditions);
-        s.in_match_conditions.set(a.in_match_conditions);
     }
 
     #[allow(dead_code)]
@@ -2827,9 +2811,9 @@ impl Parse {
                     }
                     s.plusplus();
 
-                    s.stop_on_struct_brace.set(true);
-                    let in_expr = s.parse_expr()?;
-                    s.stop_on_struct_brace.set(false);
+                    let mut config = ParseConfig::default();
+                    config.stop_on_struct_brace = true;
+                    let in_expr = s.parse_expr_config(&config)?;
 
                     r.payload = ExprLoopPayload::In(ExprLoopIn {
                         pattern,
@@ -2903,9 +2887,9 @@ impl Parse {
             let expr = if is_match {
                 s.parse_expr()?
             } else {
-                s.stop_on_struct_brace.set(true);
-                let expr = s.parse_expr()?;
-                s.stop_on_struct_brace.set(false);
+                let mut config = ParseConfig::default();
+                config.stop_on_struct_brace = true;
+                let expr = s.parse_expr_config(&config)?;
                 expr
             };
             r.push((ConditionItem::Expr(expr), None));
@@ -2918,18 +2902,14 @@ impl Parse {
             let outer_attrs = s.parse_outer_attrs()?;
 
             // specially parse expr
+            let mut config = ParseConfig::default();
             let t_first_in_expr = s.current().clone();
             if is_match {
-                s.in_match_conditions.set(true);
+                config.in_match_conditions = true;
             } else {
-                s.in_conditions.set(true);
+                config.in_conditions = true;
             }
-            let expr = s.parse_expr()?;
-            if is_match {
-                s.in_match_conditions.set(false);
-            } else {
-                s.in_conditions.set(false);
-            }
+            let expr = s.parse_expr_config(&config)?;
 
             let token = s.current();
             let item = if !matches!(&token.code, T![->]) {
@@ -2949,9 +2929,9 @@ impl Parse {
                 let pattern = if has_struct_pat {
                     s.parse_pattern()?
                 } else {
-                    s.stop_on_struct_brace.set(true);
-                    let pattern = s.parse_pattern()?;
-                    s.stop_on_struct_brace.set(false);
+                    let mut config = ParseConfig::default();
+                    config.stop_on_struct_brace = true;
+                    let pattern = s.parse_pattern_config(&config)?;
                     pattern
                 };
 
@@ -3042,9 +3022,9 @@ impl Parse {
 
         let mut r = ExprMatch::default();
 
-        s.stop_on_struct_brace.set(true);
-        r.expr = s.parse_expr()?;
-        s.stop_on_struct_brace.set(false);
+        let mut config = ParseConfig::default();
+        config.stop_on_struct_brace = true;
+        r.expr = s.parse_expr_config(&config)?;
 
         // for auto completion
         if s.magic && matches!(&s.current().code, T![;]) {
@@ -3158,16 +3138,22 @@ impl Parse {
 
     fn parse_expr(&self) -> ParseResult<Expr> {
         let s = self;
+        let config = ParseConfig::default();
+        s.parse_expr_config(&config)
+    }
+
+    fn parse_expr_config(&self, config: &ParseConfig) -> ParseResult<Expr> {
+        let s = self;
 
         let mut r = Expr::default();
         r.outer_attrs = s.parse_outer_attrs()?;
 
         let mut list: Vec<ExprOp> = Vec::new();
 
-        let expr = s.parse_binary_expr()?;
+        let expr = s.parse_binary_expr(config)?;
         list.push(ExprOp::Expr(expr));
 
-        if s.in_conditions.get() || s.in_match_conditions.get() {
+        if config.in_conditions || config.in_match_conditions {
             let token = s.current();
             match &token.code {
                 T![&&] | T![||] | T![..] | T![..=] => {
@@ -3204,10 +3190,10 @@ impl Parse {
                 | T![,,=] => {
                     s.plusplus();
                     list.push(ExprOp::Op(token.clone()));
-                    let expr = s.parse_binary_expr()?;
+                    let expr = s.parse_binary_expr(config)?;
                     list.push(ExprOp::Expr(expr));
 
-                    if s.in_conditions.get() || s.in_match_conditions.get() {
+                    if config.in_conditions || config.in_match_conditions {
                         let token = s.current();
                         match &token.code {
                             T![&&] | T![||] | T![..] | T![..=] => {
@@ -3448,17 +3434,17 @@ impl Parse {
         }
     }
 
-    fn parse_binary_expr(&self) -> ParseResult<Expr> {
+    fn parse_binary_expr(&self, config: &ParseConfig) -> ParseResult<Expr> {
         let s = self;
 
         let mut r = Expr::default();
 
-        let mut expr = s.parse_sub_expr()?;
+        let mut expr = s.parse_sub_expr(config)?;
 
         while s.has_more() {
             let token = s.current();
 
-            if s.in_conditions.get() || s.in_match_conditions.get() {
+            if config.in_conditions || config.in_match_conditions {
                 match &token.code {
                     T![=] | TokenCode::Assign(_) | T![..] => {
                         return Ok(expr);
@@ -3751,7 +3737,7 @@ impl Parse {
         }
     }
 
-    fn parse_sub_expr(&self) -> ParseResult<Expr> {
+    fn parse_sub_expr(&self, config: &ParseConfig) -> ParseResult<Expr> {
         let s = self;
 
         let mut r = Expr::default();
@@ -3936,7 +3922,7 @@ impl Parse {
                         // struct expr
                         T!["{"] => {
                             let t_brace_open = token.clone();
-                            if s.stop_on_struct_brace.get() || s.in_conditions.get() {
+                            if config.stop_on_struct_brace || config.in_conditions {
                                 r.payload = ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Path(ExprPath::Path(path)),
                                 ));
@@ -4128,7 +4114,7 @@ impl Parse {
                         ));
                     }
                     Op::Star => {
-                        let expr = s.parse_binary_expr()?;
+                        let expr = s.parse_expr()?;
                         r.payload =
                             ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
                                 ExprOperator::Dereference(ExprDereference {
@@ -4138,7 +4124,7 @@ impl Parse {
                             )));
                     }
                     Op::Sub => {
-                        let expr = s.parse_binary_expr()?;
+                        let expr = s.parse_expr()?;
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Operator(ExprOperator::Negation(ExprNegation {
                                 expr,
@@ -4147,7 +4133,7 @@ impl Parse {
                         ));
                     }
                     Op::Not => {
-                        let expr = s.parse_binary_expr()?;
+                        let expr = s.parse_expr()?;
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Operator(ExprOperator::Negation(ExprNegation {
                                 expr,
@@ -5222,11 +5208,17 @@ impl Parse {
     // pattern
     fn parse_pattern(&self) -> ParseResult<Pattern> {
         let s = self;
+        let config = ParseConfig::default();
+        s.parse_pattern_config(&config)
+    }
+
+    fn parse_pattern_config(&self, config: &ParseConfig) -> ParseResult<Pattern> {
+        let s = self;
 
         let mut r = Pattern::default();
 
         while s.has_more() {
-            let pat = s.parse_pattern_no_top_alt()?;
+            let pat = s.parse_pattern_no_top_alt_config(config)?;
             let token = s.current();
             if !matches!(&token.code, T![|]) {
                 r.items.push((pat, None));
@@ -5245,6 +5237,12 @@ impl Parse {
     }
 
     fn parse_pattern_no_top_alt(&self) -> ParseResult<PatternNoTopAlt> {
+        let s = self;
+        let config = ParseConfig::default();
+        s.parse_pattern_no_top_alt_config(&config)
+    }
+
+    fn parse_pattern_no_top_alt_config(&self, config: &ParseConfig) -> ParseResult<PatternNoTopAlt> {
         let s = self;
 
         let token = s.current();
@@ -5369,7 +5367,7 @@ impl Parse {
                 if matches!(&token.code, T![@]) {
                     let t_at = token.clone();
                     s.plusplus();
-                    let pat = s.parse_pattern_no_top_alt()?;
+                    let pat = s.parse_pattern_no_top_alt_config(config)?;
                     r.pattern = Some((t_at, Box::new(pat)));
                 }
                 return Ok(PatternNoTopAlt::WithoutRange(
@@ -5380,7 +5378,7 @@ impl Parse {
             // ?Pat
             T![?] => {
                 let t_sep = token.clone();
-                let pat = s.parse_pattern_no_top_alt()?;
+                let pat = s.parse_pattern_no_top_alt_config(config)?;
                 let r = PatternSome {
                     t_sep,
                     pattern: Box::new(pat),
@@ -5475,7 +5473,7 @@ impl Parse {
                 }
 
                 let token = s.current();
-                let pat = s.parse_pattern_no_top_alt()?;
+                let pat = s.parse_pattern_no_top_alt_config(config)?;
                 let PatternNoTopAlt::WithoutRange(p) = pat else {
                     return Err(s.panic(token, "expected PatternWithoutRange"));
                 };
@@ -5512,7 +5510,7 @@ impl Parse {
                     a.name = token.clone();
                     let t_at = next_token.clone();
                     s.plusplus();
-                    let pat = s.parse_pattern_no_top_alt()?;
+                    let pat = s.parse_pattern_no_top_alt_config(config)?;
                     a.pattern = Some((t_at, Box::new(pat)));
                     return Ok(PatternNoTopAlt::WithoutRange(
                         PatternWithoutRange::Identifier(a),
@@ -5592,8 +5590,7 @@ impl Parse {
                         let path = PathInExpr { items };
                         match &token.code {
                             T!["{"] => {
-                                if s.stop_on_struct_brace.get() {
-                                    s.stop_on_struct_brace.set(false);
+                                if config.stop_on_struct_brace {
                                     return Ok(PatternNoTopAlt::WithoutRange(
                                         PatternWithoutRange::Path(PatternPath::Path(path)),
                                     ));
@@ -5930,6 +5927,14 @@ impl fmt::Display for ParseError {
 impl error::Error for ParseError {}
 
 pub type ParseResult<T> = Result<T, ParseError>;
+
+// to only apply these rules on the outer-most level
+#[derive(Debug, Default)]
+struct ParseConfig {
+    stop_on_struct_brace: bool,
+    in_conditions: bool,
+    in_match_conditions: bool,
+}
 
 // --------------------------------------------------------------------------------
 #[derive(Debug, Default)]

@@ -738,6 +738,9 @@ fn f() {
 
     while { true } {
     }
+
+    while let Some(a) = a && (Abc{ n: 1 }.n > 1) {
+    }
 }
 
 fn f() {

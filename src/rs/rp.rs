@@ -41,28 +41,11 @@ pub struct Parse {
 
     op_map: HashMap<TokenCode, u8>,
 
-    stop_on_struct_brace: Cell<bool>,
-    // prevent the following case, when {}(a) is intepreted as an expr.
-    // not happening in u-to-rs, because {} always has an auto added semicolon after it
-    //
-    // match tuple {
-    //     1 => {}
-    //     (a) => {}
-    // }
-    stop_on_block_expr: Cell<bool>,
-    in_conditions: Cell<bool>,
-    in_match_conditions: Cell<bool>,
-
     magic: bool, // for auto completion
 }
 
 struct SavedState {
     index: usize,
-
-    stop_on_block_expr: bool,
-    stop_on_struct_brace: bool,
-    in_conditions: bool,
-    in_match_conditions: bool,
 }
 
 impl Parse {
@@ -100,11 +83,6 @@ impl Parse {
             index: Cell::new(0),
 
             op_map: build_operator_precedence_map(),
-
-            stop_on_struct_brace: Cell::new(false),
-            stop_on_block_expr: Cell::new(false),
-            in_conditions: Cell::new(false),
-            in_match_conditions: Cell::new(false),
 
             magic: false,
         };
@@ -162,19 +140,11 @@ impl Parse {
         let s = self;
         SavedState {
             index: s.index.get(),
-            stop_on_struct_brace: s.stop_on_struct_brace.get(),
-            stop_on_block_expr: s.stop_on_block_expr.get(),
-            in_conditions: s.in_conditions.get(),
-            in_match_conditions: s.in_match_conditions.get(),
         }
     }
     fn restore_state(&self, a: &SavedState) {
         let s = self;
         s.index.set(a.index);
-        s.stop_on_struct_brace.set(a.stop_on_struct_brace);
-        s.stop_on_block_expr.set(a.stop_on_block_expr);
-        s.in_conditions.set(a.in_conditions);
-        s.in_match_conditions.set(a.in_match_conditions);
     }
 
     #[allow(dead_code)]
@@ -2723,9 +2693,9 @@ impl Parse {
                 let t_in = s.current().clone();
                 s.expect(T![in])?;
 
-                s.stop_on_struct_brace.set(true);
-                let in_expr = s.parse_expr()?;
-                s.stop_on_struct_brace.set(false);
+                let mut config = ParseConfig::default();
+                config.stop_on_struct_brace = true;
+                let in_expr = s.parse_expr_config(&config)?;
 
                 r.payload = ExprLoopPayload::In(ExprLoopIn {
                     pattern,
@@ -2787,9 +2757,9 @@ impl Parse {
             let expr = if is_match {
                 s.parse_expr()?
             } else {
-                s.stop_on_struct_brace.set(true);
-                let expr = s.parse_expr()?;
-                s.stop_on_struct_brace.set(false);
+                let mut config = ParseConfig::default();
+                config.stop_on_struct_brace = true;
+                let expr = s.parse_expr_config(&config)?;
                 expr
             };
             r.push((ConditionItem::Expr(expr), None));
@@ -2815,18 +2785,14 @@ impl Parse {
                 s.expect(T![=])?;
 
                 // specially parse expr
+                let mut config = ParseConfig::default();
                 let t_first_in_expr = s.current().clone();
                 if is_match {
-                    s.in_match_conditions.set(true);
+                    config.in_match_conditions = true;
                 } else {
-                    s.in_conditions.set(true);
+                    config.in_conditions = true;
                 }
-                let expr = s.parse_expr()?;
-                if is_match {
-                    s.in_match_conditions.set(false);
-                } else {
-                    s.in_conditions.set(false);
-                }
+                let expr = s.parse_expr_config(&config)?;
 
                 let a = LetChainCondition {
                     outer_attrs,
@@ -2840,17 +2806,13 @@ impl Parse {
                 ConditionItem::LetChain(a)
             } else {
                 // specially parse expr
+                let mut config = ParseConfig::default();
                 if is_match {
-                    s.in_match_conditions.set(true);
+                    config.in_match_conditions = true;
                 } else {
-                    s.in_conditions.set(true);
+                    config.in_conditions = true;
                 }
-                let expr = s.parse_expr()?;
-                if is_match {
-                    s.in_match_conditions.set(false);
-                } else {
-                    s.in_conditions.set(false);
-                }
+                let expr = s.parse_expr_config(&config)?;
 
                 ConditionItem::Expr(expr)
             };
@@ -2923,9 +2885,9 @@ impl Parse {
 
         let mut r = ExprMatch::default();
 
-        s.stop_on_struct_brace.set(true);
-        r.expr = s.parse_expr()?;
-        s.stop_on_struct_brace.set(false);
+        let mut config = ParseConfig::default();
+        config.stop_on_struct_brace = true;
+        r.expr = s.parse_expr_config(&config)?;
 
         // for auto completion
         if s.magic && matches!(&s.current().code, T![;]) {
@@ -2981,9 +2943,9 @@ impl Parse {
             s.expect(T![=>])?;
 
             // expr
-            s.stop_on_block_expr.set(true);
-            r.expr = s.parse_expr()?;
-            s.stop_on_block_expr.set(false);
+            let mut config = ParseConfig::default();
+            config.stop_on_block_expr = true;
+            r.expr = s.parse_expr_config(&config)?;
             if matches!(s.current().code, T![,]) {
                 s.plusplus();
             }
@@ -3056,14 +3018,20 @@ impl Parse {
 
     fn parse_expr(&self) -> ParseResult<Expr> {
         let s = self;
+        let config = ParseConfig::default();
+        s.parse_expr_config(&config)
+    }
+
+    fn parse_expr_config(&self, config: &ParseConfig) -> ParseResult<Expr> {
+        let s = self;
 
         let mut r = Expr::default();
         r.outer_attrs = s.parse_outer_attrs()?;
 
         let mut list: Vec<ExprOp> = Vec::new();
 
-        let expr = s.parse_binary_expr()?;
-        if s.stop_on_block_expr.get() {
+        let expr = s.parse_binary_expr(config)?;
+        if config.stop_on_block_expr {
             if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
                 list.push(ExprOp::Expr(expr));
                 r.payload = to_op_expr(s, list)?.payload;
@@ -3072,7 +3040,7 @@ impl Parse {
         }
         list.push(ExprOp::Expr(expr));
 
-        if s.in_conditions.get() || s.in_match_conditions.get() {
+        if config.in_conditions || config.in_match_conditions {
             let token = s.current();
             match &token.code {
                 T![&&] | T![||] | T![..] | T![..=] => {
@@ -3136,10 +3104,10 @@ impl Parse {
                     list.push(ExprOp::Op(t));
 
                     s.plusplus();
-                    let expr = s.parse_binary_expr()?;
+                    let expr = s.parse_binary_expr(config)?;
                     list.push(ExprOp::Expr(expr));
 
-                    if s.in_conditions.get() || s.in_match_conditions.get() {
+                    if config.in_conditions || config.in_match_conditions {
                         let token = s.current();
                         match &token.code {
                             T![&&] | T![||] | T![..] | T![..=] => {
@@ -3380,14 +3348,14 @@ impl Parse {
         }
     }
 
-    fn parse_binary_expr(&self) -> ParseResult<Expr> {
+    fn parse_binary_expr(&self, config: &ParseConfig) -> ParseResult<Expr> {
         let s = self;
 
         let mut r = Expr::default();
 
-        let mut expr = s.parse_sub_expr()?;
+        let mut expr = s.parse_sub_expr(config)?;
 
-        if s.stop_on_block_expr.get() {
+        if config.stop_on_block_expr {
             if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
                 return Ok(expr);
             }
@@ -3396,7 +3364,7 @@ impl Parse {
         while s.has_more() {
             let token = s.current();
 
-            if s.in_conditions.get() || s.in_match_conditions.get() {
+            if config.in_conditions || config.in_match_conditions {
                 match &token.code {
                     T![=] | TokenCode::Assign(_) | T![..] => {
                         return Ok(expr);
@@ -3667,7 +3635,7 @@ impl Parse {
         }
     }
 
-    fn parse_sub_expr(&self) -> ParseResult<Expr> {
+    fn parse_sub_expr(&self, config: &ParseConfig) -> ParseResult<Expr> {
         let s = self;
 
         let mut r = Expr::default();
@@ -3858,7 +3826,7 @@ impl Parse {
                         // struct expr
                         T!["{"] => {
                             let t_brace_open = token.clone();
-                            if s.stop_on_struct_brace.get() || s.in_conditions.get() {
+                            if config.stop_on_struct_brace || config.in_conditions {
                                 r.payload = ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Path(ExprPath::Path(path)),
                                 ));
@@ -4113,7 +4081,7 @@ impl Parse {
                         ));
                     }
                     Op::Star => {
-                        let expr = s.parse_binary_expr()?;
+                        let expr = s.parse_expr()?;
                         r.payload =
                             ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
                                 ExprOperator::Dereference(ExprDereference {
@@ -4123,7 +4091,7 @@ impl Parse {
                             )));
                     }
                     Op::Sub => {
-                        let expr = s.parse_binary_expr()?;
+                        let expr = s.parse_expr()?;
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Operator(ExprOperator::Negation(ExprNegation {
                                 expr,
@@ -4132,7 +4100,7 @@ impl Parse {
                         ));
                     }
                     Op::Not => {
-                        let expr = s.parse_binary_expr()?;
+                        let expr = s.parse_expr()?;
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Operator(ExprOperator::Negation(ExprNegation {
                                 expr,
@@ -5147,14 +5115,19 @@ impl Parse {
 
     // --------------------------------------------------------------------------------
     // pattern
-
     fn parse_pattern(&self) -> ParseResult<Pattern> {
+        let s = self;
+        let config = ParseConfig::default();
+        s.parse_pattern_config(&config)
+    }
+
+    fn parse_pattern_config(&self, config: &ParseConfig) -> ParseResult<Pattern> {
         let s = self;
 
         let mut r = Pattern::default();
 
         while s.has_more() {
-            let pat = s.parse_pattern_no_top_alt()?;
+            let pat = s.parse_pattern_no_top_alt_config(config)?;
             let token = s.current();
             if !matches!(&token.code, T![|]) {
                 r.items.push((pat, None));
@@ -5173,6 +5146,12 @@ impl Parse {
     }
 
     fn parse_pattern_no_top_alt(&self) -> ParseResult<PatternNoTopAlt> {
+        let s = self;
+        let config = ParseConfig::default();
+        s.parse_pattern_no_top_alt_config(&config)
+    }
+
+    fn parse_pattern_no_top_alt_config(&self, config: &ParseConfig) -> ParseResult<PatternNoTopAlt> {
         let s = self;
 
         let token = s.current();
@@ -5297,7 +5276,7 @@ impl Parse {
                 if matches!(&token.code, T![@]) {
                     let t_at = token.clone();
                     s.plusplus();
-                    let pat = s.parse_pattern_no_top_alt()?;
+                    let pat = s.parse_pattern_no_top_alt_config(config)?;
                     r.pattern = Some((t_at, Box::new(pat)));
                 }
                 return Ok(PatternNoTopAlt::WithoutRange(
@@ -5397,7 +5376,7 @@ impl Parse {
                 }
 
                 let token = s.current();
-                let pat = s.parse_pattern_no_top_alt()?;
+                let pat = s.parse_pattern_no_top_alt_config(config)?;
                 let PatternNoTopAlt::WithoutRange(p) = pat else {
                     return Err(s.panic(token, "expected PatternWithoutRange"));
                 };
@@ -5436,7 +5415,7 @@ impl Parse {
                     a.name = token.clone();
                     let t_at = next_token.clone();
                     s.plusplus();
-                    let pat = s.parse_pattern_no_top_alt()?;
+                    let pat = s.parse_pattern_no_top_alt_config(config)?;
                     a.pattern = Some((t_at, Box::new(pat)));
                     return Ok(PatternNoTopAlt::WithoutRange(
                         PatternWithoutRange::Identifier(a),
@@ -5869,3 +5848,19 @@ impl fmt::Display for ParseError {
 impl error::Error for ParseError {}
 
 pub type ParseResult<T> = Result<T, ParseError>;
+
+// to only apply these rules on the outer-most level
+#[derive(Debug, Default)]
+struct ParseConfig {
+    // prevent the following case, when {}(a) is intepreted as an expr.
+    // not happening in u-to-rs, because {} always has an auto added semicolon after it
+    //
+    // match tuple {
+    //     1 => {}
+    //     (a) => {}
+    // }
+    stop_on_block_expr: bool,
+    stop_on_struct_brace: bool,
+    in_conditions: bool,
+    in_match_conditions: bool,
+}
