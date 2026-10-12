@@ -4,7 +4,6 @@ use std::env;
 use std::io;
 use std::process;
 
-use u::cmd::a::U_LOCAL_ROOT;
 use u::compile::ast::SpanPair;
 use u::compile::parse::compile_file;
 
@@ -44,18 +43,6 @@ fn main() -> std::io::Result<()> {
 // cargo check --frozen --message-format=json -q
 fn u_cargo_lint(args: Vec<String>) -> io::Result<()> {
     let pwd = env::current_dir()?;
-    // from abc/crates/abc/ to abc/.u/crates/abc/
-    let a = pwd.file_name().unwrap();
-    let b = pwd.parent().unwrap().file_name().unwrap();
-    let new_pwd = pwd
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join(U_LOCAL_ROOT)
-        .join(b)
-        .join(a);
-    env::set_current_dir(&new_pwd)?;
 
     let output = process::Command::new("cargo").args(&args).output()?;
     let out = String::from_utf8(output.stdout).unwrap();
@@ -66,12 +53,6 @@ fn u_cargo_lint(args: Vec<String>) -> io::Result<()> {
         if !line.contains(r#""reason":"compiler-message""#) {
             continue;
         }
-
-        // not needed any more, because the addition of u-path"move/a" string literal
-        // skip include!("../../raw/a") errors
-        /* if line.contains(r#"No such file or directory"#) {
-            continue;
-        } */
 
         // eprintln!("{}\n", line);
         let mut manifest: Manifest = serde_json::from_str(&line).unwrap();
@@ -102,13 +83,7 @@ fn u_cargo_lint(args: Vec<String>) -> io::Result<()> {
 
             let file = &mut span.file_name;
             if !file_map.contains_key(file) {
-                let mut u_file = file.clone();
-                // pwd is abc/.u/crates/abc/
-                // from abc/.u/crates/abc/main.rs to crates/abc/main.u
-                if !file.starts_with('/') {
-                    u_file.insert_str(0, "../../../");
-                }
-
+                let u_file = file.clone();
                 let span_pairs = compile_to_rust_lint(&u_file)?;
                 file_map.insert(file.clone(), span_pairs);
             }
