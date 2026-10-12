@@ -209,6 +209,9 @@ call_{
 
 f func() {
     vec_(1)
+
+    a := a()
+    *_a = a
 }
 vec_(1)
 Clone trait {

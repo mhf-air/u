@@ -128,6 +128,7 @@ impl Lex {
                     | Op::DotDotDot // because of ... in function params
                     | Op::Dollar // because of $ in $a for fast debugging
                     | Op::Underscore // because of _ in value expr
+                    | Op::Deref // because of *_ in deref expr
                 )
             }
             TokenCode::Keyword(a) => {

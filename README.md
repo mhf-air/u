@@ -460,58 +460,56 @@ example
 
 - **allow semicolon(;) as separators in addition to comma(,) in multi-line pairs**
 
-    all comma separated list are supported except the following cases:
-
-    - all types
-    - closure expressions
+    - use
+    - struct related expr, pattern, declaration
+    - enum and union declaration
 
 ```
 example
 
-    tuple = (a, b)
-    tuple = (
-        a
-        b
-    )
-    f func(
-        a
-        b
-    )
-    f(
-        a
-        b
-    )
-    array := [`
-        a
-        b
-    `]
-    vec_[
-        a
-        b
-    ]
-    a := Person {
-        name: "a"
-        age: 20
+    use std..option..{
+        Option
+        Option..Some
+        Option..None as nil
     }
-    match a {
-        Person {
-            name
-            ,,
-        }: {}
+    use {
+        crate..a
+        crate..a..*
+        super..a
     }
 
-    NOTE: tuple type must be
-        a func() (i32, i32) {}
-    or
-        a func() (
-            i32,
-            i32
-        ) {}
-    not
-        a func() (
-            i32
-            i32
-        ) {}
+    Person struct {
+        name String
+        age i32
+        desc String
+    }
+
+    a := Person {
+        name: "a"s
+        age: 20
+        ,,
+    }
+
+    a -> Person {
+        name
+        age
+        ,,
+    }
+
+    Code enum {
+        Literal(Literal)
+        Identifier {
+            id String
+            u String
+        }
+        None
+    }
+
+    Code union {
+        id String
+        u String
+    }
+
 ```
 
 - **use _ for macro invocations**

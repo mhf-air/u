@@ -4,8 +4,8 @@ use std::fs;
 use std::io;
 use std::mem;
 
-// pub const U_TO_RS: bool = true;
-pub const U_TO_RS: bool = false;
+pub const U_TO_RS: bool = true;
+// pub const U_TO_RS: bool = false;
 
 // -----------------------------------------------------------------------------
 macro_rules! io_func {
