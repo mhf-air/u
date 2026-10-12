@@ -1762,9 +1762,7 @@ impl Parse {
                     break;
                 }
                 T![,] => {
-                    let next_token = s.current();
-                    let show_comma = next_token.span.line == token.span.line;
-                    param.show_comma = show_comma;
+                    param.show_comma = true;
                     f.params.push(param);
                 }
                 _ => {
@@ -2556,9 +2554,7 @@ impl Parse {
                 let token = s.current();
                 if matches!(&token.code, T![,]) {
                     s.plusplus();
-                    let next_token = s.current();
-                    let show_comma = next_token.span.line == token.span.line;
-                    r.push((expr, show_comma));
+                    r.push((expr, true));
                 } else if let TokenCode::Pair(pair) = &token.code && *pair == *delim_close {
                     r.push((expr, false));
                 } else {
@@ -2964,6 +2960,7 @@ impl Parse {
             r.expr = s.parse_expr_config(&config)?;
             if matches!(s.current().code, T![,]) {
                 s.plusplus();
+                r.show_comma = true;
             }
 
             Ok(r)
@@ -3452,9 +3449,7 @@ impl Parse {
                         let token = s.current();
                         if matches!(&token.code, T![,]) {
                             s.plusplus();
-                            let next_token = s.current();
-                            let show_comma = next_token.span.line == token.span.line;
-                            params.push((expr, show_comma));
+                            params.push((expr, true));
                         } else {
                             params.push((expr, false));
                         }
@@ -3639,9 +3634,7 @@ impl Parse {
                 let token = s.current();
                 if matches!(&token.code, T![,]) {
                     s.plusplus();
-                    let next_token = s.current();
-                    let show_comma = next_token.span.line == token.span.line;
-                    r.params.push((expr, show_comma));
+                    r.params.push((expr, true));
                 } else {
                     r.params.push((expr, false));
                 }
@@ -3727,9 +3720,7 @@ impl Parse {
                     let token = s.current();
                     if matches!(&token.code, T![,]) {
                         s.plusplus();
-                        let next_token = s.current();
-                        let show_comma = next_token.span.line == token.span.line;
-                        items.push((expr, show_comma));
+                        items.push((expr, true));
                     } else {
                         items.push((expr, false));
                     }
@@ -3779,9 +3770,7 @@ impl Parse {
 
                 let show_comma = if matches!(&token.code, T![,]) {
                     s.plusplus();
-                    let next_token = s.current();
-                    let show_comma = next_token.span.line == token.span.line;
-                    show_comma
+                    true
                 } else {
                     false
                 };
@@ -3810,9 +3799,7 @@ impl Parse {
                     let token = s.current();
                     if matches!(&token.code, T![,]) {
                         s.plusplus();
-                        let next_token = s.current();
-                        let show_comma = next_token.span.line == token.span.line;
-                        items.push((expr, show_comma));
+                        items.push((expr, true));
                     } else {
                         items.push((expr, false));
                     }
@@ -4768,9 +4755,7 @@ impl Parse {
                     break;
                 }
                 T![,] => {
-                    let next_token = s.current();
-                    let show_comma = next_token.span.line == token.span.line;
-                    param.show_comma = show_comma;
+                    param.show_comma = true;
                     r.params.push(param);
                 }
                 _ => {
@@ -5333,9 +5318,7 @@ impl Parse {
                     let token = s.current();
                     let show_comma = if matches!(&token.code, T![,]) {
                         s.plusplus();
-                        let next_token = s.current();
-                        let show_comma = next_token.span.line == token.span.line;
-                        show_comma
+                        true
                     } else {
                         false
                     };
@@ -5365,9 +5348,7 @@ impl Parse {
                     let token = s.current();
                     let show_comma = if matches!(&token.code, T![,]) {
                         s.plusplus();
-                        let next_token = s.current();
-                        let show_comma = next_token.span.line == token.span.line;
-                        show_comma
+                        true
                     } else {
                         false
                     };
@@ -5747,9 +5728,7 @@ impl Parse {
                 let token = s.current();
                 let show_comma = if matches!(&token.code, T![,]) {
                     s.plusplus();
-                    let next_token = s.current();
-                    let show_comma = next_token.span.line == token.span.line;
-                    show_comma
+                    true
                 } else {
                     false
                 };

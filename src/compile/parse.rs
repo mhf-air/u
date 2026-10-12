@@ -1699,12 +1699,6 @@ impl Parse {
                     param.t_comma = Some(token.clone());
                     r.params.push(param);
                 }
-                T![;] => {
-                    let mut t = token.clone();
-                    t.code = T![,];
-                    param.t_comma = Some(t);
-                    r.params.push(param);
-                }
                 _ => {
                     return Err(s.panic(token, &format!("expected , or ) but got {:?}", token)));
                 }
@@ -2607,6 +2601,11 @@ impl Parse {
 
                 let expr = s.parse_expr()?;
                 let token = s.current();
+                if token.is_added_semicolon() {
+                    s.plusplus();
+                }
+
+                let token = s.current();
                 if let TokenCode::Pair(pair) = &token.code && *pair == *delim_close {
                     r.push((expr, None));
                     return Ok(r);
@@ -2614,11 +2613,6 @@ impl Parse {
                 if matches!(&token.code, T![,]) {
                     s.plusplus();
                     r.push((expr, Some(token.clone())));
-                } else if matches!(&token.code, T![;]) {
-                    s.plusplus();
-                    let mut t = token.clone();
-                    t.code = T![,];
-                    r.push((expr, Some(t)));
                 } else {
                     return Err(s.panic(&token, "expected , or delim_close for ending exprs"));
                 }
@@ -3092,10 +3086,18 @@ impl Parse {
             s.expect(T![:])?;
 
             // expr
-            r.expr = s.parse_expr()?;
+            let mut config = ParseConfig::default();
+            config.stop_on_block_expr = true;
+            r.expr = s.parse_expr_config(&config)?;
+
             s.skip_semicolons();
-            if matches!(s.current().code, T![,]) {
-                s.plusplus();
+            let token = s.current();
+            if matches!(&r.expr.payload, ExprPayload::WithBlock(_)) {
+                if matches!(&token.code, T![,]) {
+                    s.plusplus();
+                }
+            } else if !matches!(&token.code, T!["}"]) {
+                s.expect(T![,])?;
             }
 
             Ok(r)
@@ -3157,6 +3159,14 @@ impl Parse {
         let mut list: Vec<ExprOp> = Vec::new();
 
         let expr = s.parse_binary_expr(config)?;
+
+        if config.stop_on_block_expr {
+            if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
+                list.push(ExprOp::Expr(expr));
+                r.payload = to_op_expr(s, list)?.payload;
+                return Ok(r);
+            }
+        }
         list.push(ExprOp::Expr(expr));
 
         if config.in_conditions || config.in_match_conditions {
@@ -3447,6 +3457,12 @@ impl Parse {
 
         let mut expr = s.parse_sub_expr(config)?;
 
+        if config.stop_on_block_expr {
+            if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
+                return Ok(expr);
+            }
+        }
+
         while s.has_more() {
             let token = s.current();
 
@@ -3520,7 +3536,7 @@ impl Parse {
                         let expr = s.parse_expr()?;
 
                         let token = s.current();
-                        if matches!(&token.code, T![,] | T![;]) {
+                        if matches!(&token.code, T![,]) {
                             let mut t = token.clone();
                             t.code = T![,];
                             s.plusplus();
@@ -3729,7 +3745,7 @@ impl Parse {
                 let expr = s.parse_expr()?;
 
                 let token = s.current();
-                if matches!(&token.code, T![,] | T![;]) {
+                if matches!(&token.code, T![,]) {
                     let mut t = token.clone();
                     t.code = T![,];
                     s.plusplus();
@@ -3817,7 +3833,7 @@ impl Parse {
                     let expr = s.parse_expr()?;
 
                     let token = s.current();
-                    if matches!(&token.code, T![,] | T![;]) {
+                    if matches!(&token.code, T![,]) {
                         let mut t = token.clone();
                         t.code = T![,];
                         items.push((expr, Some(t)));
@@ -3866,7 +3882,7 @@ impl Parse {
                     return Ok(r);
                 }
 
-                let t_comma = if matches!(&token.code, T![,] | T![;]) {
+                let t_comma = if matches!(&token.code, T![,]) {
                     let mut t = token.clone();
                     t.code = T![,];
                     s.plusplus();
@@ -3896,7 +3912,7 @@ impl Parse {
                     let expr = s.parse_expr()?;
 
                     let token = s.current();
-                    if matches!(&token.code, T![,] | T![;]) {
+                    if matches!(&token.code, T![,]) {
                         let mut t = token.clone();
                         t.code = T![,];
                         items.push((expr, Some(t)));
@@ -4867,12 +4883,6 @@ impl Parse {
                 }
                 T![,] => {
                     param.t_comma = Some(token.clone());
-                    r.params.push(param);
-                }
-                T![;] => {
-                    let mut t = token.clone();
-                    t.code = T![,];
-                    param.t_comma = Some(t);
                     r.params.push(param);
                 }
                 _ => {
@@ -5965,6 +5975,7 @@ pub type ParseResult<T> = Result<T, ParseError>;
 #[derive(Debug, Default)]
 struct ParseConfig {
     stop_on_struct_brace: bool,
+    stop_on_block_expr: bool,
     in_conditions: bool,
     in_match_conditions: bool,
 }

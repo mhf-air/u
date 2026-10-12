@@ -3609,6 +3609,9 @@ impl ToLang for ExprMatch {
             p.push_raw(":");
 
             it.expr.to_u(p);
+            if it.show_comma {
+                p.push_raw(",");
+            }
         }
         s.t_brace_close.to_u(p);
     }
@@ -3618,6 +3621,7 @@ pub struct ExprMatchItem {
     pub arm: ExprMatchArm,
     pub expr: Expr,
     pub t_sep: Token,
+    pub show_comma: bool,
 }
 #[derive(Debug, Default)]
 pub struct ExprMatchArm {

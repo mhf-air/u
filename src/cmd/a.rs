@@ -38,13 +38,13 @@ impl Config {
         }
 
         match args[0].as_str() {
-            "to-rs" => {
+            "u-r" => {
                 args.remove(0);
                 Config {
                     cmd: Cmd::ToRs(CmdToRs::new(args)),
                 }
             }
-            "from-rs" => {
+            "r-u" => {
                 args.remove(0);
                 Config {
                     cmd: Cmd::FromRs(CmdFromRs::new(args)),

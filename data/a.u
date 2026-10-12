@@ -124,6 +124,9 @@ f func() {
 // similarly, {a b} is not a stmt list
 // vec_"stmt"{a b}
 
+call_{
+    ""
+}
 vec_(1, 2, 3)
 vec_[1, 2, 3]
 call_(1, 2, 3)
@@ -231,8 +234,8 @@ f func() {
 
     (a, b)
     (
-        a
-        b
+        a,
+        b,
     )
 
     a &[`i32; 1`] := todo_()
@@ -253,21 +256,17 @@ f func() {
         1,
     `]
     [`
-        0
-        1
-    `]
-    [`
         a,
     `]
 
     f(a, b)
     a.b(
-        a
-        b
+        a,
+        b,
     )
     f(
-        a
-        b
+        a,
+        b,
     )
 }
 
@@ -344,16 +343,16 @@ foo['a, 'b, T] func[async, unsafe](a i32, b i32) i32 where {
 } {}
 
 f func(
-    a i32
-    b i32
+    a i32,
+    b i32,
 ) {
     f(
-        a
-        b
+        a,
+        b,
     )
     vec_(
-        a
-        b
+        a,
+        b,
     )
 }
 
@@ -504,8 +503,8 @@ impl Person {
     p-path+(in crate..abc) () func(a &str) {}
 
     f (&) func(
-        a &str
-        b &str
+        a &str,
+        b &str,
     ) {}
 }
 
@@ -590,22 +589,22 @@ f func() {
 
 f func() {
     a = match c {
-        ,,5: "a"
-        5,,6: "b"
-        6,,=7: "c"
-        8: "d"
-        9,,: "e"
+        ,,5: "a",
+        5,,6: "b",
+        6,,=7: "c",
+        8: "d",
+        9,,: "e",
     }
     a = match c {
-        ,,=6: "a"
-        -: "b"
+        ,,=6: "a",
+        -: "b",
     }
     a = match c {
-        ,,a: "a"
-        b,,c: "b"
-        d,,=e: "c"
-        f: "d"
-        g,,: "e"
+        ,,a: "a",
+        b,,c: "b",
+        d,,=e: "c",
+        f: "d",
+        g,,: "e",
     }
     match tuple {
         (1, ,,, y, z): {}
@@ -800,21 +799,21 @@ f func() {
 
 f func() {
     match message {
-        Message..Quit: a
-        Message..Write-string(write): a
-        Message..Move{ x, y: 0 }: a
-        Message..Move{ ,, }: a
+        Message..Quit: a,
+        Message..Write-string(write): a,
+        Message..Move{ x, y: 0 }: a,
+        Message..Move{ ,, }: a,
         Message..Change-color{
             0: red
             1: green
             2: -
-        }: a
+        }: a,
         Message..Change-color{
             0: red,
             1: green,
             2: -,
         }:
-            a
+            a,
         -: {}
     }
 
@@ -831,12 +830,12 @@ f func() {
 
 f func() {
     match message {
-        Message..Quit: dbg_("Quit")
-        Message..Write-string(write): dbg_(&write)
-        Message..Move{ x, y: 0 }: dbg_("move {} horizontally", x)
-        Message..Move{ ,, }: dbg_("other move")
+        Message..Quit: dbg_("Quit"),
+        Message..Write-string(write): dbg_(&write),
+        Message..Move{ x, y: 0 }: dbg_("move {} horizontally", x),
+        Message..Move{ ,, }: dbg_("other move"),
         Message..Change-color{ 0: red, 1: green, 2: - }:
-            dbg_("color change, red: {}, green: {}", red, green)
+            dbg_("color change, red: {}, green: {}", red, green),
         -: {}
     }
 }
