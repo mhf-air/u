@@ -3772,7 +3772,7 @@ impl ToLang for ExprOperator {
                 } else {
                     a.t_sep.to_u_before(p);
                 }
-                p.push_raw("*^");
+                p.push_raw("*_");
                 a.expr.to_u(p);
             }
             ExprOperator::ErrorPropagation(a) => {

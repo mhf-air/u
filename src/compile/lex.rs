@@ -123,7 +123,8 @@ impl Lex {
         let need_remove = match code {
             TokenCode::Op(a) => {
                 !matches!(a,
-                    Op::CommaComma // because of ,, in struct init expr
+                    Op::Question // because of ? in pattern
+                    | Op::CommaComma // because of ,, in struct init expr
                     | Op::DotDotDot // because of ... in function params
                     | Op::Dollar // because of $ in $a for fast debugging
                     | Op::Underscore // because of _ in value expr

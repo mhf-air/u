@@ -4092,7 +4092,7 @@ impl Parse {
                         let mut range = ExprRange::default();
                         range.t_sep = token.clone();
                         if !s.at_range_end(&s.current().code) {
-                            range.end = Some(s.parse_expr()?);
+                            range.end = Some(s.parse_expr_config(config)?);
                         }
                         r.payload =
                             ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Range(range)));
@@ -4101,20 +4101,20 @@ impl Parse {
                     Op::CommaCommaEq => {
                         let mut range = ExprRange::default();
                         range.t_sep = token.clone();
-                        range.end = Some(s.parse_expr()?);
+                        range.end = Some(s.parse_expr_config(config)?);
                         r.payload =
                             ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Range(range)));
                     }
 
                     // unary Expr
                     Op::BitAnd => {
-                        let borrow = parse_borrow(s, token)?;
+                        let borrow = parse_borrow(s, token, config)?;
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Operator(ExprOperator::Borrow(borrow)),
                         ));
                     }
                     Op::And => {
-                        let borrow = parse_borrow(s, token)?;
+                        let borrow = parse_borrow(s, token, config)?;
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Operator(ExprOperator::Borrow(borrow)),
                         ));
@@ -4123,7 +4123,7 @@ impl Parse {
                         return Err(s.panic(token, "use *^Expr"));
                     }
                     Op::Deref => {
-                        let expr = s.parse_expr()?;
+                        let expr = s.parse_expr_config(config)?;
                         r.payload =
                             ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
                                 ExprOperator::Dereference(ExprDereference {
@@ -4133,7 +4133,7 @@ impl Parse {
                             )));
                     }
                     Op::Sub => {
-                        let expr = s.parse_expr()?;
+                        let expr = s.parse_expr_config(config)?;
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Operator(ExprOperator::Negation(ExprNegation {
                                 expr,
@@ -4142,7 +4142,7 @@ impl Parse {
                         ));
                     }
                     Op::Not => {
-                        let expr = s.parse_expr()?;
+                        let expr = s.parse_expr_config(config)?;
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Operator(ExprOperator::Negation(ExprNegation {
                                 expr,
@@ -4167,7 +4167,7 @@ impl Parse {
                         } else {
                             String::new()
                         };
-                        let expr = s.parse_expr()?;
+                        let expr = s.parse_expr_config(config)?;
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Debug(ExprDebug {
                                 expr,
@@ -4205,7 +4205,11 @@ impl Parse {
 
         return Ok(r);
 
-        fn parse_borrow(s: &Parse, ref_token: &Token) -> ParseResult<ExprBorrow> {
+        fn parse_borrow(
+            s: &Parse,
+            ref_token: &Token,
+            config: &ParseConfig,
+        ) -> ParseResult<ExprBorrow> {
             let mut r = ExprBorrow::default();
 
             r.t_ref = ref_token.clone();
@@ -4227,7 +4231,7 @@ impl Parse {
                 }
             }
 
-            r.expr = s.parse_expr()?;
+            r.expr = s.parse_expr_config(config)?;
             return Ok(r);
         }
 
@@ -5305,7 +5309,7 @@ impl Parse {
                             | T![super] | T![self] | T![Self] | T![crate]
                             | T!["["]
                         ) {
-                            let bound = parse_range_pattern_bound(s)?;
+                            let bound = parse_range_pattern_bound(s, config)?;
                             return Ok(PatternNoTopAlt::WithRange(PatternRange {
                                 start: Some(PatternRangeBound::Literal(pattern_literal)),
                                 end: Some(bound),
@@ -5320,7 +5324,7 @@ impl Parse {
                     }
                     T![,,=] => {
                         s.plusplus();
-                        let bound = parse_range_pattern_bound(s)?;
+                        let bound = parse_range_pattern_bound(s, config)?;
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start: Some(PatternRangeBound::Literal(pattern_literal)),
                             end: Some(bound),
@@ -5329,7 +5333,7 @@ impl Parse {
                     }
                     T![...] => {
                         s.plusplus();
-                        let bound = parse_range_pattern_bound(s)?;
+                        let bound = parse_range_pattern_bound(s, config)?;
                         return Ok(PatternNoTopAlt::WithoutRange(
                             PatternWithoutRange::Obsolete(PatternRange {
                                 start: Some(PatternRangeBound::Literal(pattern_literal)),
@@ -5350,7 +5354,7 @@ impl Parse {
             // ,,
             T![,,] | T![,,=] => {
                 let save_state = s.save_state();
-                let bound = match parse_range_pattern_bound(s) {
+                let bound = match parse_range_pattern_bound(s, config) {
                     Ok(bound) => bound,
                     Err(_) => {
                         // rest
@@ -5581,7 +5585,7 @@ impl Parse {
                                 t_sep: token.clone(),
                             }));
                         }
-                        let bound = parse_range_pattern_bound(s)?;
+                        let bound = parse_range_pattern_bound(s, config)?;
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start,
                             end: Some(bound),
@@ -5592,7 +5596,7 @@ impl Parse {
                     T![,,=] => {
                         s.plusplus();
                         let start = Some(PatternRangeBound::Path(PathInExpr { items }));
-                        let bound = parse_range_pattern_bound(s)?;
+                        let bound = parse_range_pattern_bound(s, config)?;
                         return Ok(PatternNoTopAlt::WithRange(PatternRange {
                             start,
                             end: Some(bound),
@@ -5603,7 +5607,7 @@ impl Parse {
                     T![...] => {
                         s.plusplus();
                         let start = Some(PatternRangeBound::Path(PathInExpr { items }));
-                        let bound = parse_range_pattern_bound(s)?;
+                        let bound = parse_range_pattern_bound(s, config)?;
                         return Ok(PatternNoTopAlt::WithoutRange(
                             PatternWithoutRange::Obsolete(PatternRange {
                                 start,
@@ -5669,14 +5673,17 @@ impl Parse {
             )
         }
 
-        fn parse_range_pattern_bound(s: &Parse) -> ParseResult<PatternRangeBound> {
+        fn parse_range_pattern_bound(
+            s: &Parse,
+            config: &ParseConfig,
+        ) -> ParseResult<PatternRangeBound> {
             use PatternNoTopAlt as A;
             use PatternWithoutRange as B;
             use PatternPath as C;
             use PatternRangeBound as R;
 
             let token = s.current();
-            let mut pat = s.parse_pattern()?;
+            let mut pat = s.parse_pattern_config(config)?;
             let pat = mem::take(&mut pat.items[0]);
             Ok(match pat.0 {
                 A::WithoutRange(B::Literal(a)) => R::Literal(a),
