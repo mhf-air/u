@@ -3128,7 +3128,7 @@ pub struct MaybeNamedParamVariadics {
 pub enum Stmt {
     Item(Item),
     Let(StmtLet),
-    Expr(Expr),
+    Expr((Expr, bool)),
     Value(StmtValue),
     // MacroCall(MacroCall),
 }
@@ -3139,7 +3139,12 @@ impl ToLang for Stmt {
         match &s {
             Stmt::Item(a) => a.to_u(p),
             Stmt::Let(a) => a.to_u(p),
-            Stmt::Expr(a) => a.to_u(p),
+            Stmt::Expr((a, need)) => {
+                if *need {
+                    p.push_raw(";");
+                }
+                a.to_u(p);
+            }
             Stmt::Value(a) => a.to_u(p),
         }
     }
@@ -3220,15 +3225,20 @@ impl ToLang for StmtLet {
 #[derive(Debug)]
 pub struct StmtValue {
     pub expr: Expr,
-    pub need_backslash: bool,
+    pub t_dash: Option<Token>,
 }
 impl ToLang for StmtValue {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.expr.to_u(p);
-        if s.need_backslash {
-            p.push_raw("\\");
+        if let Some(t) = &s.t_dash {
+            t.to_u_before(p);
+            p.push_raw("_ ");
+            p.no_first_before = true;
+            s.expr.to_u(p);
+            p.no_first_before = false;
+        } else {
+            s.expr.to_u(p);
         }
     }
 }
@@ -3759,10 +3769,10 @@ impl ToLang for ExprOperator {
             ExprOperator::Dereference(a) => {
                 if p.no_first_before {
                     p.no_first_before = false;
-                    a.t_sep.to_u_one(p);
                 } else {
-                    a.t_sep.to_u(p);
+                    a.t_sep.to_u_before(p);
                 }
+                p.push_raw("*^");
                 a.expr.to_u(p);
             }
             ExprOperator::ErrorPropagation(a) => {

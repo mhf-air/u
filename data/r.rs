@@ -53,6 +53,8 @@ use ::crate_abc::a;
 use std;
 use std::env;
 use std::env::consts as env_consts;
+use std::env::consts
+    as env_consts;
 use super::ApiResult as Result;
 use std::option::{ Option, Option::Some, Option::None as nil };
 use std::option::{ Option::*, Option };
@@ -1027,6 +1029,14 @@ type Point = fn(
 ) -> i32;
 type Point = for<'a> unsafe extern "C" fn(i32, i32) -> i32;
 fn call<F>(f: F) where for<'a> F: Fn(&'a i32) {
+}
+
+fn f() {
+    a;
+    // add ; before ~a
+    -a;
+    *a = 1;
+    b
 }
 
 fn f() {

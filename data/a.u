@@ -371,6 +371,9 @@ f func(a fn(&mut App), b i32) {
     a = &&mut id
     a = &&raw mut id
     a = &&raw const id
+
+    // must have a ';' if the next stmt starts with some characters, including '&', "&&", etc.
+    a;
     &raw const id
 }
 
@@ -389,10 +392,10 @@ Person['a] struct where {
 }
 impl Person {
     no-s (&) func[no-s]() String {
-        self.desc\
+        _ self.desc
     }
     has-s (&) func() String {
-        s.desc\
+        _ s.desc
     }
 }
 
@@ -565,7 +568,7 @@ f func() {
     }
 
     unsafe {
-        dangerous()\
+        _ dangerous()
     }
 
     a = unsafe {
@@ -578,11 +581,11 @@ f func() {
     }
 
     const {
-        1\
+        _ 1
     }
 
     a = const {
-        1\
+        _ 1
     }
 }
 
@@ -622,15 +625,15 @@ f func() {
     }
 
     {
-        (a, b)\
+        _ (a, b)
     } -> (a, mut b)
 
     a * b + c
 
-    a(|a i32|: i32 { 1 })
-    a(|:mut a: i32|: i32 { 1 })
+    a(|a i32|: i32 { _ 1 })
+    a(|:mut a: i32|: i32 { _ 1 })
     a(|:mut a| 1)
-    a(|[move]| { 1 })
+    a(|[move]| { _ 1 })
     a(|[move] a, b| 1)
     a(|-| { p -> (a, b) })
     a(|| {
@@ -695,21 +698,21 @@ f func() {
 
 f func() {
     if a < 2 {
-        ~1\
+        _ ~1
     }
 
     b = if a < 2 {
-        ~1\
+        _ ~1
     } else {
-        1\
+        _ 1
     }
 
     if a < 2 {
-        ~1\
+        _ ~1
     } else if a > 10 {
-        0\
+        _ 0
     } else {
-        1\
+        _ 1
     }
 
     if b -> Err(err) {
@@ -724,7 +727,7 @@ f func() {
     if b -> a..Person{ name } {
     }
 
-    if if true { true } else { false } {
+    if if true { _ true } else { _ false } {
     }
 }
 
@@ -734,23 +737,39 @@ f func() {
     if a -> Some(b) {
     }
 
-    // use , instead of && as separators between chains of conditions,
-    // because && can be regarded as part of the expr
-    if a == b && c && d && #[some-attr] outer -> Some(inner) &&
-            inner -> Some(number) &&
-            number == 1 {
+    if a == b
+        && c
+        && d
+        && #[some-attr] outer -> Some(inner)
+        && inner -> Some(number)
+        && number == 1
+    {
     }
+
     if a == b && c -> Some(n) && n > 0 {
+    }
+
+    match code {
+        T_{+}
+        | T_{+}
+        | T_{+}
+        : {
+        }
     }
 
     for v -> E..X(n) | E..Y(n) {
     }
     for a -> Some(b) {
     }
-    for a == b && c && d && #[some-attr] outer -> Some(inner) &&
-            inner -> Some(number) &&
-            number == 1 {
+    for a == b
+        && c
+        && d
+        && #[some-attr] outer -> Some(inner)
+        && inner -> Some(number)
+        && number == 1
+    {
     }
+
     for a == b && c -> Some(n) && n > 0 {
     }
 
@@ -768,11 +787,16 @@ f func() {
 
     // when condition contains {}, have to use "for while",
     // but that's very rare
-    for while { true } {
+    for while { _ true } {
     }
 
     for a -> ?a && (Abc{ n: 1 }.n > 1) {
     }
+}
+
+f func() {
+    a
+    _ a
 }
 
 f func() {
@@ -864,15 +888,15 @@ b
 /// a
 f func() {
     sum u32 := (0,,)
-        .map(|n u32|: u32 { n * n })
-        .take-while(|n &u32|: bool { *n < 1000 })
-        .filter(|n &u32|: bool { *n % 2 == 1 })
-        .fold(0, |acc u32, n u32| { acc + n } )
+        .map(|n u32|: u32 { _ n * n })
+        .take-while(|n &u32|: bool { _ *^n < 1000 })
+        .filter(|n &u32|: bool { _ *^n % 2 == 1 })
+        .fold(0, |acc u32, n u32| { _ acc + n } )
 
     sum u32 := (0,,)
         .map(|n| n * n)
-        .take-while(|n| *n < 1000)
-        .filter(|n| *n % 2 == 1)
+        .take-while(|n| *^n < 1000)
+        .filter(|n| *^n % 2 == 1)
         .fold(0, |acc, n| acc + n)
 }
 

@@ -155,17 +155,16 @@ example
 
     note: write semicolons in macro definitions, as in regular Rust code
 
-    side effect: use Expr\ as the result expression. the backslash is added to prevent auto
-    inserting semicolon
+    side effect: use "_ Expr" as the result expression.
 
 ```
 example
 
     a := if b > 0 { b } else { -b }
     a := if b > 0 {
-        b\
+        _ b
     } else {
-        ~b\
+        _ ~b
     }
 
     // if the starting token at the next line is '.' or "as",
@@ -206,6 +205,91 @@ example
     else
     {
     }
+
+    if a
+        && b -> c
+        && d
+    {
+    }
+
+    for a
+        && b -> c
+        && d
+    {
+    }
+
+    match code {
+        T_{+}
+        | T_{:}
+        | T_{->} : {
+        }
+        -: {}
+    }
+```
+
+- **have to use some new syntax because of dropping semicolon**
+
+```
+- have to use "_ Expr" as value expression
+
+    f func() i32 {
+        if condition { _ true } else { _ false }
+
+        a = condition {
+            _ true
+        } else {
+            _ false
+        }
+
+        _ 1
+    }
+
+    design decision:
+        because I want to use
+        {
+            c = a
+                    && b
+        }
+        note that "a" is not followed by an auto-added ';', so without this syntax,
+        it becomes
+            c = a && b
+
+        for the following case, when I do want to have two statements,
+        add ';' at the end of the last statement
+        {
+            c = a;
+            && b
+            _ c
+        }
+
+        there's no cons for this design, because otherwise I have to use
+            c\
+        anyway
+
+- have to add ';' at the end of the last statment,
+    when the starting character of a statment is:
+
+    ~
+    &
+    |
+    &&
+    ||
+
+    these operators can both be between two expressions and start an expression.
+
+    because these statments are rare beside as the value expression of a block expression,
+    in which case you have to use "_ Expr", so there's no problem.
+
+- have to use '*^' as dereference operator
+
+    '*' is also such an operator, but dereference is commonly used.
+    I don't want to remember to add ';' before "*a".
+    so I change the dereference expression to use a different operator: "*^".
+    so now you use
+        *^a = b
+    instead of
+        *a = b
+
 ```
 
 - **use .. instead of :: for path separator**
@@ -550,7 +634,7 @@ example
 
     a(|:mut n: i32|: i32 {
         n++
-        n\
+        _ n
     })
 ```
 
@@ -579,20 +663,6 @@ f func(:Pattern: Type) {}
 example
 
     f func(:mut a: i32, b i32) {}
-```
-
-- **add \ at line end to prevent auto adding semicolon**
-
-```
-example
-    a = b\
-        && c
-
-    if a {
-        b\
-    } else {
-        c\
-    }
 ```
 
 - **add ++ and ~~**

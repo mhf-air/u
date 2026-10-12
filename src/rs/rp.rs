@@ -455,6 +455,28 @@ impl Parse {
             }
         }
 
+        // to prevent
+        //
+        // fn f() {
+        //     a;
+        //     -b;
+        // }
+        //
+        // turn into
+        //
+        // f func() {
+        //     // this is the same as "a ~b;"
+        //     a
+        //     ~b;
+        // }
+        let need_semicolon_before = matches!(&s.current().code,
+            T![-]
+            | T![&]
+            | T![|]
+            | T![&&]
+            | T![||]
+        );
+
         // parse item's outer_attrs
         let outer_attrs = s.parse_outer_attrs()?;
 
@@ -470,31 +492,25 @@ impl Parse {
         // get_first_special_token
         let Some(first_special_token) = s.get_first_special_token() else {
             // parse expr
+            let t_first_in_expr = s.current();
             let mut expr = s.parse_expr()?;
             expr.outer_attrs = outer_attrs;
 
             // stmt value
             let token = s.current();
             if matches!(&token.code, T!["}"]) {
-                s.minusminus();
-                let t_last = s.current();
-                s.plusplus();
-                let need_backslash = if t_last.span.end_line == token.span.line {
-                    false
-                } else {
-                    if let ExprPayload::WithoutBlock(a) = &expr.payload {
-                        if let ExprWithoutBlock::MacroCall(a) = a.as_ref()
-                            && matches!(a.delim, MacroCallDelim::Brace)
-                        {
-                            false
-                        } else {
-                            true
-                        }
+                let t_dash = if let ExprPayload::WithoutBlock(a) = &expr.payload {
+                    if let ExprWithoutBlock::MacroCall(a) = a.as_ref()
+                        && matches!(a.delim, MacroCallDelim::Brace)
+                    {
+                        None
                     } else {
-                        false
+                        Some(t_first_in_expr.clone())
                     }
+                } else {
+                    None
                 };
-                return Ok(Stmt::Value(StmtValue { expr, need_backslash }));
+                return Ok(Stmt::Value(StmtValue { expr, t_dash }));
             }
 
             // macro call
@@ -513,7 +529,7 @@ impl Parse {
 
             // expr
             s.skip_semicolons();
-            return Ok(Stmt::Expr(expr));
+            return Ok(Stmt::Expr((expr, need_semicolon_before)));
         };
 
         let stmt: Stmt;

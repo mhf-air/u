@@ -444,6 +444,17 @@ impl Parse {
             return Err(s.panic(&s.current(), "expected Stmt"));
         }
 
+        // stmt value
+        let token = s.current();
+        if matches!(&token.code, T![_]) {
+            s.plusplus();
+            let expr = s.parse_expr()?;
+            return Ok(Stmt::Value(StmtValue {
+                expr,
+                t_sep: token.clone(),
+            }));
+        }
+
         // get_first_special_token
         let first_special_token = s.get_first_special_token()?;
 
@@ -451,12 +462,6 @@ impl Parse {
             // parse expr
             let mut expr = s.parse_expr()?;
             expr.outer_attrs = outer_attrs;
-
-            // stmt value
-            let token = s.current();
-            if matches!(&token.code, T!["}"]) {
-                return Ok(Stmt::Value(StmtValue { expr }));
-            }
 
             // macro call
             let mut is_macro_call = false;
@@ -2955,7 +2960,8 @@ impl Parse {
                     continue;
                 }
                 // : for match arm
-                T!["{"] | T![:] => {
+                // ; for allowing {} in a separate line
+                T!["{"] | T![:] | T![;] => {
                     r.push((item, None));
                     break;
                 }
@@ -4114,6 +4120,9 @@ impl Parse {
                         ));
                     }
                     Op::Star => {
+                        return Err(s.panic(token, "use *^Expr"));
+                    }
+                    Op::Deref => {
                         let expr = s.parse_expr()?;
                         r.payload =
                             ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(

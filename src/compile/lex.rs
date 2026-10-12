@@ -119,29 +119,29 @@ impl Lex {
         if s.tokens.is_empty() {
             return;
         }
-        if !matches!(code,
-            T![.]
-            | T![->]
-            | T![:]
-            | T![==]
-            | T![!=]
-            | T![>]
-            | T![<]
-            | T![>=]
-            | T![<=]
-            | T![<<]
-            | T![>>]
-            | T![+]
-            | T![/]
-            | T![%]
-            | T![^]
-            | T![as]
-            | T![else]
-            | T![let]
-            | T![in]
-            | T![where]
-            | TokenCode::Assign(_)
-        ) {
+
+        let need_remove = match code {
+            TokenCode::Op(a) => {
+                !matches!(a,
+                    Op::CommaComma // because of ,, in struct init expr
+                    | Op::DotDotDot // because of ... in function params
+                    | Op::Dollar // because of $ in $a for fast debugging
+                    | Op::Underscore // because of _ in value expr
+                )
+            }
+            TokenCode::Keyword(a) => {
+                matches!(a,
+                    Keyword::As
+                    | Keyword::Else
+                    | Keyword::Let
+                    | Keyword::In
+                    | Keyword::Where
+                )
+            }
+            TokenCode::Assign(_) => true,
+            _ => false,
+        };
+        if !need_remove {
             return;
         }
 
@@ -956,6 +956,11 @@ impl Lex {
                             s.add_token(TokenCode::Assign(Assign::Star), "*=".to_owned());
                             i += 1;
                         }
+                        // *^
+                        '^' => {
+                            s.add_token(TokenCode::Op(Op::Deref), "*^".to_owned());
+                            i += 1;
+                        }
                         // *
                         _ => {
                             s.add_token(TokenCode::Op(Op::Star), "*".to_owned());
@@ -1656,6 +1661,7 @@ impl Token {
                     Op::CommaComma => "..",
                     Op::CommaCommaEq => "..=",
                     Op::Underscore => "!",
+                    Op::Deref => "*",
                     Op::Colon => ":",
                     Op::Semicolon => ";",
 
@@ -2370,6 +2376,7 @@ pub enum Op {
     CommaComma,
     CommaCommaEq,
     Underscore,
+    Deref,
     Colon,
     Semicolon,
 
@@ -2417,6 +2424,7 @@ impl fmt::Debug for Op {
             Self::CommaComma => write!(f, ",,"),
             Self::CommaCommaEq => write!(f, ",,="),
             Self::Underscore => write!(f, "_"),
+            Self::Deref => write!(f, "*^"),
             Self::Colon => write!(f, ":"),
             Self::Semicolon => write!(f, ";"),
 
@@ -2574,6 +2582,7 @@ macro_rules! T {
 	[ ,, ] => { TokenCode::Op(Op::CommaComma) };
 	[ ,,= ] => { TokenCode::Op(Op::CommaCommaEq) };
 	[ _ ] => { TokenCode::Op(Op::Underscore) };
+	[ *^ ] => { TokenCode::Op(Op::Deref) };
 	[ : ] => { TokenCode::Op(Op::Colon) };
 	[ ; ] => { TokenCode::Op(Op::Semicolon) };
 

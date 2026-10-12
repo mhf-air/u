@@ -3067,12 +3067,16 @@ impl ToLang for StmtLet {
 #[derive(Debug)]
 pub struct StmtValue {
     pub expr: Expr,
+    pub t_sep: Token,
 }
 impl ToLang for StmtValue {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
 
+        s.t_sep.to_rs_before(p);
+        p.no_first_before = true;
         s.expr.to_rs(p);
+        p.no_first_before = false;
     }
 }
 
