@@ -116,8 +116,7 @@ f func() {
     $a
     $a.b
 
-    print_("tag: ")
-    $tag
+    $["a.b is"]a.b
 }
 
 // this will throw an error, because (a b) is not an expr list
@@ -889,14 +888,14 @@ b
 f func() {
     sum u32 := (0,,)
         .map(|n u32|: u32 { _ n * n })
-        .take-while(|n &u32|: bool { _ *^n < 1000 })
-        .filter(|n &u32|: bool { _ *^n % 2 == 1 })
+        .take-while(|n &u32|: bool { _ *_n < 1000 })
+        .filter(|n &u32|: bool { _ *_n % 2 == 1 })
         .fold(0, |acc u32, n u32| { _ acc + n } )
 
     sum u32 := (0,,)
         .map(|n| n * n)
-        .take-while(|n| *^n < 1000)
-        .filter(|n| *^n % 2 == 1)
+        .take-while(|n| *_n < 1000)
+        .filter(|n| *_n % 2 == 1)
         .fold(0, |acc, n| acc + n)
 }
 

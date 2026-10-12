@@ -4151,10 +4151,27 @@ impl Parse {
                         ));
                     }
                     Op::Dollar => {
+                        let next_token = s.current();
+                        let tag = if matches!(&next_token.code, T!["["]) {
+                            s.plusplus();
+                            let t3 = s.current();
+                            if !matches!(&t3.code, TokenCode::Literal(Literal{
+                                payload: LiteralPayload::String(_),
+                                ..
+                            })) {
+                                return Err(s.panic(token, "expected string literal inside $[]"));
+                            }
+                            s.plusplus();
+                            s.expect(T!["]"])?;
+                            t3.u.clone()
+                        } else {
+                            String::new()
+                        };
                         let expr = s.parse_expr()?;
                         r.payload = ExprPayload::WithoutBlock(Box::new(
                             ExprWithoutBlock::Debug(ExprDebug {
                                 expr,
+                                tag,
                                 t_sep: token.clone(),
                             }),
                         ));

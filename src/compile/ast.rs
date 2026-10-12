@@ -4172,6 +4172,7 @@ impl ToLang for ExprReturn {
 #[derive(Debug, Default)]
 pub struct ExprDebug {
     pub expr: Expr,
+    pub tag: String,
 
     pub t_sep: Token,
 }
@@ -4184,7 +4185,14 @@ impl ToLang for ExprDebug {
         } else {
             s.t_sep.to_rs_before(p);
         }
-        p.push_raw(r#"eprintln!("{:?}", "#);
+        p.push_raw("eprintln!(\"");
+        if !s.tag.is_empty() {
+            p.push_raw("{}: {:?}\", ");
+            p.push_raw(&s.tag);
+            p.push_raw(", ");
+        } else {
+            p.push_raw("{:?}\", ");
+        }
         s.expr.to_rs(p);
         p.push_raw(")");
     }

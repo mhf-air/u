@@ -596,12 +596,14 @@ example
 ```
 example
 
-    $a -> eprintln!("{:?}", a)
-    $a.b -> eprintln!("{:?}", a.b)
-
-    // if need tag
-    print_("tag: ")
+    // eprintln!("{:?}", a)
     $a
+
+    // eprintln!("{:?}", a.b)
+    $a.b
+
+    // eprintln!("{}: {:?}", "a.b is", a.b)
+    $["a.b is"]a.b
 ```
 
 - **augment struct init expression**

@@ -956,9 +956,9 @@ impl Lex {
                             s.add_token(TokenCode::Assign(Assign::Star), "*=".to_owned());
                             i += 1;
                         }
-                        // *^
-                        '^' => {
-                            s.add_token(TokenCode::Op(Op::Deref), "*^".to_owned());
+                        // *_
+                        '_' => {
+                            s.add_token(TokenCode::Op(Op::Deref), "*_".to_owned());
                             i += 1;
                         }
                         // *
@@ -2424,7 +2424,7 @@ impl fmt::Debug for Op {
             Self::CommaComma => write!(f, ",,"),
             Self::CommaCommaEq => write!(f, ",,="),
             Self::Underscore => write!(f, "_"),
-            Self::Deref => write!(f, "*^"),
+            Self::Deref => write!(f, "*_"),
             Self::Colon => write!(f, ":"),
             Self::Semicolon => write!(f, ";"),
 
@@ -2582,7 +2582,7 @@ macro_rules! T {
 	[ ,, ] => { TokenCode::Op(Op::CommaComma) };
 	[ ,,= ] => { TokenCode::Op(Op::CommaCommaEq) };
 	[ _ ] => { TokenCode::Op(Op::Underscore) };
-	[ *^ ] => { TokenCode::Op(Op::Deref) };
+	[ *_ ] => { TokenCode::Op(Op::Deref) };
 	[ : ] => { TokenCode::Op(Op::Colon) };
 	[ ; ] => { TokenCode::Op(Op::Semicolon) };
 
