@@ -1520,7 +1520,8 @@ impl ToLang for Attrs {
 
         for it in &s.items {
             it.t_start.to_rs(p);
-            for a in &it.tokens {
+            let new_list = transform_macro_tokens(&it.tokens);
+            for a in new_list {
                 a.to_rs(p);
             }
             it.t_end.to_rs(p);

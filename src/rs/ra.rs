@@ -1586,7 +1586,8 @@ impl ToLang for Attrs {
             } else {
                 it.t_start.to_u(p);
             }
-            for a in &it.tokens {
+            let new_list = transform_macro_tokens(&it.tokens);
+            for a in new_list {
                 a.to_u(p);
             }
             it.t_end.to_u(p);

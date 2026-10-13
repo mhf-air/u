@@ -190,8 +190,7 @@ impl Lex {
                 Pair::ParenClose
                 | Pair::SquareClose
                 | Pair::BraceClose
-                | Pair::ArrayClose
-                | Pair::DoubleBraceClose => true,
+                | Pair::ArrayClose => true,
                 _ => false,
             },
             _ => false,
@@ -1307,11 +1306,6 @@ impl Lex {
                     }
                     let next_ch = s.chars[i + 1];
                     match next_ch {
-                        // {{
-                        '{' => {
-                            s.add_token(TokenCode::Pair(Pair::DoubleBraceOpen), "{{".to_owned());
-                            i += 1;
-                        }
                         // {
                         _ => {
                             s.add_token(TokenCode::Pair(Pair::BraceOpen), "{".to_owned());
@@ -1325,11 +1319,6 @@ impl Lex {
                     }
                     let next_ch = s.chars[i + 1];
                     match next_ch {
-                        // }}
-                        '}' => {
-                            s.add_token(TokenCode::Pair(Pair::DoubleBraceClose), "}}".to_owned());
-                            i += 1;
-                        }
                         // }
                         _ => {
                             s.add_token(TokenCode::Pair(Pair::BraceClose), "}".to_owned());
@@ -1685,8 +1674,6 @@ impl Token {
                     Pair::SquareClose => ">",
                     Pair::BraceOpen => "{",
                     Pair::BraceClose => "}",
-                    Pair::DoubleBraceOpen => "[",
-                    Pair::DoubleBraceClose => "]",
                     Pair::ArrayOpen => "[",
                     Pair::ArrayClose => "]",
                     Pair::OuterAttr => "#[",
@@ -2450,8 +2437,6 @@ pub enum Pair {
     SquareClose,
     BraceOpen,
     BraceClose,
-    DoubleBraceOpen,
-    DoubleBraceClose,
     ArrayOpen,
     ArrayClose,
     OuterAttr,
@@ -2470,8 +2455,6 @@ impl fmt::Debug for Pair {
             Self::SquareClose => write!(f, "]"),
             Self::BraceOpen => write!(f, "{{"),
             Self::BraceClose => write!(f, "}}"),
-            Self::DoubleBraceOpen => write!(f, "{{{{"),
-            Self::DoubleBraceClose => write!(f, "}}}}"),
             Self::ArrayOpen => write!(f, "[`"),
             Self::ArrayClose => write!(f, "`]"),
             Self::OuterAttr => write!(f, "#["),
@@ -2616,8 +2599,6 @@ macro_rules! T {
 	[ "]" ] => { TokenCode::Pair(Pair::SquareClose) };
 	[ "{" ] => { TokenCode::Pair(Pair::BraceOpen) };
 	[ "}" ] => { TokenCode::Pair(Pair::BraceClose) };
-	[ "{{" ] => { TokenCode::Pair(Pair::DoubleBraceOpen) };
-	[ "}}" ] => { TokenCode::Pair(Pair::DoubleBraceClose) };
 	[ "[`" ] => { TokenCode::Pair(Pair::ArrayOpen) };
 	[ "`]" ] => { TokenCode::Pair(Pair::ArrayClose) };
 	[ "#[" ] => { TokenCode::Pair(Pair::OuterAttr) };

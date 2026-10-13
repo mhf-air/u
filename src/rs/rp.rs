@@ -5285,10 +5285,6 @@ impl Parse {
                 while s.has_more() {
                     let token = s.current();
                     if matches!(&token.code, T![")"]) {
-                        if list.is_empty() {
-                            return Err(s.panic(token, "empty () pattern"));
-                        }
-
                         s.plusplus();
                         // grouped
                         if list.len() == 1 && !list[0].1 {
@@ -5495,16 +5491,23 @@ impl Parse {
                             }
                             T!["("] => {
                                 s.plusplus();
+                                let t_first_in_pattern = s.current();
                                 let mut a = parse_tuple_struct_pattern(s)?;
 
                                 // Some(Pattern) to ?Pattern
+                                // but
+                                //      Some(
+                                //          Pattern
+                                //      )
+                                // don't change
                                 let mut is_optional = false;
                                 if path.items.len() == 1 {
                                     let p = &path.items[0];
-                                    if p.t_sep.is_none() &&
-                                            p.name.token.u == "Some" &&
-                                            p.generic_args.items.is_empty() &&
-                                            a.items.len() == 1
+                                    if p.t_sep.is_none()
+                                        && p.name.token.u == "Some"
+                                        && p.generic_args.items.is_empty()
+                                        && a.items.len() == 1
+                                        && p.name.token.span.end_line == t_first_in_pattern.span.line
                                     {
                                         is_optional = true;
                                     }

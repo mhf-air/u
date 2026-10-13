@@ -460,7 +460,45 @@ impl Parse {
 
         if first_special_token.is_none() {
             // parse expr
+            let t_first_in_expr = s.current();
             let mut expr = s.parse_expr()?;
+
+            // for cases such as:
+            //      match a {} -> b
+            // NOTE must match the code section "parse-arrow"
+            let token = s.current();
+            if matches!(&token.code, T![->]) {
+                let mut a = StmtLet::default();
+                a.t_eq = token.clone();
+                a.t_eq.code = T![=];
+                a.outer_attrs = outer_attrs;
+
+                a.t_first_in_expr = Some(t_first_in_expr.clone());
+                a.expr = Some(expr);
+
+                s.plusplus();
+                a.t_first_in_pattern = Some(s.current().clone());
+                a.pattern = s.parse_pattern()?;
+                if matches!(&s.current().code, T![let]) {
+                    s.plusplus();
+                    a.type_ = Some(s.parse_type()?);
+                }
+                let token = s.current();
+                if matches!(&token.code, T![else]) {
+                    let t_else = token.clone();
+                    s.plusplus();
+                    let block = s.parse_block_expr()?;
+                    a.else_ = Some((t_else, block));
+                } else {
+                    let token = s.current();
+                    if !matches!(&token.code, T![;] | T!["}"]) {
+                        return Err(s.panic(token, "expected ; or '}' after -> expr"));
+                    }
+                    s.skip_semicolons();
+                }
+                return Ok(Stmt::Let(a));
+            }
+
             expr.outer_attrs = outer_attrs;
 
             // macro call
@@ -490,6 +528,7 @@ impl Parse {
                 a.outer_attrs = outer_attrs;
                 stmt = Stmt::Let(a);
             }
+            // code section "parse-arrow"
             // Expr -> Pattern (let Type)? (else)?
             T![->] => {
                 let mut a = StmtLet::default();
@@ -5594,10 +5633,6 @@ impl Parse {
                 while s.has_more() {
                     let token = s.current();
                     if matches!(&token.code, T![")"]) {
-                        if list.is_empty() {
-                            return Err(s.panic(token, "empty () pattern"));
-                        }
-
                         s.plusplus();
                         // grouped
                         if list.len() == 1 && list[0].1.is_none() {
