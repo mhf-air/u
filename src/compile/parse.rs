@@ -970,8 +970,8 @@ impl Parse {
             r.params.push(param);
 
             let token = s.current();
-            s.plusplus();
             if matches!(&token.code, T!["]"]) {
+                s.plusplus();
                 r.t_square_close = token.clone();
                 break;
             }
@@ -982,10 +982,7 @@ impl Parse {
         fn parse_generic_param(s: &Parse) -> ParseResult<GenericParam> {
             let mut r = GenericParam::default();
 
-            let token = s.current();
-            if matches!(&token.code, T!["#["]) {
-                r.outer_attrs = s.parse_outer_attrs()?;
-            }
+            r.outer_attrs = s.parse_outer_attrs()?;
 
             let token = s.current();
             match &token.code {
@@ -1003,14 +1000,22 @@ impl Parse {
                     let name = token.clone();
 
                     let token = s.current();
-                    if matches!(token.code, T![const]) {
-                        let mut c = parse_const_param(s)?;
-                        c.name = name;
-                        r.payload = GenericParamPayload::Const(c);
-                    } else {
-                        let mut c = parse_type_param(s)?;
-                        c.name = name;
-                        r.payload = GenericParamPayload::Type(c);
+                    match &token.code {
+                        T![const] => {
+                            let mut c = parse_const_param(s)?;
+                            c.name = name;
+                            r.payload = GenericParamPayload::Const(c);
+                        }
+                        T![,] | T!["]"] | T![;] => {
+                            let mut c = TypeParam::default();
+                            c.name = name;
+                            r.payload = GenericParamPayload::Type(c);
+                        }
+                        _ => {
+                            let mut c = parse_type_param(s)?;
+                            c.name = name;
+                            r.payload = GenericParamPayload::Type(c);
+                        }
                     }
                 }
                 _ => {
@@ -1022,12 +1027,21 @@ impl Parse {
             }
 
             let token = s.current();
-            if !matches!(&token.code, T!["]"] | T![,]) {
-                return Err(s.panic(token, &format!("expected ] or , but got {:?}", token)));
-            }
-            if matches!(&token.code, T![,]) {
-                r.t_comma = Some(token.clone());
-                return Ok(r);
+            match &token.code {
+                T![,] => {
+                    r.t_comma = Some(token.clone());
+                    s.plusplus();
+                }
+                T![;] => {
+                    s.plusplus();
+                    if !matches!(&s.current().code, T!["]"]) {
+                        return Err(s.panic(token, &format!("expected ] but got {:?}", token)));
+                    }
+                }
+                T!["]"] => {}
+                _ => {
+                    return Err(s.panic(token, &format!("expected ] or , but got {:?}", token)));
+                }
             }
 
             Ok(r)
@@ -1047,18 +1061,9 @@ impl Parse {
                     r.bounds = s.parse_type_param_bounds()?;
 
                     let token = s.current();
-                    match &token.code {
-                        T!["]"] | T![,] => (),
-                        T![=] => {
-                            s.plusplus();
-                            r.type_ = Some((token.clone(), s.parse_type()?));
-                        }
-                        _ => {
-                            return Err(s.panic(
-                                token,
-                                &format!("illegal token {:?} for type param", token),
-                            ));
-                        }
+                    if matches!(&token.code, T![=]) {
+                        s.plusplus();
+                        r.type_ = Some((token.clone(), s.parse_type()?));
                     }
                 }
             }
@@ -1110,10 +1115,6 @@ impl Parse {
                     }
                 };
                 r.expr = Some((t_eq, expr));
-            }
-            let token = s.current();
-            if !matches!(&token.code, T!["]"] | T![,]) {
-                return Err(s.panic(token, &format!("expected ] or , but got {:?}", token)));
             }
 
             Ok(r)
@@ -1206,11 +1207,23 @@ impl Parse {
                         let one_token = token.clone();
                         s.plusplus();
                         let token = s.current();
-                        if matches!(&token.code, T![,]) {
-                            items.push((one_token, Some(token.clone())));
-                            s.plusplus();
-                        } else if matches!(&token.code, T!["]"]) {
-                            items.push((one_token, None));
+                        match &token.code {
+                            T![,] => {
+                                items.push((one_token, Some(token.clone())));
+                                s.plusplus();
+                            }
+                            T![;] => {
+                                items.push((one_token, None));
+                                s.plusplus();
+                                if !matches!(&s.current().code, T!["]"]) {
+                                    return Err(s.panic(token,
+                                        &format!("expected ] but got {:?}", token)));
+                                }
+                            }
+                            T!["]"] => {
+                                items.push((one_token, None));
+                            }
+                            _ => {}
                         }
                     } else {
                         return Err(s.panic(
@@ -1698,6 +1711,13 @@ impl Parse {
                 T![,] => {
                     param.t_comma = Some(token.clone());
                     r.params.push(param);
+                }
+                T![;] => {
+                    r.params.push(param);
+                    if !matches!(&s.current().code, T![")"]) {
+                        return Err(s.panic(token,
+                            &format!("expected ) but got {:?}", token)));
+                    }
                 }
                 _ => {
                     return Err(s.panic(token, &format!("expected , or ) but got {:?}", token)));
@@ -2600,21 +2620,30 @@ impl Parse {
                 }
 
                 let expr = s.parse_expr()?;
-                let token = s.current();
-                if token.is_added_semicolon() {
-                    s.plusplus();
-                }
 
                 let token = s.current();
                 if let TokenCode::Pair(pair) = &token.code && *pair == *delim_close {
                     r.push((expr, None));
                     return Ok(r);
                 }
-                if matches!(&token.code, T![,]) {
-                    s.plusplus();
-                    r.push((expr, Some(token.clone())));
-                } else {
-                    return Err(s.panic(&token, "expected , or delim_close for ending exprs"));
+                match &token.code {
+                    T![,] => {
+                        s.plusplus();
+                        r.push((expr, Some(token.clone())));
+                    }
+                    T![;] => {
+                        s.plusplus();
+                        r.push((expr, None));
+                        let token = s.current();
+                        if let TokenCode::Pair(pair) = &token.code && *pair == *delim_close {
+                        } else {
+                            return Err(s.panic(token,
+                                &format!("expected delim_close but got {:?}", token)));
+                        }
+                    }
+                    _ => {
+                        return Err(s.panic(&token, "expected , or delim_close for ending exprs"));
+                    }
                 }
             }
 
@@ -3090,14 +3119,31 @@ impl Parse {
             config.stop_on_block_expr = true;
             r.expr = s.parse_expr_config(&config)?;
 
-            s.skip_semicolons();
             let token = s.current();
             if matches!(&r.expr.payload, ExprPayload::WithBlock(_)) {
+                s.skip_semicolons();
                 if matches!(&token.code, T![,]) {
                     s.plusplus();
                 }
-            } else if !matches!(&token.code, T!["}"]) {
-                s.expect(T![,])?;
+            } else {
+                let token = s.current();
+                match &token.code {
+                    T![,] => {
+                        s.plusplus();
+                    }
+                    T![;] => {
+                        s.plusplus();
+                        if !matches!(&s.current().code, T!["}"]) {
+                            return Err(s.panic(token,
+                                &format!("expected }} but got {:?}", token)));
+                        }
+                    }
+                    T!["}"] => {}
+                    _ => {
+                        return Err(s.panic(token,
+                            &format!("expected , or }} but got {:?}", token)));
+                    }
+                }
             }
 
             Ok(r)
@@ -3536,13 +3582,26 @@ impl Parse {
                         let expr = s.parse_expr()?;
 
                         let token = s.current();
-                        if matches!(&token.code, T![,]) {
-                            let mut t = token.clone();
-                            t.code = T![,];
-                            s.plusplus();
-                            params.push((expr, Some(t)));
-                        } else {
-                            params.push((expr, None));
+                        match &token.code {
+                            T![,] => {
+                                let mut t = token.clone();
+                                t.code = T![,];
+                                s.plusplus();
+                                params.push((expr, Some(t)));
+                            }
+                            T![;] => {
+                                params.push((expr, None));
+                                s.plusplus();
+                                if !matches!(&s.current().code, T![")"]) {
+                                    return Err(s.panic(token,
+                                        &format!("expected ) but got {:?}", token)));
+                                }
+                            }
+                            T![")"] => {}
+                            _ => {
+                                return Err(s.panic(token,
+                                    &format!("expected , or ) but got {:?}", token)));
+                            }
                         }
                     }
                 }
@@ -3745,13 +3804,26 @@ impl Parse {
                 let expr = s.parse_expr()?;
 
                 let token = s.current();
-                if matches!(&token.code, T![,]) {
-                    let mut t = token.clone();
-                    t.code = T![,];
-                    s.plusplus();
-                    r.params.push((expr, Some(t)));
-                } else {
-                    r.params.push((expr, None));
+                match &token.code {
+                    T![,] => {
+                        let mut t = token.clone();
+                        t.code = T![,];
+                        s.plusplus();
+                        r.params.push((expr, Some(t)));
+                    }
+                    T![;] => {
+                        r.params.push((expr, None));
+                        s.plusplus();
+                        if !matches!(&s.current().code, T![")"]) {
+                            return Err(s.panic(token,
+                                &format!("expected ) but got {:?}", token)));
+                        }
+                    }
+                    T![")"] => {}
+                    _ => {
+                        return Err(s.panic(token,
+                            &format!("expected , or ) but got {:?}", token)));
+                    }
                 }
             }
 
@@ -3833,13 +3905,26 @@ impl Parse {
                     let expr = s.parse_expr()?;
 
                     let token = s.current();
-                    if matches!(&token.code, T![,]) {
-                        let mut t = token.clone();
-                        t.code = T![,];
-                        items.push((expr, Some(t)));
-                        s.plusplus();
-                    } else {
-                        items.push((expr, None));
+                    match &token.code {
+                        T![,] => {
+                            let mut t = token.clone();
+                            t.code = T![,];
+                            items.push((expr, Some(t)));
+                            s.plusplus();
+                        }
+                        T![;] => {
+                            items.push((expr, None));
+                            s.plusplus();
+                            if !matches!(&s.current().code, T![")"]) {
+                                return Err(s.panic(token,
+                                    &format!("expected ) but got {:?}", token)));
+                            }
+                        }
+                        T![")"] => {}
+                        _ => {
+                            return Err(s.panic(token,
+                                &format!("expected , or ) but got {:?}", token)));
+                        }
                     }
                 }
             }
@@ -3882,13 +3967,27 @@ impl Parse {
                     return Ok(r);
                 }
 
-                let t_comma = if matches!(&token.code, T![,]) {
-                    let mut t = token.clone();
-                    t.code = T![,];
-                    s.plusplus();
-                    Some(t)
-                } else {
-                    None
+                let token = s.current();
+                let t_comma = match &token.code {
+                    T![,] => {
+                        let mut t = token.clone();
+                        t.code = T![,];
+                        s.plusplus();
+                        Some(t)
+                    }
+                    T![;] => {
+                        s.plusplus();
+                        if !matches!(&s.current().code, T!["`]"]) {
+                            return Err(s.panic(token,
+                                &format!("expected `] but got {:?}", token)));
+                        }
+                        None
+                    }
+                    T!["`]"] => None,
+                    _ => {
+                        return Err(s.panic(token,
+                            &format!("expected , or `] but got {:?}", token)));
+                    }
                 };
 
                 // [` Expr([,;] Expr)* `]
@@ -3912,13 +4011,28 @@ impl Parse {
                     let expr = s.parse_expr()?;
 
                     let token = s.current();
-                    if matches!(&token.code, T![,]) {
-                        let mut t = token.clone();
-                        t.code = T![,];
-                        items.push((expr, Some(t)));
-                        s.plusplus();
-                    } else {
-                        items.push((expr, None));
+                    match &token.code {
+                        T![,] => {
+                            let mut t = token.clone();
+                            t.code = T![,];
+                            items.push((expr, Some(t)));
+                            s.plusplus();
+                        }
+                        T![;] => {
+                            items.push((expr, None));
+                            s.plusplus();
+                            if !matches!(&s.current().code, T!["`]"]) {
+                                return Err(s.panic(token,
+                                    &format!("expected `] but got {:?}", token)));
+                            }
+                        }
+                        T!["`]"] => {
+                            items.push((expr, None));
+                        }
+                        _ => {
+                            return Err(s.panic(token,
+                                &format!("expected , or `] but got {:?}", token)));
+                        }
                     }
                 }
             }
@@ -4369,10 +4483,6 @@ impl Parse {
                             s.plusplus();
 
                             let token = s.current();
-                            if matches!(&token.code, T![:]) {
-                                s.plusplus();
-                            }
-
                             if !matches!(&token.code, T![,] | T![|]) {
                                 let type_ = s.parse_type()?;
                                 param.type_ = Some(type_);
@@ -4399,11 +4509,24 @@ impl Parse {
                     }
 
                     let token = s.current();
-                    let t_comma = if matches!(&token.code, T![,]) {
-                        s.plusplus();
-                        Some(token.clone())
-                    } else {
-                        None
+                    let t_comma = match &token.code {
+                        T![,] => {
+                            s.plusplus();
+                            Some(token.clone())
+                        }
+                        T![;] => {
+                            s.plusplus();
+                            if !matches!(&s.current().code, T![|]) {
+                                return Err(s.panic(token,
+                                    &format!("expected | but got {:?}", token)));
+                            }
+                            None
+                        }
+                        T![|] => None,
+                        _ => {
+                            return Err(s.panic(token,
+                                &format!("expected , or | but got {:?}", token)));
+                        }
                     };
                     r.params.push((param, t_comma));
                 }
@@ -4487,12 +4610,24 @@ impl Parse {
 
                     let type_ = s.parse_type()?;
                     let token = s.current();
-                    if matches!(&token.code, T![,]) {
-                        is_tuple = true;
-                        s.plusplus();
-                        type_list.push((type_, Some(token.clone())));
-                    } else {
-                        type_list.push((type_, None));
+                    match &token.code {
+                        T![,] => {
+                            is_tuple = true;
+                            s.plusplus();
+                            type_list.push((type_, Some(token.clone())));
+                        }
+                        T![;] => {
+                            type_list.push((type_, None));
+                            s.plusplus();
+                            if !matches!(&s.current().code, T![")"]) {
+                                return Err(s.panic(token,
+                                    &format!("expected ) but got {:?}", token)));
+                            }
+                        }
+                        T!["]"] => {
+                            type_list.push((type_, None));
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -4885,6 +5020,13 @@ impl Parse {
                     param.t_comma = Some(token.clone());
                     r.params.push(param);
                 }
+                T![;] => {
+                    r.params.push(param);
+                    if !matches!(&s.current().code, T![")"]) {
+                        return Err(s.panic(token,
+                            &format!("expected ) but got {:?}", token)));
+                    }
+                }
                 _ => {
                     return Err(s.panic(token, &format!("expected , or ) but got {:?}", token)));
                 }
@@ -5154,30 +5296,42 @@ impl Parse {
                 }
                 TokenCode::Identifier(_) => {
                     let mut type_ = s.parse_type()?;
-                    if let TypePayload::TypeNoBounds(a) = &mut type_.payload &&
-                            let TypeNoBounds::TypePath(b) = a.as_mut() &&
-                            b.items.len() == 1 {
-
+                    if let TypePayload::TypeNoBounds(a) = &mut type_.payload
+                        && let TypeNoBounds::TypePath(b) = a.as_mut()
+                        && b.items.len() == 1
+                    {
                         let token = s.current();
-                        if matches!(&token.code, T![=]) {
-                            s.plusplus();
-                            let path_seg = mem::take(&mut b.items[0]);
-                            let t_eq = token.clone();
-                            let type_ = s.parse_type()?;
-                            GenericArg::Binding(GenericArgsBinding {
-                                path_seg,
-                                type_,
-                                t_eq,
-                            })
-                        } else if matches!(&token.code, T![,] | T!["]"]){
-                            GenericArg::Type(type_)
-                        } else {
-                            let path_seg = mem::take(&mut b.items[0]);
-                            let bounds = s.parse_type_param_bounds()?;
-                            GenericArg::Bounds(GenericArgsBounds {
-                                path_seg,
-                                bounds,
-                            })
+                        match &token.code {
+                            T![=] => {
+                                s.plusplus();
+                                let path_seg = mem::take(&mut b.items[0]);
+                                let t_eq = token.clone();
+                                let type_ = s.parse_type()?;
+                                GenericArg::Binding(GenericArgsBinding {
+                                    path_seg,
+                                    type_,
+                                    t_eq,
+                                })
+                            }
+                            T![,] | T!["]"] => {
+                                GenericArg::Type(type_)
+                            }
+                            T![;] => {
+                                s.plusplus();
+                                if !matches!(&s.current().code, T!["]"]) {
+                                    return Err(s.panic(token,
+                                        &format!("expected ] but got {:?}", token)));
+                                }
+                                GenericArg::Type(type_)
+                            }
+                            _ => {
+                                let path_seg = mem::take(&mut b.items[0]);
+                                let bounds = s.parse_type_param_bounds()?;
+                                GenericArg::Bounds(GenericArgsBounds {
+                                    path_seg,
+                                    bounds,
+                                })
+                            }
                         }
                     } else {
                         GenericArg::Type(type_)
@@ -5464,11 +5618,24 @@ impl Parse {
                     let pat = s.parse_pattern()?;
 
                     let token = s.current();
-                    let t_comma = if matches!(&token.code, T![,]) {
-                        s.plusplus();
-                        Some(token.clone())
-                    } else {
-                        None
+                    let t_comma = match &token.code {
+                        T![,] => {
+                            s.plusplus();
+                            Some(token.clone())
+                        }
+                        T![;] => {
+                            s.plusplus();
+                            if !matches!(&s.current().code, T![")"]) {
+                                return Err(s.panic(token,
+                                    &format!("expected ) but got {:?}", token)));
+                            }
+                            None
+                        }
+                        T![")"] => None,
+                        _ => {
+                            return Err(s.panic(token,
+                                &format!("expected , or ) but got {:?}", token)));
+                        }
                     };
                     list.push((pat, t_comma));
                 }
@@ -5483,7 +5650,7 @@ impl Parse {
                         s.plusplus();
                         return Ok(PatternNoTopAlt::WithoutRange(PatternWithoutRange::Slice(
                             PatternSlice {
-                                items: Vec::new(),
+                                items,
                                 t_square_open,
                                 t_square_close: token.clone(),
                             },
@@ -5491,13 +5658,28 @@ impl Parse {
                     }
                     let pat = s.parse_pattern()?;
                     let token = s.current();
-                    if !matches!(&token.code, T![,]) {
-                        items.push((pat, None));
-                        break;
+                    match &token.code {
+                        T![,] => {
+                            let t_comma = Some(token.clone());
+                            items.push((pat, t_comma));
+                            s.plusplus();
+                        }
+                        T![;] => {
+                            items.push((pat, None));
+                            s.plusplus();
+                            if !matches!(&s.current().code, T!["`]"]) {
+                                return Err(s.panic(token,
+                                    &format!("expected `] but got {:?}", token)));
+                            }
+                        }
+                        T!["`]"] => {
+                            items.push((pat, None));
+                        }
+                        _ => {
+                            return Err(s.panic(token,
+                                &format!("expected , or `] but got {:?}", token)));
+                        }
                     }
-                    let t_comma = Some(token.clone());
-                    items.push((pat, t_comma));
-                    s.plusplus();
                 }
             }
             // reference
@@ -5849,11 +6031,24 @@ impl Parse {
                 }
                 let pat = s.parse_pattern()?;
                 let token = s.current();
-                let t_comma = if matches!(&token.code, T![,]) {
-                    s.plusplus();
-                    Some(token.clone())
-                } else {
-                    None
+                let t_comma = match &token.code {
+                    T![,] => {
+                        s.plusplus();
+                        Some(token.clone())
+                    }
+                    T![;] => {
+                        s.plusplus();
+                        if !matches!(&s.current().code, T![")"]) {
+                            return Err(s.panic(token,
+                                &format!("expected ) but got {:?}", token)));
+                        }
+                        None
+                    }
+                    T![")"] => None,
+                    _ => {
+                        return Err(s.panic(token,
+                            &format!("expected , or ) but got {:?}", token)));
+                    }
                 };
                 r.items.push((pat, t_comma));
             }

@@ -522,6 +522,9 @@ example
     write pure Rust in macro definitions and macro invocations that are random tokens.
     except identifiers and "~" and "~=".
 
+    note: don't support custom_"stmt"{}, because such case is rare, and it's complicated
+    to implement
+
 ```
 example
 
@@ -533,14 +536,6 @@ example
         custom_"{}"()
         custom_"{}"[]
             these are for Rust code that have parameters as expressions, but use {} as delimiters
-
-    custom_"stmt"()
-    custom_"stmt"[]
-    custom_"stmt"{}
-        anything in {} are treated as declarations or statements. like
-            thread-local_[stmt]{
-                foo--g+ static Ref-cell[u32] = Ref-cell..new()
-            }
 
     custom_{}
         anything in {} are U tokens. like
