@@ -2520,14 +2520,14 @@ impl Parse {
         }
 
         // stmts
-        if let Ok(block) = parse_stmts(s, &delim_close) {
+        /* if let Ok(block) = parse_stmts(s, &delim_close) {
             r.body = MacroCallBody::Stmt(block);
             r.t_delim_close = s.current().clone();
             s.plusplus();
             return Ok(r);
         } else {
             s.restore_state(&save_state);
-        }
+        } */
 
         // { tokens }
         let i_cur = s.index.get();
@@ -2565,7 +2565,7 @@ impl Parse {
             Ok(r)
         }
 
-        fn parse_stmts(s: &Parse, delim_close: &Pair) -> ParseResult<MacroCallBodyStmt> {
+        /* fn parse_stmts(s: &Parse, delim_close: &Pair) -> ParseResult<MacroCallBodyStmt> {
             let mut r = MacroCallBodyStmt::default();
 
             s.plusplus();
@@ -2585,7 +2585,7 @@ impl Parse {
             }
 
             return Ok(r);
-        }
+        } */
     }
 
     // --------------------------------------------------------------------------------

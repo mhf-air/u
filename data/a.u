@@ -121,8 +121,6 @@ f func() {
 
 // this will throw an error, because (a b) is not an expr list
 // vec_(a b)
-// similarly, {a b} is not a stmt list
-// vec_"stmt"{a b}
 
 call_{
     ""
@@ -135,50 +133,6 @@ call_"{}"(1, 2, 3)
 call_"()"{ select a from b }
 call_"[]"{ select a from b }
 call_{ select a from b }
-call_"stmt"(
-    a := 1
-)
-call_"stmt"[
-    a := 1
-]
-call_"stmt"{
-    a := 1
-}
-call_"stmt"{
-    name--c+ const &str = "hello"
-    ~1
-
-    a..r#match() as i32
-    a..b() as i32
-
-    a -> (1, )
-
-    continue
-    break
-    ret
-
-    a = '😻'
-    a = 1_234.0E~18_f64
-
-    a = 1.0
-    a = a.0
-    a = a.0.0
-
-    a = 'a'
-    a = b'a'
-
-    a = "foo\""
-    a = "foo
-bar"
-    a = r#"foo"#
-    a = r##"foo#"##
-    a = br##"foo#"##
-    a = b##"foo#"##
-    a = b#"package
-name = "foo"
-# see more
-"#
-}
 call_{
     let a = 1.1;
     if a > 0 {

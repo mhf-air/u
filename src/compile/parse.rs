@@ -2457,7 +2457,7 @@ impl Parse {
         r.path = path;
         r.t_macro_call = token.clone();
 
-        let mut is_stmt = false;
+        // let mut is_stmt = false;
         let mut delim = None;
 
         let token = s.current();
@@ -2478,7 +2478,7 @@ impl Parse {
                 "{}" => {
                     delim = Some(MacroCallDelim::Brace);
                 }
-                "stmt" => {
+                /* "stmt" => {
                     is_stmt = true;
                     let token = s.current();
                     r.delim = match &token.code {
@@ -2492,11 +2492,11 @@ impl Parse {
                             ));
                         }
                     };
-                }
+                } */
                 _ => {
                     return Err(s.panic(
                         token,
-                        &format!("expected stmt, (), [], or {{}}, but got {:?}", token.u),
+                        &format!("expected (), [], or {{}}, but got {:?}", token.u),
                     ));
                 }
             }
@@ -2515,13 +2515,13 @@ impl Parse {
             }
         };
 
-        if is_stmt {
+        /* if is_stmt {
             let block = parse_stmts(s, &delim_close)?;
             r.body = MacroCallBody::Stmt(block);
             r.t_delim_close = s.current().clone();
             s.plusplus();
             return Ok(r);
-        }
+        } */
 
         let token = s.current();
         match &token.code {
@@ -2566,7 +2566,7 @@ impl Parse {
 
         return Ok(r);
 
-        fn parse_stmts(s: &Parse, delim_close: &Pair) -> ParseResult<MacroCallBodyStmt> {
+        /* fn parse_stmts(s: &Parse, delim_close: &Pair) -> ParseResult<MacroCallBodyStmt> {
             let mut r = MacroCallBodyStmt::default();
 
             s.plusplus();
@@ -2586,7 +2586,7 @@ impl Parse {
             }
 
             return Ok(r);
-        }
+        } */
 
         fn parse_exprs(s: &Parse, delim_close: &Pair) -> ParseResult<Vec<(Expr, Option<Token>)>> {
             let mut r = Vec::new();

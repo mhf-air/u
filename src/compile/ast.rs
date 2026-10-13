@@ -1377,14 +1377,14 @@ impl ToLang for MacroCall {
                 s.t_delim_close.to_rs_before(p);
                 p.push_raw(pairs.1);
             }
-            MacroCallBody::Stmt(a) => {
+            /* MacroCallBody::Stmt(a) => {
                 a.inner_attrs.to_rs(p);
                 for it in &a.stmts {
                     it.to_rs(p);
                 }
                 s.t_delim_close.to_rs_before(p);
                 p.push_raw(pairs.1);
-            }
+            } */
         }
     }
 }
@@ -1392,7 +1392,7 @@ impl ToLang for MacroCall {
 pub enum MacroCallBody {
     Token(Vec<Token>), // _{} _"{}"{} _"[]"{}
     Expr(Vec<(Expr, Option<Token>)>),   // _() _[] _"{}"()
-    Stmt(MacroCallBodyStmt), // _"stmt"{}
+    // Stmt(MacroCallBodyStmt), // _"stmt"{}
 }
 impl Default for MacroCallBody {
     fn default() -> Self {
