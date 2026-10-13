@@ -575,7 +575,10 @@ impl ToLang for Func {
         for param in &s.params {
             param.outer_attrs.to_rs(p);
             if let Some(pat) = &param.pat {
+                param.t_pat_colon.to_rs_before(p);
+                p.no_first_before = true;
                 pat.to_rs(p);
+                p.no_first_before = false;
             } else {
                 param.name.to_rs(p);
             }
@@ -733,6 +736,7 @@ pub struct FuncParam {
     pub type_: Type,
     pub t_var: Option<Token>,
     pub t_comma: Option<Token>,
+    pub t_pat_colon: Token,
 }
 #[derive(Debug)]
 pub struct FuncVariadics {

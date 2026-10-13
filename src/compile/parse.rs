@@ -1680,6 +1680,7 @@ impl Parse {
                     }
                 }
                 T![:] => {
+                    param.t_pat_colon = token.clone();
                     s.plusplus();
                     param.pat = Some(s.parse_pattern()?);
                     s.expect(T![:])?;
@@ -2676,14 +2677,16 @@ impl Parse {
         let mut r = ExprContinue::default();
 
         let token = s.current();
-        if matches!(&token.code, T![;]) {
-            return Ok(r);
-        }
         if let TokenCode::Lifetime(_) = &token.code {
             r.label = Some(token.clone());
             s.plusplus();
         } else {
             return Err(s.panic(token, &format!("expected lifetime, but got {:?}", token)));
+        }
+
+        let token = s.current();
+        if matches!(&token.code, T![;] | T![,]) {
+            return Ok(r);
         }
 
         Ok(r)
@@ -2695,19 +2698,15 @@ impl Parse {
 
         let mut r = ExprBreak::default();
 
-        let token = s.current();
-        if matches!(&token.code, T![;]) {
-            return Ok(r);
-        }
-
         // parse label
+        let token = s.current();
         if let TokenCode::Lifetime(_) = &token.code {
             s.plusplus();
             r.label = Some(token.clone());
         }
 
         let token = s.current();
-        if matches!(&token.code, T![;]) {
+        if matches!(&token.code, T![;] | T![,]) {
             return Ok(r);
         }
 
@@ -2724,7 +2723,7 @@ impl Parse {
         let mut r = ExprReturn::default();
 
         let token = s.current();
-        if matches!(&token.code, T![;]) {
+        if matches!(&token.code, T![;] | T![,]) {
             return Ok(r);
         }
 
@@ -3597,7 +3596,9 @@ impl Parse {
                                         &format!("expected ) but got {:?}", token)));
                                 }
                             }
-                            T![")"] => {}
+                            T![")"] => {
+                                params.push((expr, None));
+                            }
                             _ => {
                                 return Err(s.panic(token,
                                     &format!("expected , or ) but got {:?}", token)));
@@ -3819,7 +3820,9 @@ impl Parse {
                                 &format!("expected ) but got {:?}", token)));
                         }
                     }
-                    T![")"] => {}
+                    T![")"] => {
+                        r.params.push((expr, None));
+                    }
                     _ => {
                         return Err(s.panic(token,
                             &format!("expected , or ) but got {:?}", token)));
@@ -3920,7 +3923,9 @@ impl Parse {
                                     &format!("expected ) but got {:?}", token)));
                             }
                         }
-                        T![")"] => {}
+                        T![")"] => {
+                            items.push((expr, None));
+                        }
                         _ => {
                             return Err(s.panic(token,
                                 &format!("expected , or ) but got {:?}", token)));
@@ -4624,7 +4629,7 @@ impl Parse {
                                     &format!("expected ) but got {:?}", token)));
                             }
                         }
-                        T!["]"] => {
+                        T![")"] => {
                             type_list.push((type_, None));
                         }
                         _ => {}

@@ -772,6 +772,7 @@ fn f() {
         Some(x) if let Ok(y) = compute(x) => {
             a();
         }
+        a => break,
         _ => {}
     }
 }
