@@ -3136,7 +3136,7 @@ pub struct MaybeNamedParamVariadics {
 #[derive(Debug)]
 pub enum Stmt {
     Item(Item),
-    Let(StmtLet),
+    Let((StmtLet, bool)),
     Expr((Expr, bool)),
     Value(StmtValue),
     // MacroCall(MacroCall),
@@ -3147,7 +3147,12 @@ impl ToLang for Stmt {
 
         match &s {
             Stmt::Item(a) => a.to_u(p),
-            Stmt::Let(a) => a.to_u(p),
+            Stmt::Let((a, need)) => {
+                if *need {
+                    p.push_raw(";");
+                }
+                a.to_u(p);
+            }
             Stmt::Expr((a, need)) => {
                 if *need {
                     p.push_raw(";");
@@ -4185,8 +4190,9 @@ impl ToLang for ExprMethodCall {
             && seg.generic_args.items.is_empty()
             && let ExprPayload::WithoutBlock(a) = &s.left.payload
             && let ExprWithoutBlock::Literal(ExprLiteral(a)) = a.as_ref()
-            && let TokenCode::Literal(a) = &a.code
-            && let LiteralPayload::String(_) = &a.payload
+            && let TokenCode::Literal(b) = &a.code
+            && seg.name.token.span.line == a.span.end_line
+            && let LiteralPayload::String(_) = &b.payload
         {
             match s.path_expr_segment.name.token.u.as_ref() {
                 "to_owned" => {

@@ -2719,12 +2719,10 @@ impl Parse {
         if let TokenCode::Lifetime(_) = &token.code {
             r.label = Some(token.clone());
             s.plusplus();
-        } else {
-            return Err(s.panic(token, &format!("expected lifetime, but got {:?}", token)));
         }
 
         let token = s.current();
-        if matches!(&token.code, T![;] | T![,]) {
+        if matches!(&token.code, T![;] | T![,] | T!["}"]) {
             return Ok(r);
         }
 
@@ -2745,7 +2743,7 @@ impl Parse {
         }
 
         let token = s.current();
-        if matches!(&token.code, T![;] | T![,]) {
+        if matches!(&token.code, T![;] | T![,] | T!["}"]) {
             return Ok(r);
         }
 
@@ -2762,7 +2760,7 @@ impl Parse {
         let mut r = ExprReturn::default();
 
         let token = s.current();
-        if matches!(&token.code, T![;] | T![,]) {
+        if matches!(&token.code, T![;] | T![,] | T!["}"]) {
             return Ok(r);
         }
 
@@ -3130,6 +3128,12 @@ impl Parse {
 
             // patterns
             r.arm.pattern = s.parse_pattern()?;
+
+            // match a {
+            //     a
+            //     if b: {}
+            // }
+            s.skip_semicolons();
 
             // guard
             let token = s.current();

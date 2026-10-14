@@ -469,13 +469,16 @@ impl Parse {
         //     a
         //     ~b;
         // }
-        let need_semicolon_before = matches!(&s.current().code,
-            T![-]
-            | T![&]
-            | T![|]
-            | T![&&]
-            | T![||]
-        );
+        fn check_need_semicolon_before(code: &TokenCode) -> bool {
+            matches!(code,
+                T![-]
+                | T![&]
+                | T![|]
+                | T![&&]
+                | T![||]
+            )
+        }
+        let need_semicolon_before = check_need_semicolon_before(&s.current().code);
 
         // parse item's outer_attrs
         let outer_attrs = s.parse_outer_attrs()?;
@@ -546,7 +549,14 @@ impl Parse {
             T![let] => {
                 let mut a = s.parse_let()?;
                 a.outer_attrs = outer_attrs;
-                stmt = Stmt::Let(a);
+                let need_semicolon_before =
+                    if let Some(t) = &a.t_first_in_expr && a.short.is_none()
+                    {
+                        check_need_semicolon_before(&t.code)
+                    } else {
+                        false
+                    };
+                stmt = Stmt::Let((a, need_semicolon_before));
             }
             TokenCode::Keyword(keyword) => match keyword {
                 Keyword::Use => {
@@ -1547,7 +1557,7 @@ impl Parse {
             r.qualifier.no_s = true;
             r.qualifier.exist = true;
             let first = &a.stmts[0];
-            if let Stmt::Let(a) = first &&
+            if let Stmt::Let((a, _)) = first &&
                 let Some((name, None)) = &a.short &&
                 name.u == "s" &&
                 let Some(expr) = &a.expr &&
@@ -2606,12 +2616,10 @@ impl Parse {
         if let TokenCode::Lifetime(_) = &token.code {
             r.label = Some(token.clone());
             s.plusplus();
-        } else {
-            return Err(s.panic(token, &format!("expected lifetime, but got {:?}", token)));
         }
 
         let token = s.current();
-        if matches!(&token.code, T![;] | T![,]) {
+        if matches!(&token.code, T![;] | T![,] | T!["}"]) {
             return Ok(r);
         }
 
@@ -2632,7 +2640,7 @@ impl Parse {
         }
 
         let token = s.current();
-        if matches!(&token.code, T![;] | T![,]) {
+        if matches!(&token.code, T![;] | T![,] | T!["}"]) {
             return Ok(r);
         }
 
@@ -2649,7 +2657,7 @@ impl Parse {
         let mut r = ExprReturn::default();
 
         let token = s.current();
-        if matches!(&token.code, T![;] | T![,]) {
+        if matches!(&token.code, T![;] | T![,] | T!["}"]) {
             return Ok(r);
         }
 

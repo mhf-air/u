@@ -266,8 +266,8 @@ example
             c\
         anyway
 
-- have to add ';' at the end of the last statment,
-    when the starting character of a statment is:
+- have to add ';' at the end of the last statement,
+    when the starting character of a statement is:
 
     ~
     &
@@ -279,6 +279,17 @@ example
 
     because these statments are rare beside as the value expression of a block expression,
     in which case you have to use "_ Expr", so there's no problem.
+
+```
+another case is
+    &Expr -> Pattern
+
+this may be more commonly used, though I don't.
+right now when writing it this way, it will throw an error, then you have to append ';' on
+the last statement.
+it's not perfect, but I don't a better approach yet.
+
+```
 
 - have to use '*^' as dereference operator
 
