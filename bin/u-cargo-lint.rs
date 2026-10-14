@@ -122,6 +122,8 @@ fn u_cargo_lint(args: Vec<String>) -> io::Result<()> {
     }
 }
 
+// use u-to-rs, because some parts in .u can't be transformed back by rs-to-u
+// like fast debugging: $a.b
 fn compile_to_rust_lint(filepath: &str) -> io::Result<Vec<SpanPair>> {
     let p = compile_file(filepath)?;
     match p.to_rs() {

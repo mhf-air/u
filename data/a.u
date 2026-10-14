@@ -229,13 +229,29 @@ f func() {
 
 f func() {
     Person { name: "", ,,Default..default() }
-    Person { name: "", ,, }
+    Person { name: "", ,,a }
     Person {
         name: ""
-        ,,
+        ,,a
     }
 
     Person { name: "", ,,b }
+
+    // NOTE temporarily disable this feature
+    // because it will cause problems in macro call, like
+    //      matches!(a, Person {
+    //          ..
+    //      })
+    // when rs-to-u, then u-to-rs, it will show
+    //      matches_(a, Person {
+    //          ..Default::default()
+    //      })
+    // the reason is that both expr and pattern supports the ".." syntax, but have different output
+    //
+    // Person {
+    //     name: ""
+    //     ,,
+    // }
 }
 
 identifier func() {

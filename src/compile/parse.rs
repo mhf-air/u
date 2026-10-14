@@ -4131,11 +4131,13 @@ impl Parse {
                                 if matches!(&token.code, T![,,]) {
                                     let t_sep = token.clone();
                                     s.plusplus();
-                                    let e = if !matches!(s.current().code, T!["}"]) {
-                                        Some(s.parse_expr()?)
-                                    } else {
-                                        None
-                                    };
+                                    let e = Some(s.parse_expr()?);
+                                    // NOTE temporarily disable this feature
+                                    // let e = if !matches!(s.current().code, T!["}"]) {
+                                    //     Some(s.parse_expr()?)
+                                    // } else {
+                                    //     None
+                                    // };
                                     a.base = Some((t_sep, e));
                                     if matches!(s.current().code, T![;]) {
                                         s.plusplus();

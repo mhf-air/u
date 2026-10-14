@@ -3873,14 +3873,16 @@ impl Parse {
                                 if matches!(&token.code, T![..]) {
                                     let t_sep = token.clone();
                                     s.plusplus();
-                                    let mut e = None;
-                                    if !matches!(s.current().code, T!["}"]) {
-                                        let expr = s.parse_expr()?;
-                                        // check if expr is Default::default()
-                                        if !expr_is_default(&expr) {
-                                            e = Some(expr);
-                                        }
-                                    }
+                                    // NOTE temporarily disable this feature
+                                    // let mut e = None;
+                                    // if !matches!(s.current().code, T!["}"]) {
+                                    //     let expr = s.parse_expr()?;
+                                    //     // check if expr is Default::default()
+                                    //     if !expr_is_default(&expr) {
+                                    //         e = Some(expr);
+                                    //     }
+                                    // }
+                                    let e = Some(s.parse_expr()?);
                                     a.base = Some((t_sep, e));
                                     if matches!(s.current().code, T![;]) {
                                         s.plusplus();
@@ -3923,7 +3925,7 @@ impl Parse {
                     return Ok(r);
 
                     // check if expr is Default::default()
-                    fn expr_is_default(expr: &Expr) -> bool {
+                    fn _expr_is_default(expr: &Expr) -> bool {
                         if let ExprPayload::WithoutBlock(a) = &expr.payload &&
                             let ExprWithoutBlock::Call(call) = a.as_ref() &&
                             call.params.is_empty() &&
