@@ -4365,12 +4365,12 @@ impl Parse {
                 && a.prefix.is_none()
                 && a.id == "raw"
             {
-                r.t_raw = Some(token.clone());
-                s.plusplus();
-                let token = s.current();
+                let t_raw = token;
+                let token = s.nth(1);
                 if matches!(&token.code, T![mut] | T![const]) {
+                    r.t_raw = Some(t_raw.clone());
                     r.t_mut = Some(token.clone());
-                    s.plusplus();
+                    s.inc(2);
                 }
             }
 
@@ -5884,9 +5884,8 @@ impl Parse {
             use PatternRangeBound as R;
 
             let token = s.current();
-            let mut pat = s.parse_pattern_config(config)?;
-            let pat = mem::take(&mut pat.items[0]);
-            Ok(match pat.0 {
+            let pat = s.parse_pattern_no_top_alt_config(config)?;
+            Ok(match pat {
                 A::WithoutRange(B::Literal(a)) => R::Literal(a),
                 A::WithoutRange(B::Path(C::Path(p))) => R::Path(p),
                 A::WithoutRange(B::Path(C::QualifiedPath(p))) => R::QualifiedPath(p),

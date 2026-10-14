@@ -4199,12 +4199,12 @@ impl Parse {
                 && a.prefix.is_none()
                 && a.id == "raw"
             {
-                r.t_raw = Some(token.clone());
-                s.plusplus();
-                let token = s.current();
+                let t_raw = token;
+                let token = s.nth(1);
                 if matches!(&token.code, T![mut] | T![const]) {
+                    r.t_raw = Some(t_raw.clone());
                     r.t_mut = Some(token.clone());
-                    s.plusplus();
+                    s.inc(2);
                 }
             }
 
