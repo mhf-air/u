@@ -494,9 +494,13 @@ impl Parse {
 
         // get_first_special_token
         let Some(first_special_token) = s.get_first_special_token() else {
-            // parse expr
+            // parse stmt expr
             let t_first_in_expr = s.current();
-            let mut expr = s.parse_expr()?;
+            // because the Rust grammer says that when parsing statements, return as soons as
+            // you encounter a block expression
+            let mut config = ParseConfig::default();
+            config.stop_on_block_expr = true;
+            let mut expr = s.parse_expr_config(&config)?;
             expr.outer_attrs = outer_attrs;
 
             // stmt value
