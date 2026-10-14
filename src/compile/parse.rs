@@ -1818,88 +1818,49 @@ impl Parse {
         r.outer_attrs = s.parse_outer_attrs()?;
 
         let mut short = SelfParamShort::default();
+        let i_cur = s.index.get();
 
         let token = s.current();
-        if matches!(token.code, T![&]) {
+        if matches!(&token.code, T![&]) {
             short.t_ref = Some(token.clone());
-            match &s.nth(1).code {
-                // (&)
-                T![")"] => {
-                    r.payload = SelfParamPayload::Short(short);
-                    s.inc(2);
-                }
-                TokenCode::Lifetime(_) => match &s.nth(2).code {
-                    // (&'a)
-                    T![")"] => {
-                        short.label = Some(s.nth(1).clone());
-                        r.payload = SelfParamPayload::Short(short);
-                        s.inc(3);
-                    }
-                    // (&'a mut)
-                    T![mut] => {
-                        if matches!(&s.nth(3).code, T![")"]) {
-                            short.label = Some(s.nth(1).clone());
-                            short.t_mut = Some(s.nth(2).clone());
-                            r.payload = SelfParamPayload::Short(short);
-                            s.inc(4);
-                        }
-                    }
-                    // (Type)
-                    _ => {
-                        let typ = SelfParamType {
-                            typ: s.parse_type()?,
-                            t_mut: None,
-                        };
-                        r.payload = SelfParamPayload::Type(typ);
-                        s.expect(T![")"])?;
-                    }
-                },
-                // (&mut)
-                T![mut] => {
-                    let a_token = s.nth(2);
-                    if matches!(&a_token.code, T![")"]) {
-                        short.t_mut = Some(s.nth(1).clone());
-                        r.payload = SelfParamPayload::Short(short);
-                        s.inc(3);
-                    } else {
-                        return Err(s.panic(a_token,
-                            &format!("expected ')' after '(&mut' but got {:?}", a_token)));
-                    }
-                }
-                // (Type)
-                _ => {
-                    let typ = SelfParamType {
-                        typ: s.parse_type()?,
-                        t_mut: None,
-                    };
-                    r.payload = SelfParamPayload::Type(typ);
-                    s.expect(T![")"])?;
-                }
-            }
-        } else if matches!(token.code, T![")"]) {
-            // ()
-            r.payload = SelfParamPayload::Short(short);
             s.plusplus();
-        } else {
-            // (mut) or (mut Type)
-            let mut t_mut = None;
-            if matches!(token.code, T![mut]) {
-                t_mut = Some(token.clone());
-                s.plusplus();
-            }
-            if matches!(s.current().code, T![")"]) {
-                s.plusplus();
-                short.t_mut = t_mut;
-                r.payload = SelfParamPayload::Short(short);
-            } else {
-                let typ = SelfParamType {
-                    typ: s.parse_type()?,
-                    t_mut,
-                };
-                r.payload = SelfParamPayload::Type(typ);
-                s.expect(T![")"])?;
-            }
         }
+
+        let token = s.current();
+        if matches!(&token.code, TokenCode::Lifetime(_)) {
+            short.label = Some(token.clone());
+            s.plusplus();
+        }
+
+        let token = s.current();
+        if matches!(&token.code, T![mut]) {
+            short.t_mut = Some(token.clone());
+            s.plusplus();
+        }
+
+        let token = s.current();
+        if matches!(&token.code, T![")"] | T![,]) {
+            r.payload = SelfParamPayload::Short(short);
+        } else {
+            let t_mut = if short.t_ref.is_some() || short.label.is_some() {
+                s.index.set(i_cur);
+                None
+            } else {
+                short.t_mut
+            };
+            let type_ = SelfParamType {
+                typ: s.parse_type()?,
+                t_mut,
+            };
+            r.payload = SelfParamPayload::Type(type_);
+        }
+
+        let token = s.current();
+        if matches!(&token.code, T![,]) {
+            r.has_comma = true;
+            s.plusplus();
+        }
+        s.expect(T![")"])?;
 
         Ok(r)
     }

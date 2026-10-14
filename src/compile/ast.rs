@@ -556,16 +556,19 @@ impl ToLang for Func {
             // not (
             //     &self
             // )
-            let line_paren = s.t_paren_open.span.line;
-            let line_first = s.t_first_after_paren.span.line;
-            if line_paren != line_first {
-                let t = &s.t_first_after_paren.tokens_before;
-                if !t.is_empty() {
-                    t[0].to_rs_one(p);
+            for it in &s.t_paren_close.tokens_before {
+                if matches!(&it.code, TokenCode::Blank)
+                    && it.u.contains('\n')
+                {
+                    it.to_rs_one(p);
+                    p.push_raw("    ");
                 }
             }
+
+            let line_paren = s.t_paren_open.span.line;
+            let line_first = s.t_first_after_paren.span.line;
             sp.to_rs(p);
-            if !s.params.is_empty() {
+            if !s.params.is_empty() || sp.has_comma {
                 p.push_raw(",");
                 if line_paren == line_first {
                     p.push_raw(" ");
@@ -661,29 +664,53 @@ pub struct FuncQualifier {
 pub struct SelfParam {
     pub outer_attrs: Attrs,
     pub payload: SelfParamPayload,
+    pub has_comma: bool,
 }
 impl ToLang for SelfParam {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.outer_attrs.to_rs(p);
+        let mut has_first = true;
+        if !s.outer_attrs.items.is_empty() {
+            has_first = false;
+            p.no_first_before = true;
+            s.outer_attrs.to_rs(p);
+            p.no_first_before = false;
+        }
+
         match &s.payload {
             SelfParamPayload::Type(a) => {
                 if let Some(t) = &a.t_mut {
-                    t.to_rs(p);
-                    p.push_raw(" self: ");
+                    if has_first {
+                        t.to_rs_one(p);
+                        has_first = false;
+                    } else {
+                        t.to_rs(p);
+                    }
+                    p.push_raw(" self:");
                 } else {
                     p.push_raw("self: ");
                 }
-                a.typ.to_rs(p);
+                if has_first {
+                    p.no_first_before = true;
+                    a.typ.to_rs(p);
+                    p.no_first_before = false;
+                } else {
+                    a.typ.to_rs(p);
+                }
             }
             SelfParamPayload::Short(a) => {
                 if let Some(t_ref) = &a.t_ref {
-                    t_ref.to_rs(p);
+                    if has_first {
+                        t_ref.to_rs_one(p);
+                        has_first = false;
+                    } else {
+                        t_ref.to_rs(p);
+                    }
                 } else {
                     if let Some(t_mut) = &a.t_mut {
                         // (mut)
-                        t_mut.to_rs(p);
+                        t_mut.to_rs_one(p);
                         p.push_raw(" self");
                     } else {
                         // ()
@@ -692,10 +719,20 @@ impl ToLang for SelfParam {
                     return;
                 }
                 if let Some(label) = &a.label {
-                    label.to_rs(p);
+                    if has_first {
+                        label.to_rs_one(p);
+                        has_first = false;
+                    } else {
+                        label.to_rs(p);
+                    }
                 }
                 if let Some(t_mut) = &a.t_mut {
-                    t_mut.to_rs(p);
+                    if has_first {
+                        t_mut.to_rs_one(p);
+                        // has_first = false;
+                    } else {
+                        t_mut.to_rs(p);
+                    }
                 }
                 if a.label.is_none() && a.t_mut.is_none() {
                     p.push_raw("self");
@@ -1519,7 +1556,12 @@ impl ToLang for Attrs {
         let s = self;
 
         for it in &s.items {
-            it.t_start.to_rs(p);
+            if p.no_first_before {
+                p.no_first_before = false;
+                it.t_start.to_rs_one(p);
+            } else {
+                it.t_start.to_rs(p);
+            }
             let new_list = transform_macro_tokens(&it.tokens);
             for a in new_list {
                 a.to_rs(p);

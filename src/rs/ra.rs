@@ -487,6 +487,9 @@ impl ToLang for Func {
             // )
             p.push_raw(" (");
             sp.to_u(p);
+            if s.params.is_empty() && sp.has_comma {
+                p.push_raw(",");
+            }
             p.push_raw(")");
         }
 
@@ -658,6 +661,7 @@ pub struct SelfParam {
     pub outer_attrs: Attrs,
     pub payload: SelfParamPayload,
     pub t_first_after_attr: Token,
+    pub has_comma: bool,
 }
 impl ToLang for SelfParam {
     fn to_u(&self, p: &mut LangFormatter) {
@@ -682,8 +686,6 @@ impl ToLang for SelfParam {
             SelfParamPayload::Type(a) => {
                 if let Some(t) = &a.t_mut {
                     if has_first {
-                        p.no_first_before = true;
-                        p.no_first_before = false;
                         t.to_u_one(p);
                     } else {
                         t.to_u(p);

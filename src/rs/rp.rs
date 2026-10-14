@@ -1619,6 +1619,7 @@ impl Parse {
                             t_mut: None,
                         }),
                         t_first_after_attr: token.clone(),
+                        has_comma: false,
                     });
                 } else if matches!(s.nth(i).code, T![mut]) {
                     let t_mut = Some(s.nth(i).clone());
@@ -1633,6 +1634,7 @@ impl Parse {
                                 t_mut,
                             }),
                             t_first_after_attr: token.clone(),
+                            has_comma: false,
                         });
                     }
                 }
@@ -1649,6 +1651,7 @@ impl Parse {
                                 t_mut: Some(token.clone()),
                             }),
                             t_first_after_attr: token.clone(),
+                            has_comma: false,
                         });
                     } else {
                         s.inc(2);
@@ -1660,6 +1663,7 @@ impl Parse {
                                 t_mut: Some(token.clone()),
                             }),
                             t_first_after_attr: token.clone(),
+                            has_comma: false,
                         });
                     }
                 }
@@ -1675,6 +1679,7 @@ impl Parse {
                             t_mut: None,
                         }),
                         t_first_after_attr: token.clone(),
+                        has_comma: false,
                     });
                 } else {
                     s.inc(1);
@@ -1686,14 +1691,16 @@ impl Parse {
                             t_mut: None,
                         }),
                         t_first_after_attr: token.clone(),
+                        has_comma: false,
                     });
                 }
             }
             _ => {}
         }
-        if f.self_param.is_some() {
+        if let Some(sp) = &mut f.self_param {
             if matches!(s.current().code, T![,]) {
                 s.plusplus();
+                sp.has_comma = true;
             }
         } else {
             s.restore_state(&save_state);
