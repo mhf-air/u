@@ -1418,8 +1418,11 @@ impl ToLang for MacroCall {
                 // call!{a} to call_{a} directly
                 if list.len() < 2 {
                     s.t_delim_open.to_u(p);
-                    for (it, _) in list {
+                    for (it, show_comma) in list {
                         it.to_u(p);
+                        if *show_comma {
+                            p.push_raw(",");
+                        }
                     }
                     s.t_delim_close.to_u(p);
                     return;
@@ -3795,6 +3798,9 @@ impl ToLang for ExprOperator {
             }
             ExprOperator::ErrorPropagation(a) => {
                 a.expr.to_u(p);
+                if a.show_backslash {
+                    p.push_raw("\\");
+                }
                 a.t_sep.to_u(p);
             }
             ExprOperator::IncDec(a) => {
@@ -3887,6 +3893,7 @@ pub struct ExprDereference {
 #[derive(Debug)]
 pub struct ExprErrorPropagation {
     pub expr: Expr,
+    pub show_backslash: bool,
 
     pub t_sep: Token,
 }
@@ -4031,6 +4038,7 @@ impl ToLang for ExprAwait {
 #[derive(Debug)]
 pub struct ExprIndex {
     pub left: Expr,
+    pub show_backslash: bool,
     pub right: Expr,
 
     pub t_delim_open: Token,
@@ -4041,6 +4049,9 @@ impl ToLang for ExprIndex {
         let s = self;
 
         s.left.to_u(p);
+        if s.show_backslash {
+            p.push_raw("\\");
+        }
         s.t_delim_open.to_u(p);
         s.right.to_u(p);
         s.t_delim_close.to_u(p);
@@ -4145,6 +4156,7 @@ impl ToLang for ExprStructField {
 #[derive(Debug)]
 pub struct ExprCall {
     pub left: Expr,
+    pub show_backslash: bool,
     pub params: Vec<(Expr, bool)>,
 
     pub t_paren_open: Token,
@@ -4155,6 +4167,9 @@ impl ToLang for ExprCall {
         let s = self;
 
         s.left.to_u(p);
+        if s.show_backslash {
+            p.push_raw("\\");
+        }
         s.t_paren_open.to_u(p);
         for (it, show_comma) in &s.params {
             it.to_u(p);

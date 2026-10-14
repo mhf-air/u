@@ -3399,6 +3399,11 @@ impl Parse {
                 }
             }
 
+            // check if the operator is in the same line as the last token of the left expr
+            s.minusminus();
+            let show_backslash = s.current().span.end_line != token.span.line;
+            s.plusplus();
+
             s.plusplus();
             match &token.code {
                 // Expr = Expr
@@ -3448,6 +3453,7 @@ impl Parse {
                                 payload: ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Call(ExprCall {
                                         left: expr,
+                                        show_backslash,
                                         params,
                                         t_paren_open,
                                         t_paren_close: token.clone(),
@@ -3502,6 +3508,7 @@ impl Parse {
                         payload: ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Index(
                             ExprIndex {
                                 left: expr,
+                                show_backslash,
                                 right,
                                 t_delim_open,
                                 t_delim_close,
@@ -3516,6 +3523,7 @@ impl Parse {
                         payload: ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
                             ExprOperator::ErrorPropagation(ExprErrorPropagation {
                                 expr,
+                                show_backslash,
                                 t_sep: token.clone(),
                             }),
                         ))),
