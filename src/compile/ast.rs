@@ -3452,8 +3452,8 @@ impl ToLang for ExprMatch {
             it.t_sep.to_rs(p);
 
             it.expr.to_rs(p);
-            if matches!(&it.expr.payload, ExprPayload::WithoutBlock(_)) {
-                p.push_raw(",");
+            if let Some(t) = &it.t_comma {
+                t.to_rs(p);
             }
         }
         s.t_brace_close.to_rs(p);
@@ -3464,6 +3464,7 @@ pub struct ExprMatchItem {
     pub arm: ExprMatchArm,
     pub expr: Expr,
     pub t_sep: Token,
+    pub t_comma: Option<Token>,
 }
 #[derive(Debug, Default)]
 pub struct ExprMatchArm {

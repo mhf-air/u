@@ -889,7 +889,8 @@ pub struct StructField {
     pub name: Token,
     pub vis: Visibility,
     pub type_: Type,
-    pub t_comma: bool,
+    pub show_comma: bool,
+    pub show_backslash: bool,
 }
 impl ToLang for StructField {
     fn to_u(&self, p: &mut LangFormatter) {
@@ -906,8 +907,11 @@ impl ToLang for StructField {
         s.vis.to_u(p);
 
         s.type_.to_u(p);
-        if s.t_comma {
+        if s.show_comma {
             p.push_raw(",");
+        }
+        if s.show_backslash {
+            p.push_raw("\\");
         }
     }
 }
@@ -2625,6 +2629,9 @@ impl ToLang for PatternStructItem {
                 if f.show_comma {
                     p.push_raw(",");
                 }
+                if f.show_backslash {
+                    p.push_raw("\\");
+                }
             }
             PatternStructItem::Etc(t) => {
                 t.to_u(p);
@@ -2638,6 +2645,7 @@ pub struct PatternStructField {
     pub outer_attrs: Attrs,
     pub payload: PatternStructFieldPayload,
     pub show_comma: bool,
+    pub show_backslash: bool,
 }
 #[derive(Debug)]
 pub enum PatternStructFieldPayload {
@@ -3610,8 +3618,8 @@ impl ToLang for ExprMatch {
             p.push_raw(":");
 
             it.expr.to_u(p);
-            if it.show_comma {
-                p.push_raw(",");
+            if let Some(t) = &it.t_comma {
+                t.to_u(p);
             }
         }
         s.t_brace_close.to_u(p);
@@ -3622,7 +3630,7 @@ pub struct ExprMatchItem {
     pub arm: ExprMatchArm,
     pub expr: Expr,
     pub t_sep: Token,
-    pub show_comma: bool,
+    pub t_comma: Option<Token>,
 }
 #[derive(Debug, Default)]
 pub struct ExprMatchArm {
@@ -4078,7 +4086,7 @@ impl ToLang for ExprTupleIndexing {
 #[derive(Debug, Default)]
 pub struct ExprStruct {
     pub path: PathInExpr,
-    pub fields: Vec<(ExprStructField, bool)>,
+    pub fields: Vec<ExprStructField>,
     pub base: Option<(Token, Option<Expr>)>,
 
     pub t_brace_open: Token,
@@ -4090,11 +4098,8 @@ impl ToLang for ExprStruct {
 
         s.path.to_u(p);
         s.t_brace_open.to_u(p);
-        for (it, show_comma) in &s.fields {
+        for it in &s.fields {
             it.to_u(p);
-            if *show_comma {
-                p.push_raw(",");
-            }
         }
         if let Some((t, expr)) = &s.base {
             t.to_u(p);
@@ -4110,6 +4115,8 @@ pub struct ExprStructField {
     pub outer_attrs: Attrs,
     pub name: Token,
     pub expr: Option<(Token, Expr)>,
+    pub show_comma: bool,
+    pub show_backslash: bool,
 }
 impl ToLang for ExprStructField {
     fn to_u(&self, p: &mut LangFormatter) {
@@ -4120,6 +4127,12 @@ impl ToLang for ExprStructField {
         if let Some((t, expr)) = &s.expr {
             t.to_u(p);
             expr.to_u(p);
+        }
+        if s.show_comma {
+            p.push_raw(",");
+        }
+        if s.show_backslash {
+            p.push_raw("\\");
         }
     }
 }

@@ -1921,8 +1921,13 @@ impl Parse {
             if matches!(&token.code, T![,]) {
                 s.plusplus();
                 let next_token = s.current();
-                field.t_comma = next_token.span.line == token.span.line;
-            } else if !matches!(&token.code, T!["}"]) {
+                field.show_comma = next_token.span.line == token.span.line;
+            } else if matches!(&token.code, T!["}"]) {
+                s.minusminus();
+                let before_token = s.current();
+                s.plusplus();
+                field.show_backslash = before_token.span.line != token.span.line;
+            } else {
                 return Err(s.panic(token, &format!("illegal token after field {:?}", token)));
             }
             r.push(field);
@@ -2956,9 +2961,11 @@ impl Parse {
             let mut config = ParseConfig::default();
             config.stop_on_block_expr = true;
             r.expr = s.parse_expr_config(&config)?;
-            if matches!(s.current().code, T![,]) {
+
+            let token = s.current();
+            if matches!(&token.code, T![,]) {
+                r.t_comma = Some(token.clone());
                 s.plusplus();
-                r.show_comma = true;
             }
 
             Ok(r)
@@ -3867,16 +3874,24 @@ impl Parse {
                                     break;
                                 }
 
-                                let field = parse_struct_expr_field(s)?;
+                                let mut field = parse_struct_expr_field(s)?;
 
                                 let token = s.current();
                                 if matches!(&token.code, T![,]) {
                                     s.plusplus();
                                     let next_token = s.current();
                                     let show_comma = next_token.span.line == token.span.line;
-                                    a.fields.push((field, show_comma));
+                                    field.show_comma = show_comma;
+                                    a.fields.push(field);
+                                } else if matches!(&token.code, T!["}"]) {
+                                    s.minusminus();
+                                    let before_token = s.current();
+                                    s.plusplus();
+                                    field.show_backslash = before_token.span.line != token.span.line;
+                                    a.fields.push(field);
                                 } else {
-                                    a.fields.push((field, false));
+                                    return Err(s.panic(token,
+                                        &format!("illegal token after field {:?}", token)));
                                 }
                             }
                             r.payload = ExprPayload::WithoutBlock(Box::new(
@@ -5626,6 +5641,7 @@ impl Parse {
                                 t_tuple_index: token.clone(),
                             }),
                             show_comma: false,
+                            show_backslash: false,
                         }
                     }
                     TokenCode::Identifier(_) => {
@@ -5641,6 +5657,7 @@ impl Parse {
                                     pattern,
                                 }),
                                 show_comma: false,
+                                show_backslash: false,
                             }
                         } else {
                             let mut c = PatternStructFieldC::default();
@@ -5649,6 +5666,7 @@ impl Parse {
                                 outer_attrs,
                                 payload: PatternStructFieldPayload::C(c),
                                 show_comma: false,
+                                show_backslash: false,
                             }
                         }
                     }
@@ -5674,6 +5692,7 @@ impl Parse {
                             outer_attrs,
                             payload: PatternStructFieldPayload::C(c),
                             show_comma: false,
+                            show_backslash: false,
                         }
                     }
                     T![mut] => {
@@ -5693,6 +5712,7 @@ impl Parse {
                             outer_attrs,
                             payload: PatternStructFieldPayload::C(c),
                             show_comma: false,
+                            show_backslash: false,
                         }
                     }
                     _ => {
@@ -5708,6 +5728,14 @@ impl Parse {
                     let next_token = s.current();
                     let show_comma = next_token.span.line == token.span.line;
                     r.show_comma = show_comma;
+                } else if matches!(&token.code, T!["}"]) {
+                    s.minusminus();
+                    let before_token = s.current();
+                    s.plusplus();
+                    r.show_backslash = before_token.span.line != token.span.line;
+                } else {
+                    return Err(s.panic(token,
+                        &format!("illegal token after field {:?}", token)));
                 }
 
                 Ok(PatternStructItem::Field(r))

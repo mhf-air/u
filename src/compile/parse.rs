@@ -3161,12 +3161,14 @@ impl Parse {
             if matches!(&r.expr.payload, ExprPayload::WithBlock(_)) {
                 s.skip_semicolons();
                 if matches!(&token.code, T![,]) {
+                    r.t_comma = Some(token.clone());
                     s.plusplus();
                 }
             } else {
                 let token = s.current();
                 match &token.code {
                     T![,] => {
+                        r.t_comma = Some(token.clone());
                         s.plusplus();
                     }
                     T![;] => {
