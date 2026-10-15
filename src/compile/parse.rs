@@ -518,7 +518,14 @@ impl Parse {
             // expr
             let token = s.current();
             let semicolon_after = if matches!(&token.code, T![;]) {
-                let a = !token.is_added_semicolon();
+                let a = if !token.is_added_semicolon() {
+                    s.minusminus();
+                    let r = s.current().span.end_line == token.span.line;
+                    s.plusplus();
+                    r
+                } else {
+                    false
+                };
                 s.plusplus();
                 a
             } else {
