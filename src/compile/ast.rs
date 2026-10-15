@@ -2082,7 +2082,6 @@ impl ToLang for QualifiedPathInExpr {
 
         s.type_.to_rs(p);
         for it in &s.items {
-            p.push_raw("::");
             it.to_rs(p);
         }
     }
@@ -4059,7 +4058,7 @@ impl ToLang for ExprField {
 #[derive(Debug, Default)]
 pub struct ExprClosure {
     pub params: Vec<(FuncParamOptionalType, Option<Token>)>,
-    pub return_type: Option<TypeNoBounds>,
+    pub return_type: Option<(Token, TypeNoBounds)>,
     pub expr: Expr,
 
     pub t_async: Option<Token>,
@@ -4135,8 +4134,9 @@ impl ToLang for ExprClosure {
         }
         s.t_delim_close.to_rs(p);
 
-        if let Some(a) = &s.return_type {
-            p.push_raw(" ->");
+        if let Some((t, a)) = &s.return_type {
+            t.to_rs_before(p);
+            p.push_raw("->");
             a.to_rs(p);
         }
         s.expr.to_rs(p);

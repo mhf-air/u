@@ -4255,7 +4255,7 @@ impl ToLang for ExprField {
 #[derive(Debug, Default)]
 pub struct ExprClosure {
     pub params: Vec<(FuncParamOptionalType, Option<Token>)>,
-    pub return_type: Option<TypeNoBounds>,
+    pub return_type: Option<(Token, TypeNoBounds)>,
     pub expr: Expr,
 
     pub t_async: Option<Token>,
@@ -4344,7 +4344,8 @@ impl ToLang for ExprClosure {
             p.push_raw("|");
         }
 
-        if let Some(a) = &s.return_type {
+        if let Some((t, a)) = &s.return_type {
+            t.to_u_before(p);
             p.push_raw(":");
             a.to_u(p);
         }

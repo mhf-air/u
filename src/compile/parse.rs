@@ -1767,10 +1767,7 @@ impl Parse {
 
         let token = s.current();
         match &token.code {
-            T![;] => {
-                s.plusplus();
-                return Ok(r);
-            }
+            T![;] => {}
             T![where] => {}
             T!["{"] => (),
             _ => {
@@ -1793,6 +1790,13 @@ impl Parse {
         let token = s.current();
         match &token.code {
             T![;] => {
+                s.plusplus();
+                if matches!(&s.current().code, T!["{"]) {
+                    // function without body can only appear in a trait or external block
+                    // both don't permit block expr directly inside them
+                    let a = s.parse_block_expr()?;
+                    r.body = Some(a);
+                }
                 return Ok(r);
             }
             T!["{"] => {
@@ -4553,12 +4557,13 @@ impl Parse {
         // return type
         let token = s.current();
         if matches!(&token.code, T![:]) {
+            let t_sep = token.clone();
             s.plusplus();
             let type_ = s.parse_type()?;
             let TypePayload::TypeNoBounds(a) = type_.payload else {
                 return Err(s.panic(token, "expected TypeNoBounds"));
             };
-            r.return_type = Some(*a);
+            r.return_type = Some((t_sep, *a));
             // the expr after return type must be a block expr
             let token = s.current();
             if !matches!(token.code, T!["{"]) {
@@ -4851,7 +4856,7 @@ impl Parse {
                 s.minusminus();
                 let lifetimes = s.parse_for_lifetimes()?;
                 let token = s.current();
-                s.expect(T![func])?;
+                s.expect(T![fn])?;
                 let mut f = s.parse_func_type()?;
                 f.t_func = Some(token.clone());
                 f.for_lifetimes = Some(lifetimes);

@@ -498,9 +498,7 @@ impl Parse {
             let t_first_in_expr = s.current();
             // because the Rust grammer says that when parsing statements, return as soons as
             // you encounter a block expression
-            let mut config = ParseConfig::default();
-            config.stop_on_block_expr = true;
-            let mut expr = s.parse_expr_config(&config)?;
+            let mut expr = s.parse_expr()?;
             expr.outer_attrs = outer_attrs;
 
             // stmt value
@@ -3397,6 +3395,12 @@ impl Parse {
                 return Ok(expr);
             }
         }
+        if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
+            let token = s.current();
+            if matches!(&token.code, T!["("]) {
+                return Ok(expr);
+            }
+        }
 
         while s.has_more() {
             let token = s.current();
@@ -4345,12 +4349,13 @@ impl Parse {
         // return type
         let token = s.current();
         if matches!(&token.code, T![->]) {
+            let t_sep = token.clone();
             s.plusplus();
             let type_ = s.parse_type()?;
             let TypePayload::TypeNoBounds(a) = type_.payload else {
                 return Err(s.panic(token, "expected TypeNoBounds"));
             };
-            r.return_type = Some(*a);
+            r.return_type = Some((t_sep, *a));
             // the expr after return type must be a block expr
             let token = s.current();
             if !matches!(token.code, T!["{"]) {
