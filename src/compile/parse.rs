@@ -516,8 +516,18 @@ impl Parse {
             }
 
             // expr
-            s.skip_semicolons();
-            return Ok(Stmt::Expr(expr));
+            let token = s.current();
+            let semicolon_after = if matches!(&token.code, T![;]) {
+                let a = !token.is_added_semicolon();
+                s.plusplus();
+                a
+            } else {
+                false
+            };
+            return Ok(Stmt::Expr(StmtExpr {
+                expr,
+                semicolon_after,
+            }));
         }
 
         let stmt: Stmt;
@@ -5053,11 +5063,12 @@ impl Parse {
 
         let token = s.current();
         if matches!(token.code, T![:]) {
+            let t_sep = token.clone();
             s.plusplus();
             // return type
             let type_ = s.parse_type()?;
             if let TypePayload::TypeNoBounds(_) = type_.payload {
-                r.return_type = Some(type_);
+                r.return_type = Some((t_sep, type_));
             } else {
                 return Err(s.panic(token, "expected TypeNoBounds but got {:?}"));
             }

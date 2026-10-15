@@ -533,8 +533,17 @@ impl Parse {
             }
 
             // expr
-            s.skip_semicolons();
-            return Ok(Stmt::Expr((expr, need_semicolon_before)));
+            let semicolon_after = if matches!(&s.current().code, T![;]) {
+                s.plusplus();
+                true
+            } else {
+                false
+            };
+            return Ok(Stmt::Expr(StmtExpr {
+                expr,
+                need_semicolon_before,
+                semicolon_after,
+            }));
         };
 
         let stmt: Stmt;
@@ -4627,8 +4636,10 @@ impl Parse {
             // bare function
             T![for] => {
                 s.minusminus();
+                let t_first = s.current().clone();
                 let lifetimes = s.parse_for_lifetimes()?;
                 let mut f = s.parse_func_type()?;
+                f.t_first = t_first;
                 f.for_lifetimes = Some(lifetimes);
                 let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::BareFunction(
                     Box::new(f),
@@ -4638,7 +4649,9 @@ impl Parse {
             // unsafe? ( extern Abi? )? fn
             T![fn] | T![unsafe] | T![extern] => {
                 s.minusminus();
-                let f = s.parse_func_type()?;
+                let t_first = s.current().clone();
+                let mut f = s.parse_func_type()?;
+                f.t_first = t_first;
                 let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::BareFunction(
                     Box::new(f),
                 )));
@@ -4788,7 +4801,7 @@ impl Parse {
             if let TokenCode::Identifier(_) = &token.code &&
                     matches!(&s.nth(1).code, T![:]) {
                 param.name = Some(token.clone());
-                s.plusplus();
+                s.inc(2);
             }
 
             // param type
@@ -4813,11 +4826,12 @@ impl Parse {
 
         let token = s.current();
         if matches!(token.code, T![->]) {
+            let t_sep = token.clone();
             s.plusplus();
             // return type
             let type_ = s.parse_type()?;
             if let TypePayload::TypeNoBounds(_) = type_.payload {
-                r.return_type = Some(type_);
+                r.return_type = Some((t_sep, type_));
             } else {
                 return Err(s.panic(token, "expected TypeNoBounds but got {:?}"));
             }

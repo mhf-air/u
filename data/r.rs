@@ -1162,3 +1162,7 @@ fn f() {
     call![a];
     call!{a}
 }
+
+#[rustfmt::skip]
+fn f() {
+}

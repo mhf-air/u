@@ -2193,7 +2193,7 @@ impl Default for TypePathSegmentPayload {
 #[derive(Debug)]
 pub struct TypePathFunc {
     pub inputs: Vec<(Type, Option<Token>)>,
-    pub return_type: Option<Type>,
+    pub return_type: Option<(Token, Type)>,
 
     pub t_paren_open: Token,
     pub t_paren_close: Token,
@@ -2211,8 +2211,9 @@ impl ToLang for TypePathFunc {
         }
         s.t_paren_close.to_rs(p);
 
-        if let Some(return_type) = &s.return_type {
-            p.push_raw(" ->");
+        if let Some((t, return_type)) = &s.return_type {
+            t.to_rs_before(p);
+            p.push_raw("->");
             return_type.to_rs(p);
         }
     }
@@ -2941,7 +2942,7 @@ pub struct TypeBareFunction {
     pub for_lifetimes: Option<ForLifetimes>,
     pub qualifier: FuncTypeQualifier,
     pub params: Vec<MaybeNamedParam>,
-    pub return_type: Option<Type>,
+    pub return_type: Option<(Token, Type)>,
     pub variadics: Option<MaybeNamedParamVariadics>,
 
     pub t_func: Option<Token>,
@@ -2956,18 +2957,18 @@ impl ToLang for TypeBareFunction {
             for_.to_rs(p);
         }
 
-        if let Some(t) = &s.qualifier.t_unsafe {
-            t.to_rs(p);
-        }
-        if let Some((extern_, abi)) = &s.qualifier.t_extern {
-            extern_.to_rs(p);
-            if let Some(abi) = abi {
-                abi.to_rs(p);
+        if let Some(t_func) = &s.t_func {
+            if let Some(t) = &s.qualifier.t_unsafe {
+                t.to_rs(p);
             }
-        }
+            if let Some((extern_, abi)) = &s.qualifier.t_extern {
+                extern_.to_rs(p);
+                if let Some(abi) = abi {
+                    abi.to_rs(p);
+                }
+            }
 
-        if let Some(t) = &s.t_func {
-            t.to_rs(p);
+            t_func.to_rs(p);
         }
 
         s.t_paren_open.to_rs(p);
@@ -2975,7 +2976,7 @@ impl ToLang for TypeBareFunction {
             it.outer_attrs.to_rs(p);
             if let Some(name) = &it.name {
                 name.to_rs(p);
-                p.push_raw(": ");
+                p.push_raw(":");
             }
             it.type_.to_rs(p);
             if let Some(t) = &it.t_comma {
@@ -2988,8 +2989,9 @@ impl ToLang for TypeBareFunction {
         }
         s.t_paren_close.to_rs(p);
 
-        if let Some(return_type) = &s.return_type {
-            p.push_raw(" ->");
+        if let Some((t, return_type)) = &s.return_type {
+            t.to_rs_before(p);
+            p.push_raw("->");
             return_type.to_rs(p);
         }
     }
@@ -3018,7 +3020,7 @@ pub struct MaybeNamedParamVariadics {
 pub enum Stmt {
     Item(Item),
     Let(StmtLet),
-    Expr(Expr),
+    Expr(StmtExpr),
     Value(StmtValue),
     // MacroCall(MacroCall),
 }
@@ -3029,12 +3031,7 @@ impl ToLang for Stmt {
         match &s {
             Stmt::Item(a) => a.to_rs(p),
             Stmt::Let(a) => a.to_rs(p),
-            Stmt::Expr(a) => {
-                a.to_rs(p);
-                if matches!(a.payload, ExprPayload::WithoutBlock(_)) {
-                    p.push_raw(";");
-                }
-            }
+            Stmt::Expr(a) => a.to_rs(p),
             Stmt::Value(a) => a.to_rs(p),
         }
     }
@@ -3123,6 +3120,24 @@ impl ToLang for StmtValue {
         p.no_first_before = true;
         s.expr.to_rs(p);
         p.no_first_before = false;
+    }
+}
+
+#[derive(Debug)]
+pub struct StmtExpr {
+    pub expr: Expr,
+    pub semicolon_after: bool,
+}
+impl ToLang for StmtExpr {
+    fn to_rs(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        s.expr.to_rs(p);
+        if matches!(s.expr.payload, ExprPayload::WithoutBlock(_)) {
+            p.push_raw(";");
+        } else if s.semicolon_after {
+            p.push_raw(";");
+        }
     }
 }
 

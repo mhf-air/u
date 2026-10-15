@@ -2230,7 +2230,7 @@ impl Default for TypePathSegmentPayload {
 #[derive(Debug)]
 pub struct TypePathFunc {
     pub inputs: Vec<(Type, bool)>,
-    pub return_type: Option<Type>,
+    pub return_type: Option<(Token, Type)>,
 
     pub t_paren_open: Token,
     pub t_paren_close: Token,
@@ -2248,7 +2248,8 @@ impl ToLang for TypePathFunc {
         }
         s.t_paren_close.to_u(p);
 
-        if let Some(return_type) = &s.return_type {
+        if let Some((t, return_type)) = &s.return_type {
+            t.to_u_before(p);
             p.push_raw(":");
             return_type.to_u(p);
         }
@@ -3045,47 +3046,61 @@ pub struct TypeBareFunction {
     pub for_lifetimes: Option<ForLifetimes>,
     pub qualifier: FuncTypeQualifier,
     pub params: Vec<MaybeNamedParam>,
-    pub return_type: Option<Type>,
+    pub return_type: Option<(Token, Type)>,
     pub variadics: Option<MaybeNamedParamVariadics>,
 
     pub t_func: Option<Token>,
     pub t_paren_open: Token,
     pub t_paren_close: Token,
+    pub t_first: Token,
 }
 impl ToLang for TypeBareFunction {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
+        if !p.no_first_before {
+            s.t_first.to_u_before(p);
+            p.no_first_before = true;
+        }
+
         if let Some(for_) = &s.for_lifetimes {
             for_.to_u(p);
         }
 
-        if let Some(t) = &s.qualifier.t_unsafe {
+        if let Some(t_func) = &s.t_func {
             if p.no_first_before {
                 p.no_first_before = false;
-                t.to_u_one(p);
+                t_func.to_u_one(p);
             } else {
-                t.to_u(p);
+                t_func.to_u(p);
             }
-        }
-        if let Some((extern_, abi)) = &s.qualifier.t_extern {
-            if p.no_first_before {
-                p.no_first_before = false;
-                extern_.to_u_one(p);
-            } else {
-                extern_.to_u(p);
-            }
-            if let Some(abi) = abi {
-                abi.to_u(p);
-            }
-        }
 
-        if let Some(t) = &s.t_func {
-            if p.no_first_before {
-                p.no_first_before = false;
-                t.to_u_one(p);
-            } else {
-                t.to_u(p);
+            if s.qualifier.t_unsafe.is_some() || s.qualifier.t_extern.is_some() {
+                p.push_raw("[");
+                p.no_first_before = true;
+            }
+            if let Some(t) = &s.qualifier.t_unsafe {
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    t.to_u_one(p);
+                } else {
+                    t.to_u(p);
+                }
+            }
+            if let Some((extern_, abi)) = &s.qualifier.t_extern {
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    extern_.to_u_one(p);
+                } else {
+                    p.push_raw(",");
+                    extern_.to_u(p);
+                }
+                if let Some(abi) = abi {
+                    abi.to_u(p);
+                }
+            }
+            if s.qualifier.t_unsafe.is_some() || s.qualifier.t_extern.is_some() {
+                p.push_raw("]");
             }
         }
 
@@ -3099,7 +3114,6 @@ impl ToLang for TypeBareFunction {
             it.outer_attrs.to_u(p);
             if let Some(name) = &it.name {
                 name.to_u(p);
-                p.push_raw(": ");
             }
             it.type_.to_u(p);
             if it.show_comma {
@@ -3112,7 +3126,8 @@ impl ToLang for TypeBareFunction {
         }
         s.t_paren_close.to_u(p);
 
-        if let Some(return_type) = &s.return_type {
+        if let Some((t, return_type)) = &s.return_type {
+            t.to_u_before(p);
             p.push_raw(":");
             return_type.to_u(p);
         }
@@ -3142,7 +3157,7 @@ pub struct MaybeNamedParamVariadics {
 pub enum Stmt {
     Item(Item),
     Let((StmtLet, bool)),
-    Expr((Expr, bool)),
+    Expr(StmtExpr),
     Value(StmtValue),
     // MacroCall(MacroCall),
 }
@@ -3158,12 +3173,7 @@ impl ToLang for Stmt {
                 }
                 a.to_u(p);
             }
-            Stmt::Expr((a, need)) => {
-                if *need {
-                    p.push_raw(";");
-                }
-                a.to_u(p);
-            }
+            Stmt::Expr(a) => a.to_u(p),
             Stmt::Value(a) => a.to_u(p),
         }
     }
@@ -3258,6 +3268,26 @@ impl ToLang for StmtValue {
             p.no_first_before = false;
         } else {
             s.expr.to_u(p);
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct StmtExpr {
+    pub expr: Expr,
+    pub need_semicolon_before: bool,
+    pub semicolon_after: bool,
+}
+impl ToLang for StmtExpr {
+    fn to_u(&self, p: &mut LangFormatter) {
+        let s = self;
+
+        if s.need_semicolon_before {
+            p.push_raw(";");
+        }
+        s.expr.to_u(p);
+        if s.semicolon_after {
+            p.push_raw(";");
         }
     }
 }
