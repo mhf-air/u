@@ -4864,12 +4864,19 @@ impl Parse {
             // bare function
             T![for] => {
                 s.minusminus();
+                let t_first = s.current().clone();
                 let lifetimes = s.parse_for_lifetimes()?;
+                if matches!(&s.current().code, T![;]) {
+                    s.plusplus();
+                }
                 let token = s.current();
+                let t_first_after_for = token.clone();
                 s.expect(T![fn])?;
                 let mut f = s.parse_func_type()?;
                 f.t_func = Some(token.clone());
+                f.t_first = t_first;
                 f.for_lifetimes = Some(lifetimes);
+                f.t_first_after_for = t_first_after_for;
                 let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::BareFunction(
                     Box::new(f),
                 )));
@@ -4878,6 +4885,7 @@ impl Parse {
             T![fn] => {
                 let mut f = s.parse_func_type()?;
                 f.t_func = Some(token.clone());
+                f.t_first = token.clone();
                 let payload = TypePayload::TypeNoBounds(Box::new(TypeNoBounds::BareFunction(
                     Box::new(f),
                 )));

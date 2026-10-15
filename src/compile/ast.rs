@@ -1888,7 +1888,12 @@ impl ToLang for ForLifetimes {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
 
-        s.t_for.to_rs(p);
+        if p.no_first_before {
+            p.no_first_before = false;
+            s.t_for.to_rs_one(p);
+        } else {
+            s.t_for.to_rs(p);
+        }
         s.for_.to_rs(p);
     }
 }
@@ -2948,27 +2953,47 @@ pub struct TypeBareFunction {
     pub t_func: Option<Token>,
     pub t_paren_open: Token,
     pub t_paren_close: Token,
+    pub t_first: Token,
+    pub t_first_after_for: Token,
 }
 impl ToLang for TypeBareFunction {
     fn to_rs(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if let Some(for_) = &s.for_lifetimes {
-            for_.to_rs(p);
-        }
+        s.t_first.to_rs_before(p);
+        p.no_first_before = true;
 
         if let Some(t_func) = &s.t_func {
+            if let Some(for_) = &s.for_lifetimes {
+                for_.to_rs(p);
+                s.t_first_after_for.to_rs_before(p);
+                p.no_first_before = true;
+            }
+
             if let Some(t) = &s.qualifier.t_unsafe {
-                t.to_rs(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    t.to_rs_one(p);
+                } else {
+                    t.to_rs(p);
+                }
             }
             if let Some((extern_, abi)) = &s.qualifier.t_extern {
-                extern_.to_rs(p);
+                if p.no_first_before {
+                    p.no_first_before = false;
+                    extern_.to_rs_one(p);
+                } else {
+                    extern_.to_rs(p);
+                }
                 if let Some(abi) = abi {
                     abi.to_rs(p);
                 }
             }
 
-            t_func.to_rs(p);
+            if !p.no_first_before {
+                p.push_raw(" ");
+            }
+            t_func.to_rs_one(p);
         }
 
         s.t_paren_open.to_rs(p);
