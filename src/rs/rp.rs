@@ -3050,7 +3050,7 @@ impl Parse {
             let expr = s.parse_binary_expr(config)?;
             if config.stop_on_block_expr {
                 if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
-                    list.push(ExprOp::Expr((expr, false)));
+                    list.push(ExprOp::Expr(expr));
                     break;
                 }
             }
@@ -3059,8 +3059,8 @@ impl Parse {
             let t_last = s.current();
             s.plusplus();
             let token = s.current();
-            let b = t_last.span.end_line != token.span.line;
-            list.push(ExprOp::Expr((expr, b)));
+            let show_backslash = t_last.span.end_line != token.span.line;
+            list.push(ExprOp::Expr(expr));
 
             if config.in_conditions || config.in_match_conditions {
                 let token = s.current();
@@ -3121,7 +3121,7 @@ impl Parse {
                         }
                         _ => token.clone(),
                     };
-                    list.push(ExprOp::Op(t));
+                    list.push(ExprOp::Op((t, show_backslash)));
                     s.plusplus();
                 }
 
@@ -3136,12 +3136,12 @@ impl Parse {
 
         #[derive(Debug)]
         enum ExprOp {
-            Expr((Expr, bool)),
-            Op(Token),
+            Expr(Expr),
+            Op((Token, bool)),
         }
         impl Default for ExprOp {
             fn default() -> Self {
-                ExprOp::Op(Token::default())
+                ExprOp::Op((Token::default(), false))
             }
         }
 
@@ -3180,7 +3180,7 @@ impl Parse {
             // special case when list has only one element
             if list.len() == 1 {
                 let expr_op = mem::take(&mut list[0]);
-                if let ExprOp::Expr((expr, _)) = expr_op {
+                if let ExprOp::Expr(expr) = expr_op {
                     return Ok(Expr {
                         outer_attrs: Attrs::default(),
                         payload: expr.payload,
@@ -3188,7 +3188,7 @@ impl Parse {
                 }
             }
 
-            let mut op_stack: Vec<Token> = Vec::new();
+            let mut op_stack: Vec<(Token, bool)> = Vec::new();
             let mut r_list: Vec<ExprOp> = Vec::new();
 
             // from infix to postfix
@@ -3197,28 +3197,28 @@ impl Parse {
                     ExprOp::Expr(expr) => {
                         r_list.push(ExprOp::Expr(expr));
                     }
-                    ExprOp::Op(token) => loop {
+                    ExprOp::Op(item) => loop {
                         if op_stack.is_empty() {
-                            op_stack.push(token);
+                            op_stack.push(item);
                             break;
                         }
                         let top = op_stack.last().unwrap();
-                        let top_precedence = *s.op_map.get(&top.code).unwrap();
-                        let current_precedence = *s.op_map.get(&token.code).unwrap();
+                        let top_precedence = *s.op_map.get(&top.0.code).unwrap();
+                        let current_precedence = *s.op_map.get(&item.0.code).unwrap();
                         if current_precedence > top_precedence {
-                            op_stack.push(token);
+                            op_stack.push(item);
                             break;
                         } else if current_precedence < top_precedence {
                             r_list.push(ExprOp::Op(op_stack.pop().unwrap()));
                         } else {
                             r_list.push(ExprOp::Op(op_stack.pop().unwrap()));
-                            op_stack.push(token);
+                            op_stack.push(item);
                             break;
                         }
                     },
                 }
             }
-            for op in op_stack.into_iter().rev().collect::<Vec<Token>>() {
+            for op in op_stack.into_iter().rev().collect::<Vec<(Token, bool)>>() {
                 r_list.push(ExprOp::Op(op));
             }
 
@@ -3240,11 +3240,11 @@ impl Parse {
                         index -= 1;
                         if matches!(r_list[index], ExprOp::Expr(_)) {
                             let e = mem::take(&mut r_list[index]);
-                            if let ExprOp::Expr((expr, b)) = e {
+                            if let ExprOp::Expr(expr) = e {
                                 if right_option.is_none() {
-                                    right_option = Some((expr, b));
+                                    right_option = Some(expr);
                                 } else {
-                                    left_option = Some((expr, b));
+                                    left_option = Some(expr);
                                     break;
                                 }
                             }
@@ -3254,8 +3254,10 @@ impl Parse {
                         }
                     }
 
-                    let (left, left_b) = left_option.unwrap();
-                    let (right, _) = right_option.unwrap();
+                    let left = left_option.unwrap();
+                    let right = right_option.unwrap();
+
+                    let (op, show) = op;
 
                     match op.code {
                         T![+]
@@ -3272,7 +3274,7 @@ impl Parse {
                                 if config.may_end_with_semicolon
                                     && matches!(op.code, T![-] | T![*] | T![&] | T![|])
                                 {
-                                    left_b
+                                    show
                                 } else {
                                     false
                                 };
@@ -3289,7 +3291,7 @@ impl Parse {
                                     )),
                                 )),
                             };
-                            r_list[index] = ExprOp::Expr((expr, false));
+                            r_list[index] = ExprOp::Expr(expr);
                         }
                         T![==] | T![!=] | T![>] | T![<] | T![>=] | T![<=] => {
                             let expr = Expr {
@@ -3304,12 +3306,12 @@ impl Parse {
                                     )),
                                 )),
                             };
-                            r_list[index] = ExprOp::Expr((expr, false));
+                            r_list[index] = ExprOp::Expr(expr);
                         }
                         T![||] | T![&&] => {
                             let show_backslash =
                                 if config.may_end_with_semicolon {
-                                    left_b
+                                    show
                                 } else {
                                     false
                                 };
@@ -3326,7 +3328,7 @@ impl Parse {
                                     )),
                                 )),
                             };
-                            r_list[index] = ExprOp::Expr((expr, false));
+                            r_list[index] = ExprOp::Expr(expr);
                         }
 
                         T![..] => {
@@ -3340,7 +3342,7 @@ impl Parse {
                                     }),
                                 )),
                             };
-                            r_list[index] = ExprOp::Expr((expr, false));
+                            r_list[index] = ExprOp::Expr(expr);
                         }
                         T![..=] => {
                             let expr = Expr {
@@ -3353,7 +3355,7 @@ impl Parse {
                                     }),
                                 )),
                             };
-                            r_list[index] = ExprOp::Expr((expr, false));
+                            r_list[index] = ExprOp::Expr(expr);
                         }
                         _ => {
                             return Err(s.panic(s.current(), "not a valid op"));
@@ -3365,7 +3367,7 @@ impl Parse {
             }
 
             let item = mem::take(&mut r_list[0]);
-            if let ExprOp::Expr((expr, _)) = item {
+            if let ExprOp::Expr(expr) = item {
                 Ok(expr)
             } else {
                 return Err(s.panic(s.current(), "not an expr"));

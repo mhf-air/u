@@ -128,6 +128,7 @@ impl Lex {
                     | Op::DotDotDot // because of ... in function params
                     | Op::Dollar // because of $ in $a for fast debugging
                     | Op::Underscore // because of _ in value expr
+                    | Op::Not // because of ! in value expr
                     | Op::Star // because of * in deref expr
                     | Op::Sub
                     | Op::BitAnd
@@ -163,6 +164,9 @@ impl Lex {
     fn may_add_semicolon(&mut self) {
         let s = self;
         if s.tokens.is_empty() {
+            return;
+        }
+        if s.tokens_before.iter().any(|it| it.u == "\\") {
             return;
         }
         let last_token = s.tokens.last().unwrap();
@@ -396,12 +400,10 @@ impl Lex {
         }
 
         // main loop
-        let mut is_backslash = false;
         'outer: while i < total_len {
             let ch = s.chars[i];
 
             if ch == '\\' {
-                is_backslash = true;
                 s.add_token_to_before(TokenCode::Op(Op::Backslash), "\\".to_owned());
                 i += 1;
                 continue;
@@ -417,17 +419,13 @@ impl Lex {
                     }
                     // newline
                     if ch == '\n' {
-                        if !is_backslash {
-                            s.may_add_semicolon();
-                        }
+                        s.may_add_semicolon();
                     }
                     i += 1;
                 }
                 let u = s.sub_str(start, i);
                 s.add_token_to_before_nl(TokenCode::Blank, u);
                 continue;
-            } else {
-                is_backslash = false;
             }
 
             // ->

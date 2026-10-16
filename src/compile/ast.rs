@@ -2997,6 +2997,7 @@ impl ToLang for TypeBareFunction {
         }
 
         s.t_paren_open.to_rs(p);
+        p.no_first_before = false;
         for it in &s.params {
             it.outer_attrs.to_rs(p);
             if let Some(name) = &it.name {

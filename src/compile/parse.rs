@@ -456,6 +456,7 @@ impl Parse {
 
             // stmt value
             if matches!(&s.current().code, T!["}"]) {
+                expr.outer_attrs = outer_attrs;
                 return Ok(Stmt::Value(StmtValue {
                     expr,
                 }));
@@ -1992,6 +1993,10 @@ impl Parse {
 
             field.vis = s.parse_vis()?;
 
+            if matches!(&s.current().code, T![;]) {
+                s.plusplus();
+            }
+
             field.type_ = s.parse_type()?;
 
             let token = s.current();
@@ -2917,6 +2922,27 @@ impl Parse {
             match &token.code {
                 T![:] => break,
                 T!["{"] => {
+                    // macro_{}
+                    if start >= 2 {
+                        let t_minus = &s.tokens[start - 2].code;
+                        if matches!(t_minus, T![_]) {
+                            start = s.skip_pair(start - 1)?;
+                            continue;
+                        }
+                        // macro_"()"{}
+                        if start >= 3 {
+                            if matches!(t_minus, TokenCode::Literal(Literal {
+                                payload: LiteralPayload::String(_),
+                                ..
+                            }))
+                                && matches!(&s.tokens[start - 3].code, T![_])
+                            {
+                                start = s.skip_pair(start - 1)?;
+                                continue;
+                            }
+                        }
+                    }
+
                     if !is_match {
                         break;
                     }
