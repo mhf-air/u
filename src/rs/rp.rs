@@ -476,6 +476,7 @@ impl Parse {
                 | T![|]
                 | T![&&]
                 | T![||]
+                | T![*]
             )
         }
         let need_semicolon_before = check_need_semicolon_before(&s.current().code);

@@ -448,7 +448,9 @@ impl Parse {
         let token = s.current();
         if matches!(&token.code, T![_]) {
             s.plusplus();
-            let expr = s.parse_expr()?;
+            let mut config = ParseConfig::default();
+            config.may_end_with_semicolon = true;
+            let expr = s.parse_expr_config(&config)?;
             return Ok(Stmt::Value(StmtValue {
                 expr,
                 t_sep: token.clone(),
@@ -461,7 +463,9 @@ impl Parse {
         if first_special_token.is_none() {
             // parse expr
             let t_first_in_expr = s.current();
-            let mut expr = s.parse_expr()?;
+            let mut config = ParseConfig::default();
+            config.may_end_with_semicolon = true;
+            let mut expr = s.parse_expr_config(&config)?;
 
             // for cases such as:
             //      match a {} -> b
@@ -558,7 +562,9 @@ impl Parse {
 
                 s.expect(T![->])?;
                 a.t_first_in_pattern = Some(s.current().clone());
-                a.pattern = s.parse_pattern()?;
+                let mut config = ParseConfig::default();
+                config.may_end_with_semicolon = true;
+                a.pattern = s.parse_pattern_config(&config)?;
                 if matches!(&s.current().code, T![let]) {
                     s.plusplus();
                     a.type_ = Some(s.parse_type()?);
@@ -2112,7 +2118,9 @@ impl Parse {
                 if matches!(token.code, T![=]) {
                     let t_eq = token.clone();
                     s.plusplus();
-                    let expr = s.parse_expr()?;
+                    let mut config = ParseConfig::default();
+                    config.may_end_with_semicolon = true;
+                    let expr = s.parse_expr_config(&config)?;
                     field.discriminant = Some((t_eq, expr));
                 }
 
@@ -2171,7 +2179,9 @@ impl Parse {
         s.expect(T![=])?;
 
         let t_eq = token.clone();
-        let expr = s.parse_expr()?;
+        let mut config = ParseConfig::default();
+        config.may_end_with_semicolon = true;
+        let expr = s.parse_expr_config(&config)?;
         r.expr = Some((t_eq, expr));
         s.expect(T![;])?;
 
@@ -2208,7 +2218,9 @@ impl Parse {
         if matches!(&token.code, T![=]) {
             let t_eq = token.clone();
             s.expect(T![=])?;
-            let expr = s.parse_expr()?;
+            let mut config = ParseConfig::default();
+            config.may_end_with_semicolon = true;
+            let expr = s.parse_expr_config(&config)?;
             r.expr = Some((t_eq, expr));
         }
         s.expect(T![;])?;
@@ -2992,6 +3004,8 @@ impl Parse {
                 ConditionItem::LetChain(a)
             };
 
+            s.skip_semicolons();
+
             let token = s.current();
             match &token.code {
                 T![&&] => {
@@ -3001,8 +3015,7 @@ impl Parse {
                     continue;
                 }
                 // : for match arm
-                // ; for allowing {} in a separate line
-                T!["{"] | T![:] | T![;] => {
+                T!["{"] | T![:] => {
                     r.push((item, None));
                     break;
                 }
@@ -3208,7 +3221,9 @@ impl Parse {
         if matches!(token.code, T![;]) {
             return Ok(r);
         }
-        r.expr = Some(s.parse_expr()?);
+        let mut config = ParseConfig::default();
+        config.may_end_with_semicolon = true;
+        r.expr = Some(s.parse_expr_config(&config)?);
         s.expect(T![;])?;
         Ok(r)
     }
@@ -3230,29 +3245,34 @@ impl Parse {
 
         let mut list: Vec<ExprOp> = Vec::new();
 
-        let expr = s.parse_binary_expr(config)?;
-
-        if config.stop_on_block_expr {
-            if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
-                list.push(ExprOp::Expr(expr));
-                r.payload = to_op_expr(s, list)?.payload;
-                return Ok(r);
-            }
-        }
-        list.push(ExprOp::Expr(expr));
-
-        if config.in_conditions || config.in_match_conditions {
-            let token = s.current();
-            match &token.code {
-                T![&&] | T![||] | T![..] | T![..=] => {
-                    r.payload = to_op_expr(s, list)?.payload;
-                    return Ok(r);
-                }
-                _ => {}
-            }
-        }
-
         while s.has_more() {
+            let expr = s.parse_binary_expr(config)?;
+
+            if config.stop_on_block_expr {
+                if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
+                    list.push(ExprOp::Expr(expr));
+                    break;
+                }
+            }
+            list.push(ExprOp::Expr(expr));
+
+            if config.in_conditions || config.in_match_conditions {
+                let token = s.current();
+                match &token.code {
+                    T![&&] | T![||] | T![..] | T![..=] => {
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+
+            if s.current().is_added_semicolon() {
+                if config.may_end_with_semicolon {
+                    break;
+                }
+                s.plusplus();
+            }
+
             let token = s.current();
             match &token.code {
                 // Expr op Expr
@@ -3278,28 +3298,15 @@ impl Parse {
                 | T![,,=] => {
                     s.plusplus();
                     list.push(ExprOp::Op(token.clone()));
-                    let expr = s.parse_binary_expr(config)?;
-                    list.push(ExprOp::Expr(expr));
-
-                    if config.in_conditions || config.in_match_conditions {
-                        let token = s.current();
-                        match &token.code {
-                            T![&&] | T![||] | T![..] | T![..=] => {
-                                r.payload = to_op_expr(s, list)?.payload;
-                                return Ok(r);
-                            }
-                            _ => {}
-                        }
-                    }
                 }
 
                 _ => {
-                    r.payload = to_op_expr(s, list)?.payload;
                     break;
                 }
             }
         }
 
+        r.payload = to_op_expr(s, list)?.payload;
         return Ok(r);
 
         #[derive(Debug)]
@@ -4284,9 +4291,6 @@ impl Parse {
                         ));
                     }
                     Op::Star => {
-                        return Err(s.panic(token, "use *^Expr"));
-                    }
-                    Op::Deref => {
                         let expr = s.parse_expr_config(config)?;
                         r.payload =
                             ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
@@ -5457,6 +5461,13 @@ impl Parse {
 
         while s.has_more() {
             let pat = s.parse_pattern_no_top_alt_config(config)?;
+            if s.current().is_added_semicolon() {
+                if config.may_end_with_semicolon {
+                    r.items.push((pat, None));
+                    break;
+                }
+                s.plusplus();
+            }
             let token = s.current();
             if !matches!(&token.code, T![|]) {
                 r.items.push((pat, None));
@@ -6212,6 +6223,7 @@ struct ParseConfig {
     stop_on_block_expr: bool,
     in_conditions: bool,
     in_match_conditions: bool,
+    may_end_with_semicolon: bool,
 }
 
 // --------------------------------------------------------------------------------

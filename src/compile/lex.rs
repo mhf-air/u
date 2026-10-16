@@ -128,7 +128,12 @@ impl Lex {
                     | Op::DotDotDot // because of ... in function params
                     | Op::Dollar // because of $ in $a for fast debugging
                     | Op::Underscore // because of _ in value expr
-                    | Op::Deref // because of *_ in deref expr
+                    | Op::Star // because of * in deref expr
+                    | Op::Sub
+                    | Op::BitAnd
+                    | Op::And
+                    | Op::BitOr
+                    | Op::Or
                 )
             }
             TokenCode::Keyword(a) => {
@@ -957,11 +962,6 @@ impl Lex {
                             s.add_token(TokenCode::Assign(Assign::Star), "*=".to_owned());
                             i += 1;
                         }
-                        // *_
-                        '_' => {
-                            s.add_token(TokenCode::Op(Op::Deref), "*_".to_owned());
-                            i += 1;
-                        }
                         // *
                         _ => {
                             s.add_token(TokenCode::Op(Op::Star), "*".to_owned());
@@ -1652,7 +1652,6 @@ impl Token {
                     Op::CommaComma => "..",
                     Op::CommaCommaEq => "..=",
                     Op::Underscore => "!",
-                    Op::Deref => "*",
                     Op::Colon => ":",
                     Op::Semicolon => ";",
 
@@ -2365,7 +2364,6 @@ pub enum Op {
     CommaComma,
     CommaCommaEq,
     Underscore,
-    Deref,
     Colon,
     Semicolon,
 
@@ -2413,7 +2411,6 @@ impl fmt::Debug for Op {
             Self::CommaComma => write!(f, ",,"),
             Self::CommaCommaEq => write!(f, ",,="),
             Self::Underscore => write!(f, "_"),
-            Self::Deref => write!(f, "*_"),
             Self::Colon => write!(f, ":"),
             Self::Semicolon => write!(f, ";"),
 
@@ -2567,7 +2564,6 @@ macro_rules! T {
 	[ ,, ] => { TokenCode::Op(Op::CommaComma) };
 	[ ,,= ] => { TokenCode::Op(Op::CommaCommaEq) };
 	[ _ ] => { TokenCode::Op(Op::Underscore) };
-	[ *_ ] => { TokenCode::Op(Op::Deref) };
 	[ : ] => { TokenCode::Op(Op::Colon) };
 	[ ; ] => { TokenCode::Op(Op::Semicolon) };
 
