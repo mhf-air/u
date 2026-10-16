@@ -1505,8 +1505,16 @@ impl Parse {
         // return type
         let token = s.current();
         if matches!(&token.code, T![->]) {
+            s.minusminus();
+            let t_last = s.current();
             s.plusplus();
-            r.return_type = Some(s.parse_type()?);
+            if t_last.span.end_line != token.span.line {
+                r.show_backslash_after_paren = true;
+            }
+
+            s.plusplus();
+            let type_ = s.parse_type()?;
+            r.return_type = Some((token.clone(), type_));
         }
 
         // where

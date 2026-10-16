@@ -455,7 +455,10 @@ impl Parse {
             let mut expr = s.parse_expr_config(&config)?;
 
             // stmt value
-            if matches!(&s.current().code, T!["}"]) {
+            s.minusminus();
+            let t_last = s.current();
+            s.plusplus();
+            if matches!(&s.current().code, T!["}"]) && !matches!(&t_last.code, T![;]) {
                 expr.outer_attrs = outer_attrs;
                 return Ok(Stmt::Value(StmtValue {
                     expr,
@@ -3581,7 +3584,7 @@ impl Parse {
             match &token.code {
                 // Expr = Expr
                 T![=] => {
-                    let right = s.parse_expr()?;
+                    let right = s.parse_expr_config(config)?;
                     r.payload = ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
                         ExprOperator::Assignment(ExprAssignment {
                             op: token.clone(),
@@ -3602,7 +3605,7 @@ impl Parse {
                 | T![^=]
                 | T![<<=]
                 | T![>>=] => {
-                    let right = s.parse_expr()?;
+                    let right = s.parse_expr_config(config)?;
                     r.payload = ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
                         ExprOperator::CompoundAssignment(ExprCompoundAssignment {
                             op: token.clone(),

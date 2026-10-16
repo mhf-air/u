@@ -453,15 +453,15 @@ pub struct Func {
     pub self_param: Option<SelfParam>,
     pub params: Vec<FuncParam>,
     pub variadics: Option<FuncVariadics>, // only functions in external blocks might have this
-    pub return_type: Option<Type>,
+    pub return_type: Option<(Token, Type)>,
     pub body: Option<BlockExpr>,
 
     pub t_func: Token,
     pub t_paren_open: Token,
     pub t_paren_close: Token,
-    pub t_arrow: Option<Token>,
     pub t_first_after_paren: Token,
     pub t_first: Token,
+    pub show_backslash_after_paren: bool,
 }
 impl ToLang for Func {
     fn to_u(&self, p: &mut LangFormatter) {
@@ -621,8 +621,14 @@ impl ToLang for Func {
         s.t_paren_close.to_u(p);
 
         // return type
-        if let Some(return_type) = &s.return_type {
+        if let Some((t, return_type)) = &s.return_type {
+            if s.show_backslash_after_paren {
+                p.push_raw("\\");
+            }
+            t.to_u_before(p);
+            p.no_first_before = true;
             return_type.to_u(p);
+            p.no_first_before = false;
         }
 
         // where
