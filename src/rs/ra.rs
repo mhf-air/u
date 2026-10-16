@@ -3156,7 +3156,7 @@ pub struct MaybeNamedParamVariadics {
 #[derive(Debug)]
 pub enum Stmt {
     Item(Item),
-    Let((StmtLet, bool)),
+    Let(StmtLet),
     Expr(StmtExpr),
     Value(StmtValue),
     // MacroCall(MacroCall),
@@ -3167,12 +3167,7 @@ impl ToLang for Stmt {
 
         match &s {
             Stmt::Item(a) => a.to_u(p),
-            Stmt::Let((a, need)) => {
-                if *need {
-                    p.push_raw(";");
-                }
-                a.to_u(p);
-            }
+            Stmt::Let(a) => a.to_u(p),
             Stmt::Expr(a) => a.to_u(p),
             Stmt::Value(a) => a.to_u(p),
         }
@@ -3254,20 +3249,15 @@ impl ToLang for StmtLet {
 #[derive(Debug)]
 pub struct StmtValue {
     pub expr: Expr,
-    pub t_dash: Option<Token>,
+    pub need_backslash: bool,
 }
 impl ToLang for StmtValue {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if let Some(t) = &s.t_dash {
-            t.to_u_before(p);
-            p.push_raw("_ ");
-            p.no_first_before = true;
-            s.expr.to_u(p);
-            p.no_first_before = false;
-        } else {
-            s.expr.to_u(p);
+        s.expr.to_u(p);
+        if s.need_backslash {
+            p.push_raw("\\");
         }
     }
 }
@@ -3275,16 +3265,12 @@ impl ToLang for StmtValue {
 #[derive(Debug)]
 pub struct StmtExpr {
     pub expr: Expr,
-    pub need_semicolon_before: bool,
     pub semicolon_after: bool,
 }
 impl ToLang for StmtExpr {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
-        if s.need_semicolon_before {
-            p.push_raw(";");
-        }
         s.expr.to_u(p);
         if s.semicolon_after {
             p.push_raw(";");
@@ -3822,10 +3808,10 @@ impl ToLang for ExprOperator {
             ExprOperator::Dereference(a) => {
                 if p.no_first_before {
                     p.no_first_before = false;
+                    a.t_sep.to_u_one(p);
                 } else {
-                    a.t_sep.to_u_before(p);
+                    a.t_sep.to_u(p);
                 }
-                p.push_raw("*_");
                 a.expr.to_u(p);
             }
             ExprOperator::ErrorPropagation(a) => {
@@ -3855,6 +3841,9 @@ impl ToLang for ExprOperator {
             }
             ExprOperator::ArithmeticOrLogical(a) => {
                 a.left.to_u(p);
+                if a.show_backslash {
+                    p.push_raw("\\");
+                }
                 a.op.to_u(p);
                 a.right.to_u(p);
             }
@@ -3865,6 +3854,9 @@ impl ToLang for ExprOperator {
             }
             ExprOperator::LazyBoolean(a) => {
                 a.left.to_u(p);
+                if a.show_backslash {
+                    p.push_raw("\\");
+                }
                 a.op.to_u(p);
                 a.right.to_u(p);
             }
@@ -3946,6 +3938,7 @@ pub struct ExprArithmeticOrLogical {
     pub left: Expr,
     pub op: Token, // must be TokenCode::Op(+ ~ * / % & | ^ << >>)
     pub right: Expr,
+    pub show_backslash: bool,
 }
 #[derive(Debug)]
 pub struct ExprComparison {
@@ -3958,6 +3951,7 @@ pub struct ExprLazyBoolean {
     pub left: Expr,
     pub op: Token, // must be TokenCode::Op(&& ||)
     pub right: Expr,
+    pub show_backslash: bool,
 }
 #[derive(Debug)]
 pub struct ExprTypeCast {
@@ -4164,7 +4158,6 @@ pub struct ExprStructField {
     pub name: Token,
     pub expr: Option<(Token, Expr)>,
     pub show_comma: bool,
-    pub show_backslash: bool,
 }
 impl ToLang for ExprStructField {
     fn to_u(&self, p: &mut LangFormatter) {
@@ -4178,9 +4171,6 @@ impl ToLang for ExprStructField {
         }
         if s.show_comma {
             p.push_raw(",");
-        }
-        if s.show_backslash {
-            p.push_raw("\\");
         }
     }
 }

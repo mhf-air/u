@@ -455,32 +455,6 @@ impl Parse {
             }
         }
 
-        // to prevent
-        //
-        // fn f() {
-        //     a;
-        //     -b;
-        // }
-        //
-        // turn into
-        //
-        // f func() {
-        //     // this is the same as "a ~b;"
-        //     a
-        //     ~b;
-        // }
-        fn check_need_semicolon_before(code: &TokenCode) -> bool {
-            matches!(code,
-                T![-]
-                | T![&]
-                | T![|]
-                | T![&&]
-                | T![||]
-                | T![*]
-            )
-        }
-        let need_semicolon_before = check_need_semicolon_before(&s.current().code);
-
         // parse item's outer_attrs
         let outer_attrs = s.parse_outer_attrs()?;
 
@@ -496,27 +470,20 @@ impl Parse {
         // get_first_special_token
         let Some(first_special_token) = s.get_first_special_token() else {
             // parse stmt expr
-            let t_first_in_expr = s.current();
-            // because the Rust grammer says that when parsing statements, return as soons as
-            // you encounter a block expression
-            let mut expr = s.parse_expr()?;
+            let mut config = ParseConfig::default();
+            config.may_end_with_semicolon = true;
+            let mut expr = s.parse_expr_config(&config)?;
             expr.outer_attrs = outer_attrs;
 
             // stmt value
             let token = s.current();
             if matches!(&token.code, T!["}"]) {
-                let t_dash = if let ExprPayload::WithoutBlock(a) = &expr.payload {
-                    if let ExprWithoutBlock::MacroCall(a) = a.as_ref()
-                        && matches!(a.delim, MacroCallDelim::Brace)
-                    {
-                        None
-                    } else {
-                        Some(t_first_in_expr.clone())
-                    }
-                } else {
-                    None
-                };
-                return Ok(Stmt::Value(StmtValue { expr, t_dash }));
+                s.minusminus();
+                let t_last = s.current();
+                s.plusplus();
+                let need_backslash = matches!(expr.payload, ExprPayload::WithoutBlock(_))
+                    && t_last.span.end_line != token.span.line ;
+                return Ok(Stmt::Value(StmtValue { expr, need_backslash }));
             }
 
             // macro call
@@ -542,7 +509,6 @@ impl Parse {
             };
             return Ok(Stmt::Expr(StmtExpr {
                 expr,
-                need_semicolon_before,
                 semicolon_after,
             }));
         };
@@ -561,14 +527,7 @@ impl Parse {
             T![let] => {
                 let mut a = s.parse_let()?;
                 a.outer_attrs = outer_attrs;
-                let need_semicolon_before =
-                    if let Some(t) = &a.t_first_in_expr && a.short.is_none()
-                    {
-                        check_need_semicolon_before(&t.code)
-                    } else {
-                        false
-                    };
-                stmt = Stmt::Let((a, need_semicolon_before));
+                stmt = Stmt::Let(a);
             }
             TokenCode::Keyword(keyword) => match keyword {
                 Keyword::Use => {
@@ -1569,7 +1528,7 @@ impl Parse {
             r.qualifier.no_s = true;
             r.qualifier.exist = true;
             let first = &a.stmts[0];
-            if let Stmt::Let((a, _)) = first &&
+            if let Stmt::Let(a) = first &&
                 let Some((name, None)) = &a.short &&
                 name.u == "s" &&
                 let Some(expr) = &a.expr &&
@@ -2081,7 +2040,9 @@ impl Parse {
                 if matches!(token.code, T![=]) {
                     let t_eq = token.clone();
                     s.plusplus();
-                    let expr = s.parse_expr()?;
+                    let mut config = ParseConfig::default();
+                    config.may_end_with_semicolon = true;
+                    let expr = s.parse_expr_config(&config)?;
                     field.discriminant = Some((t_eq, expr));
                 }
 
@@ -2170,7 +2131,9 @@ impl Parse {
         s.expect(T![=])?;
 
         let t_eq = token.clone();
-        let expr = s.parse_expr()?;
+        let mut config = ParseConfig::default();
+        config.may_end_with_semicolon = true;
+        let expr = s.parse_expr_config(&config)?;
         r.expr = Some((t_eq, expr));
         s.expect(T![;])?;
 
@@ -2217,7 +2180,9 @@ impl Parse {
         if matches!(&token.code, T![=]) {
             let t_eq = token.clone();
             s.expect(T![=])?;
-            let expr = s.parse_expr()?;
+            let mut config = ParseConfig::default();
+            config.may_end_with_semicolon = true;
+            let expr = s.parse_expr_config(&config)?;
             r.expr = Some((t_eq, expr));
         }
         s.expect(T![;])?;
@@ -3045,7 +3010,13 @@ impl Parse {
         s.expect(T![=])?;
 
         r.t_first_in_expr = Some(s.current().clone());
-        r.expr = Some(s.parse_expr()?);
+        if r.short.is_some() {
+            let mut config = ParseConfig::default();
+            config.may_end_with_semicolon = true;
+            r.expr = Some(s.parse_expr_config(&config)?);
+        } else {
+            r.expr = Some(s.parse_expr()?);
+        }
 
         let token = s.current();
         if matches!(&token.code, T![else]) {
@@ -3075,28 +3046,32 @@ impl Parse {
 
         let mut list: Vec<ExprOp> = Vec::new();
 
-        let expr = s.parse_binary_expr(config)?;
-        if config.stop_on_block_expr {
-            if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
-                list.push(ExprOp::Expr(expr));
-                r.payload = to_op_expr(s, list)?.payload;
-                return Ok(r);
-            }
-        }
-        list.push(ExprOp::Expr(expr));
-
-        if config.in_conditions || config.in_match_conditions {
-            let token = s.current();
-            match &token.code {
-                T![&&] | T![||] | T![..] | T![..=] => {
-                    r.payload = to_op_expr(s, list)?.payload;
-                    return Ok(r);
-                }
-                _ => {}
-            }
-        }
-
         while s.has_more() {
+            let expr = s.parse_binary_expr(config)?;
+            if config.stop_on_block_expr {
+                if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
+                    list.push(ExprOp::Expr((expr, false)));
+                    break;
+                }
+            }
+
+            s.minusminus();
+            let t_last = s.current();
+            s.plusplus();
+            let token = s.current();
+            let b = t_last.span.end_line != token.span.line;
+            list.push(ExprOp::Expr((expr, b)));
+
+            if config.in_conditions || config.in_match_conditions {
+                let token = s.current();
+                match &token.code {
+                    T![&&] | T![||] | T![..] | T![..=] => {
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+
             let token = s.current();
             match &token.code {
                 // Expr op Expr
@@ -3147,35 +3122,21 @@ impl Parse {
                         _ => token.clone(),
                     };
                     list.push(ExprOp::Op(t));
-
                     s.plusplus();
-                    let expr = s.parse_binary_expr(config)?;
-                    list.push(ExprOp::Expr(expr));
-
-                    if config.in_conditions || config.in_match_conditions {
-                        let token = s.current();
-                        match &token.code {
-                            T![&&] | T![||] | T![..] | T![..=] => {
-                                r.payload = to_op_expr(s, list)?.payload;
-                                return Ok(r);
-                            }
-                            _ => {}
-                        }
-                    }
                 }
 
                 _ => {
-                    r.payload = to_op_expr(s, list)?.payload;
                     break;
                 }
             }
         }
 
+        r.payload = to_op_expr(s, list, config)?.payload;
         return Ok(r);
 
         #[derive(Debug)]
         enum ExprOp {
-            Expr(Expr),
+            Expr((Expr, bool)),
             Op(Token),
         }
         impl Default for ExprOp {
@@ -3208,7 +3169,7 @@ impl Parse {
 
         8. At the end of the expression, pop and print all operators on the stack. (No parentheses should remain.)
         */
-        fn to_op_expr(s: &Parse, list: Vec<ExprOp>) -> ParseResult<Expr> {
+        fn to_op_expr(s: &Parse, list: Vec<ExprOp>, config: &ParseConfig) -> ParseResult<Expr> {
             let mut list = list;
 
             /* note
@@ -3219,7 +3180,7 @@ impl Parse {
             // special case when list has only one element
             if list.len() == 1 {
                 let expr_op = mem::take(&mut list[0]);
-                if let ExprOp::Expr(expr) = expr_op {
+                if let ExprOp::Expr((expr, _)) = expr_op {
                     return Ok(Expr {
                         outer_attrs: Attrs::default(),
                         payload: expr.payload,
@@ -3279,11 +3240,11 @@ impl Parse {
                         index -= 1;
                         if matches!(r_list[index], ExprOp::Expr(_)) {
                             let e = mem::take(&mut r_list[index]);
-                            if let ExprOp::Expr(expr) = e {
+                            if let ExprOp::Expr((expr, b)) = e {
                                 if right_option.is_none() {
-                                    right_option = Some(expr);
+                                    right_option = Some((expr, b));
                                 } else {
-                                    left_option = Some(expr);
+                                    left_option = Some((expr, b));
                                     break;
                                 }
                             }
@@ -3292,6 +3253,9 @@ impl Parse {
                             break;
                         }
                     }
+
+                    let (left, left_b) = left_option.unwrap();
+                    let (right, _) = right_option.unwrap();
 
                     match op.code {
                         T![+]
@@ -3304,19 +3268,28 @@ impl Parse {
                         | T![^]
                         | T![<<]
                         | T![>>] => {
+                            let show_backslash =
+                                if config.may_end_with_semicolon
+                                    && matches!(op.code, T![-] | T![*] | T![&] | T![|])
+                                {
+                                    left_b
+                                } else {
+                                    false
+                                };
                             let expr = Expr {
                                 outer_attrs: Attrs::default(),
                                 payload: ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Operator(ExprOperator::ArithmeticOrLogical(
                                         ExprArithmeticOrLogical {
                                             op,
-                                            left: left_option.unwrap(),
-                                            right: right_option.unwrap(),
+                                            show_backslash,
+                                            left,
+                                            right,
                                         },
                                     )),
                                 )),
                             };
-                            r_list[index] = ExprOp::Expr(expr);
+                            r_list[index] = ExprOp::Expr((expr, false));
                         }
                         T![==] | T![!=] | T![>] | T![<] | T![>=] | T![<=] => {
                             let expr = Expr {
@@ -3325,28 +3298,35 @@ impl Parse {
                                     ExprWithoutBlock::Operator(ExprOperator::Comparison(
                                         ExprComparison {
                                             op,
-                                            left: left_option.unwrap(),
-                                            right: right_option.unwrap(),
+                                            left,
+                                            right,
                                         },
                                     )),
                                 )),
                             };
-                            r_list[index] = ExprOp::Expr(expr);
+                            r_list[index] = ExprOp::Expr((expr, false));
                         }
                         T![||] | T![&&] => {
+                            let show_backslash =
+                                if config.may_end_with_semicolon {
+                                    left_b
+                                } else {
+                                    false
+                                };
                             let expr = Expr {
                                 outer_attrs: Attrs::default(),
                                 payload: ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Operator(ExprOperator::LazyBoolean(
                                         ExprLazyBoolean {
                                             op,
-                                            left: left_option.unwrap(),
-                                            right: right_option.unwrap(),
+                                            show_backslash,
+                                            left,
+                                            right,
                                         },
                                     )),
                                 )),
                             };
-                            r_list[index] = ExprOp::Expr(expr);
+                            r_list[index] = ExprOp::Expr((expr, false));
                         }
 
                         T![..] => {
@@ -3354,26 +3334,26 @@ impl Parse {
                                 outer_attrs: Attrs::default(),
                                 payload: ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Range(ExprRange {
-                                        start: left_option,
-                                        end: right_option,
+                                        start: Some(left),
+                                        end: Some(right),
                                         t_sep: op,
                                     }),
                                 )),
                             };
-                            r_list[index] = ExprOp::Expr(expr);
+                            r_list[index] = ExprOp::Expr((expr, false));
                         }
                         T![..=] => {
                             let expr = Expr {
                                 outer_attrs: Attrs::default(),
                                 payload: ExprPayload::WithoutBlock(Box::new(
                                     ExprWithoutBlock::Range(ExprRange {
-                                        start: left_option,
-                                        end: right_option,
+                                        start: Some(left),
+                                        end: Some(right),
                                         t_sep: op,
                                     }),
                                 )),
                             };
-                            r_list[index] = ExprOp::Expr(expr);
+                            r_list[index] = ExprOp::Expr((expr, false));
                         }
                         _ => {
                             return Err(s.panic(s.current(), "not a valid op"));
@@ -3385,7 +3365,7 @@ impl Parse {
             }
 
             let item = mem::take(&mut r_list[0]);
-            if let ExprOp::Expr(expr) = item {
+            if let ExprOp::Expr((expr, _)) = item {
                 Ok(expr)
             } else {
                 return Err(s.panic(s.current(), "not an expr"));
@@ -3922,15 +3902,9 @@ impl Parse {
                                 let token = s.current();
                                 if matches!(&token.code, T![,]) {
                                     s.plusplus();
-                                    let next_token = s.current();
-                                    let show_comma = next_token.span.line == token.span.line;
-                                    field.show_comma = show_comma;
+                                    field.show_comma = true;
                                     a.fields.push(field);
                                 } else if matches!(&token.code, T!["}"]) {
-                                    s.minusminus();
-                                    let before_token = s.current();
-                                    s.plusplus();
-                                    field.show_backslash = before_token.span.line != token.span.line;
                                     a.fields.push(field);
                                 } else {
                                     return Err(s.panic(token,
@@ -5774,9 +5748,7 @@ impl Parse {
                 let token = s.current();
                 if matches!(&token.code, T![,]) {
                     s.plusplus();
-                    let next_token = s.current();
-                    let show_comma = next_token.span.line == token.span.line;
-                    r.show_comma = show_comma;
+                    r.show_comma = true;
                 } else if matches!(&token.code, T!["}"]) {
                     s.minusminus();
                     let before_token = s.current();
@@ -5934,4 +5906,5 @@ struct ParseConfig {
     stop_on_struct_brace: bool,
     in_conditions: bool,
     in_match_conditions: bool,
+    may_end_with_semicolon: bool,
 }

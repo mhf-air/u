@@ -181,12 +181,12 @@ extern {
 f func() {
     Person { name: "", ,,b }
     Person {
-        name: ""
+        name: "",
         ,,b
     }
     Person {
-        name: ""
-        age
+        name: "",
+        age,
     }
 
     (a, b)
@@ -363,10 +363,10 @@ Person['a] struct where {
 }
 impl Person {
     no-s (&) func[no-s]() String {
-        _ self.desc
+        self.desc
     }
     has-s (&) func() String {
-        _ s.desc
+        s.desc
     }
 }
 
@@ -539,7 +539,7 @@ f func() {
     }
 
     unsafe {
-        _ dangerous()
+        dangerous()\
     }
 
     a = unsafe {
@@ -552,11 +552,11 @@ f func() {
     }
 
     const {
-        _ 1
+        1\
     }
 
     a = const {
-        _ 1
+        1\
     }
 }
 
@@ -596,15 +596,15 @@ f func() {
     }
 
     {
-        _ (a, b)
+        (a, b)\
     } -> (a, mut b)
 
     a * b + c
 
-    a(|a i32|: i32 { _ 1 })
-    a(|:mut a: i32|: i32 { _ 1 })
+    a(|a i32|: i32 { 1 })
+    a(|:mut a: i32|: i32 { 1 })
     a(|:mut a| 1)
-    a(|[move]| { _ 1 })
+    a(|[move]| { 1 })
     a(|[move] a, b| 1)
     a(|-| { p -> (a, b) })
     a(|| {
@@ -669,21 +669,21 @@ f func() {
 
 f func() {
     if a < 2 {
-        _ ~1
+        ~1\
     }
 
     b = if a < 2 {
-        _ ~1
+        ~1\
     } else {
-        _ 1
+        1\
     }
 
     if a < 2 {
-        _ ~1
+        ~1\
     } else if a > 10 {
-        _ 0
+        0\
     } else {
-        _ 1
+        1\
     }
 
     if b -> Err(err) {
@@ -698,7 +698,7 @@ f func() {
     if b -> a..Person{ name } {
     }
 
-    if if true { _ true } else { _ false } {
+    if if true { true } else { false } {
     }
 }
 
@@ -758,7 +758,7 @@ f func() {
 
     // when condition contains {}, have to use "for while",
     // but that's very rare
-    for while { _ true } {
+    for while { true } {
     }
 
     for a -> ?a && (Abc{ n: 1 }.n > 1) {
@@ -767,7 +767,7 @@ f func() {
 
 f func() {
     a
-    _ a
+    a\
 }
 
 f func() {
@@ -776,11 +776,6 @@ f func() {
         Message..Write-string(write): a,
         Message..Move{ x, y: 0 }: a,
         Message..Move{ ,, }: a,
-        Message..Change-color{
-            0: red
-            1: green
-            2: -
-        }: a,
         Message..Change-color{
             0: red,
             1: green,
@@ -859,10 +854,10 @@ b
 /// a
 f func() {
     sum u32 := (0,,)
-        .map(|n u32|: u32 { _ n * n })
-        .take-while(|n &u32|: bool { _ *n < 1000 })
-        .filter(|n &u32|: bool { _ *n % 2 == 1 })
-        .fold(0, |acc u32, n u32| { _ acc + n } )
+        .map(|n u32|: u32 { n * n })
+        .take-while(|n &u32|: bool { *n < 1000 })
+        .filter(|n &u32|: bool { *n % 2 == 1 })
+        .fold(0, |acc u32, n u32| { acc + n } )
 
     sum u32 := (0,,)
         .map(|n| n * n)

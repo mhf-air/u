@@ -444,19 +444,6 @@ impl Parse {
             return Err(s.panic(&s.current(), "expected Stmt"));
         }
 
-        // stmt value
-        let token = s.current();
-        if matches!(&token.code, T![_]) {
-            s.plusplus();
-            let mut config = ParseConfig::default();
-            config.may_end_with_semicolon = true;
-            let expr = s.parse_expr_config(&config)?;
-            return Ok(Stmt::Value(StmtValue {
-                expr,
-                t_sep: token.clone(),
-            }));
-        }
-
         // get_first_special_token
         let first_special_token = s.get_first_special_token()?;
 
@@ -466,6 +453,13 @@ impl Parse {
             let mut config = ParseConfig::default();
             config.may_end_with_semicolon = true;
             let mut expr = s.parse_expr_config(&config)?;
+
+            // stmt value
+            if matches!(&s.current().code, T!["}"]) {
+                return Ok(Stmt::Value(StmtValue {
+                    expr,
+                }));
+            }
 
             // for cases such as:
             //      match a {} -> b
@@ -482,7 +476,9 @@ impl Parse {
 
                 s.plusplus();
                 a.t_first_in_pattern = Some(s.current().clone());
-                a.pattern = s.parse_pattern()?;
+                let mut config = ParseConfig::default();
+                config.may_end_with_semicolon = true;
+                a.pattern = s.parse_pattern_config(&config)?;
                 if matches!(&s.current().code, T![let]) {
                     s.plusplus();
                     a.type_ = Some(s.parse_type()?);
@@ -562,9 +558,10 @@ impl Parse {
 
                 s.expect(T![->])?;
                 a.t_first_in_pattern = Some(s.current().clone());
-                let mut config = ParseConfig::default();
-                config.may_end_with_semicolon = true;
-                a.pattern = s.parse_pattern_config(&config)?;
+                let pat = s.parse_pattern_no_top_alt()?;
+                a.pattern = Pattern {
+                    items: vec![(pat, None)],
+                };
                 if matches!(&s.current().code, T![let]) {
                     s.plusplus();
                     a.type_ = Some(s.parse_type()?);
@@ -3256,6 +3253,13 @@ impl Parse {
             }
             list.push(ExprOp::Expr(expr));
 
+            if s.current().is_added_semicolon() {
+                if config.may_end_with_semicolon {
+                    break;
+                }
+                s.plusplus();
+            }
+
             if config.in_conditions || config.in_match_conditions {
                 let token = s.current();
                 match &token.code {
@@ -3264,13 +3268,6 @@ impl Parse {
                     }
                     _ => {}
                 }
-            }
-
-            if s.current().is_added_semicolon() {
-                if config.may_end_with_semicolon {
-                    break;
-                }
-                s.plusplus();
             }
 
             let token = s.current();
@@ -4139,13 +4136,26 @@ impl Parse {
                                 let field = parse_struct_expr_field(s)?;
 
                                 let token = s.current();
-                                if matches!(&token.code, T![,] | T![;]) {
-                                    let mut t = token.clone();
-                                    t.code = T![,];
-                                    s.plusplus();
-                                    a.fields.push((field, Some(t)));
-                                } else {
-                                    a.fields.push((field, None));
+                                match &token.code {
+                                    T![,] => {
+                                        s.plusplus();
+                                        a.fields.push((field, Some(token.clone())));
+                                    }
+                                    T![;] => {
+                                        a.fields.push((field, None));
+                                        s.plusplus();
+                                        if !matches!(&s.current().code, T!["}"]) {
+                                            return Err(s.panic(token,
+                                                &format!("expected }} but got {:?}", token)));
+                                        }
+                                    }
+                                    T!["}"] => {
+                                        a.fields.push((field, None));
+                                    }
+                                    _ => {
+                                        return Err(s.panic(token,
+                                            &format!("expected ',', }} but got {:?}", token)));
+                                    }
                                 }
                             }
                             r.payload = ExprPayload::WithoutBlock(Box::new(
@@ -4347,13 +4357,13 @@ impl Parse {
 
                     Op::BitOr => {
                         s.minusminus();
-                        let a = s.parse_closure_expr()?;
+                        let a = s.parse_closure_expr(config)?;
                         r.payload =
                             ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Closure(a)));
                     }
                     Op::Or => {
                         s.minusminus();
-                        let a = s.parse_closure_expr()?;
+                        let a = s.parse_closure_expr(config)?;
                         r.payload =
                             ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Closure(a)));
                     }
@@ -4454,7 +4464,7 @@ impl Parse {
     // |[move] a, b, c| Expr
     // |[async] a, b, c| Expr
     // |[async, move] a, b, c| Expr
-    fn parse_closure_expr(&self) -> ParseResult<ExprClosure> {
+    fn parse_closure_expr(&self, config: &ParseConfig) -> ParseResult<ExprClosure> {
         let s = self;
 
         let mut r = ExprClosure::default();
@@ -4592,7 +4602,7 @@ impl Parse {
             }
         }
         // body expr
-        r.expr = s.parse_expr()?;
+        r.expr = s.parse_expr_config(config)?;
 
         Ok(r)
     }
@@ -6057,11 +6067,23 @@ impl Parse {
                 };
 
                 let token = s.current();
-                if matches!(&token.code, T![,] | T![;]) {
-                    s.plusplus();
-                    let mut t = token.clone();
-                    t.code = T![,];
-                    r.t_comma = Some(t);
+                match &token.code {
+                    T![,] => {
+                        s.plusplus();
+                        r.t_comma = Some(token.clone());
+                    }
+                    T![;] => {
+                        s.plusplus();
+                        if !matches!(&s.current().code, T!["}"]) {
+                            return Err(s.panic(token,
+                                &format!("expected }} but got {:?}", token)));
+                        }
+                    }
+                    T!["}"] => {}
+                    _ => {
+                        return Err(s.panic(token,
+                            &format!("expected ',', }} but got {:?}", token)));
+                    }
                 }
 
                 Ok(PatternStructItem::Field(r))

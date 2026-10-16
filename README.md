@@ -472,8 +472,7 @@ example
 - **allow semicolon(;) as separators in addition to comma(,) in multi-line pairs**
 
     - use
-    - struct related expr, pattern, declaration
-    - enum and union declaration
+    - struct, enum, union declaration
 
 ```
 example
@@ -493,18 +492,6 @@ example
         name String
         age i32
         desc String
-    }
-
-    a := Person {
-        name: "a"s
-        age: 20
-        ,,
-    }
-
-    a -> Person {
-        name
-        age
-        ,,
     }
 
     Code enum {
