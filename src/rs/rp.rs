@@ -472,6 +472,7 @@ impl Parse {
             // parse stmt expr
             let mut config = ParseConfig::default();
             config.may_end_with_semicolon = true;
+            config.stop_on_block_expr = true;
             let mut expr = s.parse_expr_config(&config)?;
             expr.outer_attrs = outer_attrs;
 
