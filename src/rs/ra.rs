@@ -461,7 +461,7 @@ pub struct Func {
     pub t_paren_close: Token,
     pub t_first_after_paren: Token,
     pub t_first: Token,
-    pub show_backslash_after_paren: bool,
+    pub show_arrow: bool,
 }
 impl ToLang for Func {
     fn to_u(&self, p: &mut LangFormatter) {
@@ -622,13 +622,16 @@ impl ToLang for Func {
 
         // return type
         if let Some((t, return_type)) = &s.return_type {
-            if s.show_backslash_after_paren {
-                p.push_raw("\\");
+            if s.show_arrow {
+                t.to_u_before(p);
+                p.push_raw(":");
+                return_type.to_u(p);
+            } else {
+                t.to_u_before(p);
+                p.no_first_before = true;
+                return_type.to_u(p);
+                p.no_first_before = false;
             }
-            t.to_u_before(p);
-            p.no_first_before = true;
-            return_type.to_u(p);
-            p.no_first_before = false;
         }
 
         // where
@@ -1423,29 +1426,25 @@ impl ToLang for MacroCall {
             }
             MacroCallBody::Expr(list) => {
                 // call!{} to call_{} directly
-                // call!{a} to call_{a} directly
-                if list.len() < 2 {
+                if list.is_empty() {
                     s.t_delim_open.to_u(p);
-                    for (it, show_comma) in list {
-                        it.to_u(p);
-                        if *show_comma {
-                            p.push_raw(",");
-                        }
-                    }
                     s.t_delim_close.to_u(p);
                     return;
                 }
 
-                s.t_delim_open.to_u_before(p);
                 match s.delim {
                     MacroCallDelim::Paren => {
+                        s.t_delim_open.to_u_before(p);
                         p.push_raw("(");
                     }
                     MacroCallDelim::Square => {
+                        s.t_delim_open.to_u_before(p);
                         p.push_raw("[");
                     }
                     MacroCallDelim::Brace => {
-                        p.push_raw("\"{}\"(");
+                        p.push_raw("\"{}\"");
+                        s.t_delim_open.to_u_before(p);
+                        p.push_raw("(");
                     }
                 }
 

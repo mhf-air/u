@@ -788,6 +788,29 @@ impl Parse {
                 T!["}"] => {
                     break;
                 }
+                T!["{"] => {
+                    // macro_{}
+                    if start >= 2 {
+                        let t_minus = &s.tokens[start - 2].code;
+                        if matches!(t_minus, T![_]) {
+                            start = s.skip_pair(start - 1)?;
+                            continue;
+                        }
+                        // macro_"()"{}
+                        if start >= 3 {
+                            if matches!(t_minus, TokenCode::Literal(Literal {
+                                payload: LiteralPayload::String(_),
+                                ..
+                            }))
+                                && matches!(&s.tokens[start - 3].code, T![_])
+                            {
+                                start = s.skip_pair(start - 1)?;
+                                continue;
+                            }
+                        }
+                    }
+                    break;
+                }
 
                 TokenCode::Pair(_) => {
                     start = s.skip_pair(start - 1)?;
@@ -797,18 +820,7 @@ impl Parse {
                     break;
                 }
 
-                T![_]
-                | T![=]
-                | T![+=]
-                | T![~=]
-                | T![*=]
-                | T![/=]
-                | T![%=]
-                | T![&=]
-                | T![|=]
-                | T![^=]
-                | T![<<=]
-                | T![>>=] => {
+                TokenCode::Assign(_) => {
                     break;
                 }
 
@@ -1795,8 +1807,7 @@ impl Parse {
             T![where] => {}
             T!["{"] => (),
             _ => {
-                if let TokenCode::Literal(lit) = &token.code &&
-                        let LiteralPayload::String(_)= lit.payload {
+                if matches!(&token.code, T![:]) {
                     r.t_arrow = Some(token.clone());
                     s.plusplus();
                 }
@@ -2353,6 +2364,10 @@ impl Parse {
 
         let type_ = s.parse_type()?;
 
+        if matches!(&s.current().code, T![;]) {
+            s.plusplus();
+        }
+
         if matches!(&s.current().code, T![for]) {
             if let TypePayload::TypeNoBounds(a) = type_.payload &&
                     let TypeNoBounds::TypePath(b) = *a {
@@ -2364,6 +2379,9 @@ impl Parse {
             s.plusplus();
             r.type_ = s.parse_type()?;
             r.payload = ImplPayload::Trait(impl_trait);
+            if matches!(&s.current().code, T![;]) {
+                s.plusplus();
+            }
         } else {
             r.type_ = type_;
             r.payload = ImplPayload::Static;

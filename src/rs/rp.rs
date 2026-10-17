@@ -1509,7 +1509,7 @@ impl Parse {
             let t_last = s.current();
             s.plusplus();
             if t_last.span.end_line != token.span.line {
-                r.show_backslash_after_paren = true;
+                r.show_arrow = true;
             }
 
             s.plusplus();
@@ -3423,7 +3423,7 @@ impl Parse {
             match &token.code {
                 // Expr = Expr
                 T![=] => {
-                    let right = s.parse_expr()?;
+                    let right = s.parse_expr_config(config)?;
                     r.payload = ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
                         ExprOperator::Assignment(ExprAssignment {
                             op: token.clone(),
@@ -3444,7 +3444,7 @@ impl Parse {
                 | T![^=]
                 | T![<<=]
                 | T![>>=] => {
-                    let right = s.parse_expr()?;
+                    let right = s.parse_expr_config(config)?;
                     r.payload = ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
                         ExprOperator::CompoundAssignment(ExprCompoundAssignment {
                             op: token.clone(),
