@@ -1391,6 +1391,7 @@ impl Token {
                     Op::Backslash => "",
 
                     Op::UComaComma => "::",
+                    Op::UUnderscore => "_",
                 }
             }
             TokenCode::Pair(pair) => {
@@ -1970,6 +1971,7 @@ pub enum Op {
     Backslash,
 
     UComaComma,
+    UUnderscore,
 }
 
 impl fmt::Debug for Op {
@@ -2017,6 +2019,7 @@ impl fmt::Debug for Op {
             Self::Backslash => write!(f, "\\"),
 
             Self::UComaComma => write!(f, "::"),
+            Self::UUnderscore => write!(f, "_"),
         }
     }
 }
@@ -2191,5 +2194,6 @@ macro_rules! T {
 	[ "#![" ] => { TokenCode::Pair(Pair::InnerAttr) };
 
 	[ "u:::" ] => { TokenCode::Op(Op::UComaComma) };
+	[ "u:_" ] => { TokenCode::Op(Op::UUnderscore) };
 }
 pub(crate) use T;

@@ -155,7 +155,7 @@ example
 
     note: write semicolons in macro definitions, as in regular Rust code
 
-    side effect: use "_ Expr" as the result expression.
+    side effect: use "Expr\" as the result expression.
 
 ```
 example
@@ -520,7 +520,7 @@ example
     and easier to read(I find ! very disturbing if not used for exclamation)
 
     write pure Rust in macro definitions and macro invocations that are random tokens.
-    except identifiers and "~" and "~=".
+    except identifiers and "~" and "~=", and use '_' not '-'.
 
     note: don't support custom_"stmt"{}, because such case is rare, and it's complicated
     to implement

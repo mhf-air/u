@@ -1518,7 +1518,13 @@ fn transform_macro_tokens(tokens: &[Token]) -> Vec<Token> {
             T![..] => T![,,],
             T![..=] => T![,,=],
             T![::] => T!["u:::"],
-            _ => t.code,
+            _ => {
+                if it.u == "_" {
+                    T!["u:_"]
+                } else {
+                    t.code
+                }
+            }
         };
         r.push(t);
     }

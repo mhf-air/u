@@ -1627,8 +1627,8 @@ impl Token {
                     Op::Star => "*",
                     Op::Div => "/",
                     Op::Rem => "%",
-                    Op::PlusPlus => "+= 1",
-                    Op::MinusMinus => "-= 1",
+                    Op::PlusPlus => "++",
+                    Op::MinusMinus => "--",
                     Op::Eq => "==",
                     Op::Neq => "!=",
                     Op::Less => "<",
@@ -1664,6 +1664,7 @@ impl Token {
                     Op::Backslash => "",
 
                     Op::RsDotDot => "..",
+                    Op::RsUnderscore => "_",
                 }
             }
             TokenCode::Pair(pair) => {
@@ -2376,6 +2377,7 @@ pub enum Op {
     Backslash,
 
     RsDotDot,
+    RsUnderscore,
 }
 
 impl fmt::Debug for Op {
@@ -2423,6 +2425,7 @@ impl fmt::Debug for Op {
             Self::Backslash => write!(f, "\\"),
 
             Self::RsDotDot => write!(f, ".."),
+            Self::RsUnderscore => write!(f, "_"),
         }
     }
 }
@@ -2606,6 +2609,7 @@ macro_rules! T {
 	[ "rs:macro" ] => { TokenCode::Keyword(Keyword::RsMacro) };
 	[ "rs:ret" ] => { TokenCode::Keyword(Keyword::RsRet) };
 	[ "rs:.." ] => { TokenCode::Op(Op::RsDotDot) };
+	[ "rs:_" ] => { TokenCode::Op(Op::RsUnderscore) };
 	[ "rs:[" ] => { TokenCode::Pair(Pair::RsSquareOpen) };
 	[ "rs:]" ] => { TokenCode::Pair(Pair::RsSquareClose) };
 }

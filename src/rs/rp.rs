@@ -1215,8 +1215,34 @@ impl Parse {
                 break;
             }
             let stmt = s.parse_stmt(r.items.len())?;
-            let Stmt::Item(item) = stmt else {
-                return Err(s.panic(token, "expected Item"));
+            let item = match stmt {
+                Stmt::Item(a) => {
+                    a
+                }
+                Stmt::Value(a) => {
+                    let is_macro_call = match &a.expr.payload {
+                        ExprPayload::WithoutBlock(b) => {
+                            if matches!(b.as_ref(), ExprWithoutBlock::MacroCall(_)) {
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        _ => {
+                            false
+                        }
+                    };
+                    if !is_macro_call {
+                        return Err(s.panic(token, "expected Item"));
+                    }
+                    Item {
+                        outer_attrs: Attrs::default(),
+                        payload: ItemPayload::MacroCall(a.expr),
+                    }
+                }
+                _ => {
+                    return Err(s.panic(token, "expected Item"));
+                }
             };
             r.items.push(item);
 
@@ -1327,7 +1353,7 @@ impl Parse {
                 s.plusplus();
                 match &token.code {
                     T![,] => {
-                        let next_token = s.nth(1);
+                        let next_token = s.current();
                         let show_comma = next_token.span.line == token.span.line;
                         r.items.push((it, show_comma));
                         let token = s.current();
