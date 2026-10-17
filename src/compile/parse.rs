@@ -1341,6 +1341,12 @@ impl Parse {
         let mut r = TraitBound::default();
 
         let token = s.current();
+        if matches!(&token.code, T!["("]) {
+            r.t_paren_open = Some(token.clone());
+            s.plusplus();
+        }
+
+        let token = s.current();
         if matches!(&token.code, T![?]) {
             r.t_unsized = Some(token.clone());
             s.plusplus();
@@ -1353,6 +1359,12 @@ impl Parse {
         }
 
         r.type_path = s.parse_type_path()?;
+
+        let token = s.current();
+        if r.t_paren_open.is_some() {
+            r.t_paren_close = Some(token.clone());
+            s.expect(T![")"])?;
+        }
 
         Ok(r)
     }

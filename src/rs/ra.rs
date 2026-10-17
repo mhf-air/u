@@ -1919,11 +1919,17 @@ pub struct TraitBound {
     pub t_unsized: Option<Token>,
     pub for_lifetimes: Option<ForLifetimes>,
     pub type_path: TypePath,
+
+    pub t_paren_open: Option<Token>,
+    pub t_paren_close: Option<Token>,
 }
 impl ToLang for TraitBound {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
+        if let Some(t) = &s.t_paren_open {
+            t.to_u(p);
+        }
         if let Some(t) = &s.t_unsized {
             t.to_u(p);
         }
@@ -1931,6 +1937,9 @@ impl ToLang for TraitBound {
             for_.to_u(p);
         }
         s.type_path.to_u(p);
+        if let Some(t) = &s.t_paren_close {
+            t.to_u(p);
+        }
     }
 }
 
