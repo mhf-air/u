@@ -232,38 +232,104 @@ impl Lex {
         //      use+ *
         //      use^ *
         //      use+(super) *
-        //      use+(in crate..path) *
+        //      use+(in crate..path) path..*
         fn add_semicolon_after_star(s: &Lex) -> bool {
-            let mut i = s.tokens.len() - 2;
-            let ch = &s.tokens[i];
-            if matches!(&ch.code, T![..] | T![use] | T![+] | T![^]) {
-                return true;
-            }
-            if !matches!(&ch.code, T![")"]) {
+            if s.tokens.len() < 2 {
                 return false;
             }
+            let mut i = s.tokens.len() - 2;
+
+            // path..*
             loop {
-                if i == 0 {
-                    return false;
-                }
-                i -= 1;
-                let ch = &s.tokens[i];
-                if !matches!(
-                    &ch.code,
-                    T![use] | T![+] | T![in] | T!["("] | T![")"] | T![..] |
-                    T![super] | T![self] | T![crate] | TokenCode::Identifier(_),
+                if matches!(
+                    &s.tokens[i].code,
+                    T![..] | T![super] | T![self] | T![crate] | TokenCode::Identifier(_),
                 ) {
-                    return false;
-                }
-                if !matches!(&ch.code, T!["("]) {
+                    if i == 0 {
+                        return false;
+                    }
+                    i -= 1;
                     continue;
                 }
-                if i <= 1 {
+                break;
+            }
+
+            match &s.tokens[i].code {
+                // ( )
+                T![")"] => {
+                    if i == 0 {
+                        return false;
+                    }
+                    i -= 1;
+                    loop {
+                        if i == 0 {
+                            return false;
+                        }
+                        if matches!(
+                            &s.tokens[i].code,
+                            T![..] | T![super] | T![self] | T![crate] | TokenCode::Identifier(_),
+                        ) {
+                            if i == 0 {
+                                return false;
+                            }
+                            i -= 1;
+                            continue;
+                        }
+                        break;
+                    }
+
+                    match &s.tokens[i].code {
+                        T!["("] => {
+                            if i == 0 {
+                                return false;
+                            }
+                            i -= 1;
+                        }
+                        T![in] => {
+                            if i == 0 {
+                                return false;
+                            }
+                            i -= 1;
+                            if !matches!(&s.tokens[i].code, T!["("]) {
+                                return false;
+                            }
+                            if i == 0 {
+                                return false;
+                            }
+                            i -= 1;
+                        }
+                        _ => {
+                            return false;
+                        }
+                    }
+                    if !matches!(&s.tokens[i].code, T![+]) {
+                        return false;
+                    }
+                    if i == 0 {
+                        return false;
+                    }
+                    i -= 1;
+                    if !matches!(&s.tokens[i].code, T![use]) {
+                        return false;
+                    }
+                    return true;
+                }
+                T![^] | T![+] => {
+                    if i == 0 {
+                        return false;
+                    }
+                    i -= 1;
+                    if !matches!(&s.tokens[i].code, T![use]) {
+                        return false;
+                    }
+                    return true;
+                }
+                T![use] => {
+                    return true;
+                }
+                _ => {
                     return false;
                 }
-                let ch1 = &s.tokens[i];
-                let ch2 = &s.tokens[i - 1];
-                return matches!(&ch1.code, T![+]) && matches!(&ch2.code, T![use]);
             }
         }
     }

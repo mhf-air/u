@@ -21,24 +21,24 @@ extern crate std as ruststd
 extern crate foo as -
 
 use {
-    crate..a
-    crate..a..*
-    super..a
-    self..a
-    -..crate-abc..a
+    crate..a,
+    crate..a..*,
+    super..a,
+    self..a,
+    -..crate-abc..a,
 
-    std
-    std..env
-    std..env..consts as env-consts
-    super..Api-result as Result
-    std..option..{ Option, Option..Some, Option..None as nil }
+    std,
+    std..env,
+    std..env..consts as env-consts,
+    super..Api-result as Result,
+    std..option..{ Option, Option..Some, Option..None as nil },
     astd..option..{
         Option {
-            self
-            Some
-            None as nil
-        }
-    }
+            self,
+            Some,
+            None as nil,
+        },
+    },
 }
 
 use+ crate..a

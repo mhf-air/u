@@ -473,7 +473,6 @@ example
 
 - **allow semicolon(;) as separators in addition to comma(,) in multi-line pairs**
 
-    - use
     - struct, enum, union declaration
 
 ```

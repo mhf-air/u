@@ -1454,27 +1454,24 @@ impl Parse {
         fn parse_use_item(s: &Parse) -> ParseResult<UseItem> {
             let mut r = UseItem::default();
 
-            let token = s.current();
-            if matches!(&token.code, T!["{"]) {
-                r.sub = Some(parse_use_item_sub(s)?);
-                return Ok(r);
-            }
-
             // identifier
             while s.has_more() {
                 let token = s.current();
-                if matches!(&token.code, T![as]) {
-                    s.plusplus();
-                    r.alias = Some((token.clone(), s.current().clone()));
-                    s.plusplus(); // identifier
-                    return Ok(r);
-                }
-                if matches!(&token.code, T![;] | T![,] | T!["}"]) {
-                    return Ok(r);
-                }
-                if matches!(&token.code, T!["{"]) {
-                    r.sub = Some(parse_use_item_sub(s)?);
-                    return Ok(r);
+                match &token.code {
+                    T![as] => {
+                        s.plusplus();
+                        r.alias = Some((token.clone(), s.current().clone()));
+                        s.plusplus(); // identifier
+                        return Ok(r);
+                    }
+                    T![;] | T![,] | T!["}"] => {
+                        return Ok(r);
+                    }
+                    T!["{"] => {
+                        r.sub = Some(parse_use_item_sub(s)?);
+                        return Ok(r);
+                    }
+                    _ => {}
                 }
                 s.plusplus();
                 r.paths.push(token.clone());
@@ -1503,34 +1500,36 @@ impl Parse {
                 let it = parse_use_item(s)?;
 
                 let token = s.current();
-                s.plusplus();
                 match &token.code {
                     T![,] => {
+                        s.plusplus();
                         r.items.push((it, Some(token.clone())));
                         let token = s.current();
                         if matches!(&token.code, T!["}"]) {
-                            r.t_brace_close = token.clone();
                             s.plusplus();
+                            r.t_brace_close = token.clone();
                             return Ok(r);
                         }
                     }
                     T![;] => {
-                        let mut t = token.clone();
-                        t.code = T![,];
-                        r.items.push((it, Some(t)));
+                        s.plusplus();
+                        r.items.push((it, None));
                         let token = s.current();
-                        if matches!(&token.code, T!["}"]) {
-                            r.t_brace_close = token.clone();
-                            s.plusplus();
-                            return Ok(r);
+                        if !matches!(&token.code, T!["}"]) {
+                            return Err(s.panic(token,
+                                &format!("expected ',' or '}}' but got {:?}", token)));
                         }
                     }
                     T!["}"] => {
                         r.items.push((it, None));
+                        s.plusplus();
                         r.t_brace_close = token.clone();
                         return Ok(r);
                     }
-                    _ => {}
+                    _ => {
+                        return Err(s.panic(token,
+                            &format!("expected ',' or '}}' but got {:?}", token)));
+                    }
                 }
             }
 

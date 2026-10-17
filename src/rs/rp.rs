@@ -1310,22 +1310,26 @@ impl Parse {
             // identifier
             while s.has_more() {
                 let token = s.current();
-                if matches!(&token.code, T![as]) {
-                    s.plusplus();
-                    r.alias = Some((token.clone(), s.current().clone()));
-                    s.plusplus(); // identifier
-                    return Ok(r);
-                }
-                if matches!(&token.code, T![;] | T![,] | T!["}"]) {
-                    return Ok(r);
-                }
-                if matches!(&token.code, T!["{"]) {
-                    r.sub = Some(parse_use_item_sub(s)?);
-                    return Ok(r);
+                match &token.code {
+                    T![as] => {
+                        s.plusplus();
+                        r.alias = Some((token.clone(), s.current().clone()));
+                        s.plusplus(); // identifier
+                        return Ok(r);
+                    }
+                    T![;] | T![,] | T!["}"] => {
+                        return Ok(r);
+                    }
+                    T!["{"] => {
+                        r.sub = Some(parse_use_item_sub(s)?);
+                        return Ok(r);
+                    }
+                    _ => {}
                 }
                 s.plusplus();
                 r.paths.push(token.clone());
             }
+
             // unreachable
             return Ok(r);
         }
@@ -1350,11 +1354,10 @@ impl Parse {
                 let it = parse_use_item(s)?;
 
                 let token = s.current();
-                s.plusplus();
                 match &token.code {
                     T![,] => {
-                        let next_token = s.current();
-                        let show_comma = next_token.span.line == token.span.line;
+                        s.plusplus();
+                        let show_comma = true;
                         r.items.push((it, show_comma));
                         let token = s.current();
                         if matches!(&token.code, T!["}"]) {
@@ -1364,11 +1367,14 @@ impl Parse {
                         }
                     }
                     T!["}"] => {
+                        s.plusplus();
                         r.items.push((it, false));
                         r.t_brace_close = token.clone();
                         return Ok(r);
                     }
-                    _ => {}
+                    _ => {
+                        return Err(s.panic(token, "illegal token in use"));
+                    }
                 }
             }
 
