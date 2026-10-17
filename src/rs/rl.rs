@@ -1159,6 +1159,7 @@ impl Lex {
                 '?' => s.add_token(TokenCode::Op(Op::Question), "?".to_owned()),
                 '@' => s.add_token(TokenCode::Op(Op::At), "@".to_owned()),
                 '$' => s.add_token(TokenCode::Op(Op::Dollar), "$".to_owned()),
+                '~' => s.add_token(TokenCode::Op(Op::Tilda), "~".to_owned()),
 
                 _ => return s.panic(&format!("illegal char: {}", ch)),
             }
@@ -1389,6 +1390,7 @@ impl Token {
                     Op::FatArrow => "=>",
                     Op::Dollar => "$",
                     Op::Backslash => "",
+                    Op::Tilda => "~_",
 
                     Op::UComaComma => "::",
                     Op::UUnderscore => "_",
@@ -1969,6 +1971,7 @@ pub enum Op {
     FatArrow,
     Dollar,
     Backslash,
+    Tilda,
 
     UComaComma,
     UUnderscore,
@@ -1978,7 +1981,7 @@ impl fmt::Debug for Op {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Self::Add => write!(f, "+"),
-            Self::Sub => write!(f, "~"),
+            Self::Sub => write!(f, "-"),
             Self::Star => write!(f, "*"),
             Self::Div => write!(f, "/"),
             Self::Rem => write!(f, "%"),
@@ -2017,6 +2020,7 @@ impl fmt::Debug for Op {
             Self::FatArrow => write!(f, "=>"),
             Self::Dollar => write!(f, "$"),
             Self::Backslash => write!(f, "\\"),
+            Self::Tilda => write!(f, "~"),
 
             Self::UComaComma => write!(f, "::"),
             Self::UUnderscore => write!(f, "_"),
@@ -2166,6 +2170,7 @@ macro_rules! T {
 	[ => ] => { TokenCode::Op(Op::FatArrow) };
 	[ $ ] => { TokenCode::Op(Op::Dollar) };
 	[ "\\" ] => { TokenCode::Op(Op::Backslash) };
+	[ ~ ] => { TokenCode::Op(Op::Tilda) };
 
 	// assign
 	[ = ] => { TokenCode::Assign(Assign::Assign) };

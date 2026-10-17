@@ -1010,6 +1010,11 @@ impl Lex {
                             s.add_token(TokenCode::Assign(Assign::Sub), "~=".to_owned());
                             i += 1;
                         }
+                        // ~_
+                        '_' => {
+                            s.add_token(TokenCode::Op(Op::Tilda), "~_".to_owned());
+                            i += 1;
+                        }
                         // ~
                         _ => {
                             s.add_token(TokenCode::Op(Op::Sub), "~".to_owned());
@@ -1728,6 +1733,7 @@ impl Token {
                     Op::FatArrow => "=>",
                     Op::Dollar => "$",
                     Op::Backslash => "",
+                    Op::Tilda => "~",
 
                     Op::RsDotDot => "..",
                     Op::RsUnderscore => "_",
@@ -2441,6 +2447,7 @@ pub enum Op {
     FatArrow,
     Dollar,
     Backslash,
+    Tilda,
 
     RsDotDot,
     RsUnderscore,
@@ -2489,6 +2496,7 @@ impl fmt::Debug for Op {
             Self::FatArrow => write!(f, "=>"),
             Self::Dollar => write!(f, "$"),
             Self::Backslash => write!(f, "\\"),
+            Self::Tilda => write!(f, "~_"),
 
             Self::RsDotDot => write!(f, ".."),
             Self::RsUnderscore => write!(f, "_"),
@@ -2643,6 +2651,7 @@ macro_rules! T {
 	[ => ] => { TokenCode::Op(Op::FatArrow) };
 	[ $ ] => { TokenCode::Op(Op::Dollar) };
 	[ "\\" ] => { TokenCode::Op(Op::Backslash) };
+	[ "~_" ] => { TokenCode::Op(Op::Tilda) };
 
 	// assign
 	[ = ] => { TokenCode::Assign(Assign::Assign) };

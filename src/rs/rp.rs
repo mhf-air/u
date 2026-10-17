@@ -2584,12 +2584,31 @@ impl Parse {
         fn parse_exprs(s: &Parse, delim_close: &Pair) -> ParseResult<Vec<(Expr, bool)>> {
             let mut r = Vec::new();
 
+            // check for consecutive --
+            let i_cur = s.index.get();
+            let start = s.skip_pair(i_cur)?;
+            let tokens: Vec<Token> = s.tokens[i_cur + 1..start - 1].to_vec();
+            let mut has_minus = false;
+            for it in &tokens {
+                if matches!(it.code, T![-]) {
+                    if has_minus {
+                        if it.tokens_before.is_empty() {
+                            return Err(s.panic(it, "--"));
+                        }
+                    } else {
+                        has_minus = true;
+                    }
+                } else {
+                    has_minus = false;
+                }
+            }
+
             s.plusplus();
 
             while s.has_more() {
                 let token = s.current();
                 if let TokenCode::Pair(pair) = &token.code && *pair == *delim_close {
-                    return Ok(r);
+                    break;
                 }
 
                 let expr = s.parse_expr()?;
