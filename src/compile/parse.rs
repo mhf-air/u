@@ -916,6 +916,7 @@ impl Parse {
                 s.plusplus();
                 return Ok(Visibility {
                     payload: VisibilityPayload::Crate,
+                    t_pub: Some(plus_token.clone()),
                 });
             }
             _ => {
@@ -925,14 +926,14 @@ impl Parse {
 
         // +
         if !matches!(s.current().code, T!["("]) {
-            return pub_vis();
+            return pub_vis(plus_token);
         };
 
         // the token after '+('
         let token = s.nth(1);
         // + ()
         if matches!(token.code, T![")"]) {
-            return pub_vis();
+            return pub_vis(plus_token);
         }
 
         // +(sth)
@@ -941,18 +942,22 @@ impl Parse {
             let r = match token.code {
                 T![self] => Visibility {
                     payload: VisibilityPayload::Private(true),
+                    t_pub: Some(plus_token.clone()),
                 },
                 T![super] => Visibility {
                     payload: VisibilityPayload::Super,
+                    t_pub: Some(plus_token.clone()),
                 },
                 T![crate] => Visibility {
                     payload: VisibilityPayload::Crate,
+                    t_pub: Some(plus_token.clone()),
                 },
                 _ => {
                     // not part of +()
                     s.dec(3);
                     Visibility {
                         payload: VisibilityPayload::Pub,
+                        t_pub: Some(plus_token.clone()),
                     }
                 }
             };
@@ -977,15 +982,17 @@ impl Parse {
             s.plusplus();
             let r = Visibility {
                 payload: VisibilityPayload::SimplePath(path),
+                t_pub: Some(plus_token.clone()),
             };
             return Ok(r);
         }
 
-        return pub_vis();
+        return pub_vis(plus_token);
 
-        fn pub_vis() -> ParseResult<Visibility> {
+        fn pub_vis(plus_token: &Token) -> ParseResult<Visibility> {
             return Ok(Visibility {
                 payload: VisibilityPayload::Pub,
+                t_pub: Some(plus_token.clone()),
             });
         }
     }
@@ -2274,6 +2281,10 @@ impl Parse {
             r.where_ = Some(s.parse_where()?);
         }
 
+        if matches!(&s.current().code, T![;]) {
+            s.plusplus();
+        }
+
         r.t_brace_open = s.current().clone();
         s.expect(T!["{"])?;
         r.inner_attrs = s.parse_inner_attrs()?;
@@ -2354,6 +2365,9 @@ impl Parse {
         let token = s.current();
         if matches!(&token.code, T!["["]) {
             r.generics = Some(s.parse_generics()?);
+            if matches!(&s.current().code, T![;]) {
+                s.plusplus();
+            }
         }
 
         let token = s.current();
@@ -5354,11 +5368,24 @@ impl Parse {
             let arg = parse_generic_arg(s)?;
 
             let token = s.current();
-            let t_comma = if matches!(&token.code, T![,]) {
-                s.plusplus();
-                Some(token.clone())
-            } else {
-                None
+            let t_comma = match &token.code {
+                T![,] => {
+                    s.plusplus();
+                    Some(token.clone())
+                }
+                T![;] => {
+                    s.plusplus();
+                    if !matches!(&s.current().code, T!["]"]) {
+                        return Err(s.panic(token,
+                            &format!("expected ] but got {:?}", token)));
+                    }
+                    None
+                }
+                T!["]"] => None,
+                _ => {
+                    return Err(s.panic(token,
+                        &format!("expected , or ] but got {:?}", token)));
+                }
             };
 
             r.items.push((arg, t_comma));

@@ -197,6 +197,7 @@ impl Package {
 #[derive(Debug, Default)]
 pub struct Visibility {
     pub payload: VisibilityPayload,
+    pub t_pub: Option<Token>,
 }
 #[derive(Debug)]
 pub enum VisibilityPayload {
@@ -930,6 +931,9 @@ impl ToLang for TupleField {
         let s = self;
 
         s.outer_attrs.to_rs(p);
+        if let Some(t) = &s.vis.t_pub {
+            t.to_rs_before(p);
+        }
         s.vis.to_rs_custom(p, false);
         s.type_.to_rs(p);
         if let Some(t) = &s.t_comma {

@@ -474,8 +474,12 @@ impl Lex {
                         i = delta;
                         break;
                     }
-                    // no digit after INT. translates to INT
-                    if i == new_i {
+                    // INT.a translates to INT . a
+                    // INT.. translates to INT ..
+                    if i == new_i && (
+                        (s.chars[i].is_alphabetic() || s.chars[i] == '_')
+                        || s.chars[i] == '.'
+                    ) {
                         let u = s.sub_str(start, i - 1);
                         s.add_token(TokenCode::Literal(Literal {
                             payload: LiteralPayload::Int(u.clone()),
@@ -1471,7 +1475,7 @@ impl Literal {
             LiteralPayload::String(a) => &a.to_u_string(),
             LiteralPayload::Char(a) => &a.to_u_string(),
             LiteralPayload::Int(a) => a,
-            LiteralPayload::Float(a) => a,
+            LiteralPayload::Float(a) => &a.replace("-", "~"),
             LiteralPayload::Bool(a) => a,
         };
         r.push_str(a);

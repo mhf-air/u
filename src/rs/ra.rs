@@ -932,14 +932,25 @@ pub struct TupleField {
     pub vis: Visibility,
     pub type_: Type,
     pub t_comma: Option<Token>,
+    pub t_first_in_type: Token,
 }
 impl ToLang for TupleField {
     fn to_u(&self, p: &mut LangFormatter) {
         let s = self;
 
         s.outer_attrs.to_u(p);
-        s.vis.to_u(p);
-        s.type_.to_u(p);
+
+        if let Some(t) = &s.vis.t_pub {
+            t.to_u_before(p);
+            s.vis.to_u(p);
+            s.type_.to_u(p);
+        } else {
+            s.t_first_in_type.to_u_before(p);
+            p.no_first_before = true;
+            s.type_.to_u(p);
+            p.no_first_before = false;
+        }
+
         if let Some(t) = &s.t_comma {
             t.to_u(p);
         }

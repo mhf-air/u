@@ -887,8 +887,8 @@ impl Parse {
             r.params.push(param);
 
             let token = s.current();
-            s.plusplus();
             if matches!(&token.code, T![>]) {
+                s.plusplus();
                 r.t_square_close = token.clone();
                 r.t_square_close.code = T!["]"];
                 break;
@@ -941,6 +941,7 @@ impl Parse {
             }
             if matches!(&token.code, T![,]) {
                 r.t_comma = Some(token.clone());
+                s.plusplus();
                 return Ok(r);
             }
 
@@ -1944,6 +1945,7 @@ impl Parse {
 
             let outer_attrs = s.parse_outer_attrs()?;
             let vis = s.parse_vis()?;
+            let t_first_in_type = s.current().clone();
             let type_ = s.parse_type()?;
 
             let token = s.current();
@@ -1961,6 +1963,7 @@ impl Parse {
                 vis,
                 type_,
                 t_comma,
+                t_first_in_type,
             });
         }
 
