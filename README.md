@@ -337,30 +337,32 @@ example
 ```
 example
 
-    a :=;
-    a i32 :=;
     a := 1
     a i32 := 1
 
-    a mut :=;
-    a mut i32 :=;
     a mut := 1
     a mut i32 := 1
 
-    a fn(i32, ...) :=;
+    let a
+    let a: i32
+    let mut a
+    let mut a: i32
+    let (a, b, c)
+    let a: fn(i32, ...)
 
 becomes
 
-    let a;
-    let a: i32;
     let a = 1;
     let a: i32 = 1;
 
-    let mut a;
-    let mut a: i32;
     let mut a = 1;
     let mut a: i32 = 1;
 
+    let a;
+    let a: i32;
+    let mut a;
+    let mut a: i32;
+    let (a, b, c);
     let a: fn(i32, ...);
 
 ```

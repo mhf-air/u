@@ -3232,6 +3232,12 @@ impl ToLang for StmtLet {
         }
 
         let Some(expr) = &s.expr else {
+            p.push_raw("let");
+            s.pattern.to_u(p);
+            if let Some(type_) = &s.type_ {
+                p.push_raw(":");
+                type_.to_u(p);
+            }
             return;
         };
 

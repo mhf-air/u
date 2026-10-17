@@ -3014,6 +3014,9 @@ impl Parse {
         }
         let token = s.current();
         if matches!(token.code, T![;]) {
+            if r.short.is_some() {
+                r.short = None;
+            }
             return Ok(r);
         }
 

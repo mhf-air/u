@@ -141,7 +141,6 @@ impl Lex {
                 matches!(a,
                     Keyword::As
                     | Keyword::Else
-                    | Keyword::Let
                     | Keyword::In
                     | Keyword::Where
                 )

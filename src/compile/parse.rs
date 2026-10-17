@@ -544,8 +544,13 @@ impl Parse {
         let stmt: Stmt;
         let special_token = first_special_token.unwrap();
         match &special_token.code {
-            T![:=] => {
+            T![let] => {
                 let mut a = s.parse_let()?;
+                a.outer_attrs = outer_attrs;
+                stmt = Stmt::Let(a);
+            }
+            T![:=] => {
+                let mut a = s.parse_short_let()?;
                 a.outer_attrs = outer_attrs;
                 stmt = Stmt::Let(a);
             }
@@ -3247,8 +3252,30 @@ impl Parse {
         }
     }
 
-    // NAME mut? Type? := [;|Expr]?
+    // let Pattern: Type
     fn parse_let(&self) -> ParseResult<StmtLet> {
+        let s = self;
+
+        let mut r = StmtLet::default();
+        r.t_let = Some(s.current().clone());
+        s.plusplus();
+
+        r.t_first_in_pattern = Some(s.current().clone());
+        let pat = s.parse_pattern_no_top_alt()?;
+        r.pattern = Pattern {
+            items: vec![(pat, None)],
+        };
+
+        if matches!(&s.current().code, T![:]) {
+            s.plusplus();
+            r.type_ = Some(s.parse_type()?);
+        }
+
+        Ok(r)
+    }
+
+    // NAME mut? Type? := [;|Expr]?
+    fn parse_short_let(&self) -> ParseResult<StmtLet> {
         let s = self;
 
         let t_name = s.current().clone();
@@ -3275,10 +3302,6 @@ impl Parse {
         r.t_eq = s.current().clone();
         s.expect(T![:=])?;
 
-        let token = s.current();
-        if matches!(token.code, T![;]) {
-            return Ok(r);
-        }
         let mut config = ParseConfig::default();
         config.may_end_with_semicolon = true;
         r.expr = Some(s.parse_expr_config(&config)?);

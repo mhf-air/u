@@ -3080,6 +3080,7 @@ pub struct StmtLet {
     pub t_eq: Token,
     pub t_first_in_pattern: Option<Token>,
     pub t_first_in_expr: Option<Token>,
+    pub t_let: Option<Token>,
 }
 impl ToLang for StmtLet {
     fn to_rs(&self, p: &mut LangFormatter) {
@@ -3089,10 +3090,10 @@ impl ToLang for StmtLet {
 
         if let Some((name, _)) = &s.short {
             name.to_rs_before(p);
+        } else if let Some(t) = &s.t_first_in_expr {
+            t.to_rs_before(p);
         } else {
-            if let Some(t) = &s.t_first_in_expr {
-                t.to_rs_before(p);
-            }
+            s.t_let.as_ref().unwrap().to_rs_before(p);
         }
 
         // NOTE not considering the case when "let" is followed by new line
