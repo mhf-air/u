@@ -973,13 +973,22 @@ impl Lex {
                     match next_ch {
                         // <=
                         '=' => {
-                            s.add_token(TokenCode::Op(Op::LessEq), "<=".to_owned());
+                            // s.add_token(TokenCode::Op(Op::LessEq), "<=".to_owned());
+                            // i += 1;
+
+                            s.add_token(TokenCode::Op(Op::Less), "<".to_owned());
+                            s.add_token(TokenCode::Assign(Assign::Assign), "=".to_owned());
                             i += 1;
                         }
                         '<' => {
                             if i + 2 < total_len && s.chars[i + 2] == '=' {
                                 // <<=
-                                s.add_token(TokenCode::Assign(Assign::LeftShift), "<<=".to_owned());
+                                // s.add_token(TokenCode::Assign(Assign::LeftShift), "<<=".to_owned());
+                                // i += 2;
+
+                                s.add_token(TokenCode::Op(Op::Less), "<".to_owned());
+                                s.add_token(TokenCode::Op(Op::Less), "<".to_owned());
+                                s.add_token(TokenCode::Assign(Assign::Assign), "=".to_owned());
                                 i += 2;
                             } else {
                                 // // <<
@@ -1009,13 +1018,22 @@ impl Lex {
                     match next_ch {
                         // >=
                         '=' => {
-                            s.add_token(TokenCode::Op(Op::GreaterEq), ">=".to_owned());
+                            // s.add_token(TokenCode::Op(Op::GreaterEq), ">=".to_owned());
+                            // i += 1;
+
+                            s.add_token(TokenCode::Op(Op::Greater), ">".to_owned());
+                            s.add_token(TokenCode::Assign(Assign::Assign), "=".to_owned());
                             i += 1;
                         }
                         '>' => {
                             if i + 2 < total_len && s.chars[i + 2] == '=' {
                                 // >>=
-                                s.add_token(TokenCode::Assign(Assign::RightShift), ">>=".to_owned());
+                                // s.add_token(TokenCode::Assign(Assign::RightShift), ">>=".to_owned());
+                                // i += 2;
+
+                                s.add_token(TokenCode::Op(Op::Greater), ">".to_owned());
+                                s.add_token(TokenCode::Op(Op::Greater), ">".to_owned());
+                                s.add_token(TokenCode::Assign(Assign::Assign), "=".to_owned());
                                 i += 2;
                             } else {
                                 // // >>

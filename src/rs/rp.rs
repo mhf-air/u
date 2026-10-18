@@ -3227,6 +3227,11 @@ impl Parse {
                                 let mut t = token.clone();
                                 t.code = T![>>];
                                 t
+                            } else if matches!(&t1.code, T![=]) {
+                                s.plusplus();
+                                let mut t = token.clone();
+                                t.code = T![>=];
+                                t
                             } else {
                                 token.clone()
                             }
@@ -3237,6 +3242,11 @@ impl Parse {
                                 s.plusplus();
                                 let mut t = token.clone();
                                 t.code = T![<<];
+                                t
+                            } else if matches!(&t1.code, T![=]) {
+                                s.plusplus();
+                                let mut t = token.clone();
+                                t.code = T![<=];
                                 t
                             } else {
                                 token.clone()
@@ -3561,6 +3571,62 @@ impl Parse {
                         }),
                     )));
                     break;
+                }
+                T![>] => {
+                    let mut is_assign = false;
+                    let t1 = s.current();
+                    if matches!(&t1.code, T![>]) {
+                        let t2 = s.nth(1);
+                        if matches!(&t2.code, T![=]) {
+                            is_assign = true;
+                        }
+                    }
+                    if is_assign {
+                        s.inc(2);
+                        let mut t = token.clone();
+                        t.code = T![>>=];
+                        let right = s.parse_expr_config(config)?;
+                        r.payload = ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
+                            ExprOperator::CompoundAssignment(ExprCompoundAssignment {
+                                op: t,
+                                left: expr,
+                                right,
+                            }),
+                        )));
+                        break;
+                    } else {
+                        s.minusminus();
+                        r = expr;
+                        break;
+                    }
+                }
+                T![<] => {
+                    let mut is_assign = false;
+                    let t1 = s.current();
+                    if matches!(&t1.code, T![<]) {
+                        let t2 = s.nth(1);
+                        if matches!(&t2.code, T![=]) {
+                            is_assign = true;
+                        }
+                    }
+                    if is_assign {
+                        s.inc(2);
+                        let mut t = token.clone();
+                        t.code = T![<<=];
+                        let right = s.parse_expr_config(config)?;
+                        r.payload = ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
+                            ExprOperator::CompoundAssignment(ExprCompoundAssignment {
+                                op: t,
+                                left: expr,
+                                right,
+                            }),
+                        )));
+                        break;
+                    } else {
+                        s.minusminus();
+                        r = expr;
+                        break;
+                    }
                 }
                 // compound assignment
                 T![+=]
