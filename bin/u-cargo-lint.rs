@@ -66,19 +66,21 @@ fn u_cargo_lint(args: Vec<String>) -> io::Result<()> {
                 span.byte_end = a.span.byte_end;
             }
 
-            let list: Vec<_> = span.file_name.split(".u/").collect();
-            if !span.file_name.starts_with('/') {
-                // relative path
-                span.file_name = list[0].replace(".rs", ".u");
-            } else {
+            if !span.file_name.ends_with(".rs") {
+                continue;
+            }
+
+            if span.file_name.starts_with('/') {
                 // absolute path
-                if list[0] != pwd_str {
+                if !span.file_name.starts_with(pwd_str) {
                     // skip lint messages from other crates
                     continue;
                 }
-                let relative = list[1].replace(".rs", ".u");
-                span.file_name = format!("{}{}", list[0], relative);
             }
+
+            let (dir, file_name) = span.file_name.rsplit_once('/').unwrap();
+            let u_file = format!(".{}.u", file_name.strip_suffix(".rs").unwrap());
+            span.file_name = format!("{}/{}", dir, u_file);
             // eprintln!("{}", span.file_name);
 
             let file = &mut span.file_name;
