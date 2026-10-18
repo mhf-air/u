@@ -504,9 +504,14 @@ impl Parse {
             }
 
             // expr
-            let semicolon_after = if matches!(&s.current().code, T![;]) {
+            let token = s.current();
+            let semicolon_after = if matches!(&token.code, T![;]) {
                 s.plusplus();
-                true
+                if token.span.end_line == s.current().span.line {
+                    true
+                } else {
+                    matches!(&expr.payload, ExprPayload::WithBlock(_))
+                }
             } else {
                 false
             };

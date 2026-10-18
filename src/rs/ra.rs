@@ -3309,9 +3309,7 @@ impl ToLang for StmtExpr {
         let s = self;
 
         s.expr.to_u(p);
-        if matches!(&s.expr.payload, ExprPayload::WithBlock(_))
-            && s.semicolon_after
-        {
+        if s.semicolon_after {
             p.push_raw(";");
         }
     }
