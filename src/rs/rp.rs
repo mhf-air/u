@@ -3455,6 +3455,12 @@ impl Parse {
                         }
 
                         T![..] => {
+                            let show_backslash =
+                                if config.may_end_with_semicolon {
+                                    show
+                                } else {
+                                    false
+                                };
                             let expr = Expr {
                                 outer_attrs: Attrs::default(),
                                 payload: ExprPayload::WithoutBlock(Box::new(
@@ -3462,12 +3468,19 @@ impl Parse {
                                         start: Some(left),
                                         end: Some(right),
                                         t_sep: op,
+                                        show_backslash,
                                     }),
                                 )),
                             };
                             r_list[index] = ExprOp::Expr(expr);
                         }
                         T![..=] => {
+                            let show_backslash =
+                                if config.may_end_with_semicolon {
+                                    show
+                                } else {
+                                    false
+                                };
                             let expr = Expr {
                                 outer_attrs: Attrs::default(),
                                 payload: ExprPayload::WithoutBlock(Box::new(
@@ -3475,6 +3488,7 @@ impl Parse {
                                         start: Some(left),
                                         end: Some(right),
                                         t_sep: op,
+                                        show_backslash,
                                     }),
                                 )),
                             };
@@ -3615,6 +3629,7 @@ impl Parse {
                                     start: Some(expr),
                                     end: None,
                                     t_sep: token.clone(),
+                                    show_backslash: false,
                                 },
                             ))),
                         };

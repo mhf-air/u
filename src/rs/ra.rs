@@ -4512,6 +4512,7 @@ pub struct ExprRange {
     pub end: Option<Expr>,
 
     pub t_sep: Token,
+    pub show_backslash: bool,
 }
 impl ToLang for ExprRange {
     fn to_u(&self, p: &mut LangFormatter) {
@@ -4519,6 +4520,9 @@ impl ToLang for ExprRange {
 
         if let Some(t) = &s.start {
             t.to_u(p);
+        }
+        if s.show_backslash {
+            p.push_raw("\\");
         }
         if p.no_first_before {
             p.no_first_before = false;

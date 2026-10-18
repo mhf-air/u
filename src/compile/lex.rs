@@ -863,6 +863,12 @@ impl Lex {
                 // string
                 '"' => {
                     let start = i;
+
+                    let is_raw = if let Some((prefix, _)) = &id_prefix {
+                        prefix.contains("r")
+                    } else {
+                        false
+                    };
                     let mut skip = false;
                     for delta in (start + 1)..total_len {
                         if skip {
@@ -871,7 +877,9 @@ impl Lex {
                         }
                         let c = s.chars[delta];
                         if c == '\\' {
-                            skip = true;
+                            if !is_raw {
+                                skip = true;
+                            }
                             continue;
                         }
                         if c == '"' {
