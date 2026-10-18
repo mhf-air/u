@@ -14,10 +14,10 @@ call ale#Set('u_cargo_clippy_options', '')
 call ale#Set('u_cargo_target_dir', '')
 
 function! ale_linters#u#u#GetCargoExecutable(bufnr) abort
-	if ale#path#FindNearestFile(a:bufnr, 'u.toml') isnot# ''
+	if ale#path#FindNearestFile(a:bufnr, 'Cargo.toml') isnot# ''
 		return 'u-cargo-lint'
 	else
-		" if there is no u.toml file, we don't use u even if it exists,
+		" if there is no Cargo.toml file, we don't use u even if it exists,
 		" so we return '', because executable('') apparently always fails
 		return ''
 	endif
@@ -25,7 +25,7 @@ endfunction
 
 function! ale_linters#u#u#GetCwd(buffer) abort
 	if ale#Var(a:buffer, 'u_cargo_avoid_whole_workspace')
-		let l:nearest_cargo = ale#path#FindNearestFile(a:buffer, 'u.toml')
+		let l:nearest_cargo = ale#path#FindNearestFile(a:buffer, 'Cargo.toml')
 		let l:nearest_cargo_dir = fnamemodify(l:nearest_cargo, ':h')
 
 		if l:nearest_cargo_dir isnot# '.'
