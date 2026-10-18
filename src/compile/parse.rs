@@ -2964,72 +2964,48 @@ impl Parse {
     fn parse_conditions(&self, is_match: bool) -> ParseResult<Conditions> {
         let s = self;
 
-        // find if the conditions contain ->
-        let mut is_let = false;
-        let mut start = s.index.get();
-        while start < s.tokens.len() {
-            let token = &s.tokens[start];
-            start += 1;
-            match &token.code {
-                T![:] => break,
-                T!["{"] => {
-                    // macro_{}
-                    if start >= 2 {
-                        let t_minus = &s.tokens[start - 2].code;
-                        if matches!(t_minus, T![_]) {
-                            start = s.skip_pair(start - 1)?;
-                            continue;
-                        }
-                        // macro_"()"{}
-                        if start >= 3 {
-                            if matches!(t_minus, TokenCode::Literal(Literal {
-                                payload: LiteralPayload::String(_),
-                                ..
-                            }))
-                                && matches!(&s.tokens[start - 3].code, T![_])
-                            {
-                                start = s.skip_pair(start - 1)?;
-                                continue;
-                            }
-                        }
+        let mut r = Vec::new();
+
+        // try parsing the expr directly first, if it fails, or the following token is ->,
+        // then you know it's let-chains
+        let save_state = s.save_state();
+        if is_match {
+            let a = s.parse_expr();
+            match a {
+                Ok(expr) => {
+                    if !matches!(&s.current().code, T![->]) {
+                        r.push((ConditionItem::Expr(expr), None));
+                        return Ok(Conditions {
+                            items: r,
+                        });
                     }
-
-                    if !is_match {
-                        break;
+                    s.restore_state(&save_state);
+                }
+                Err(_) => {
+                    s.restore_state(&save_state);
+                }
+            }
+        } else {
+            let mut config = ParseConfig::default();
+            config.stop_on_struct_brace = true;
+            let a = s.parse_expr_config(&config);
+            match a {
+                Ok(expr) => {
+                    if !matches!(&s.current().code, T![->]) {
+                        r.push((ConditionItem::Expr(expr), None));
+                        return Ok(Conditions {
+                            items: r,
+                        });
                     }
+                    s.restore_state(&save_state);
                 }
-
-                T![;] if s.magic => break,
-
-                TokenCode::Pair(_) => {
-                    start = s.skip_pair(start - 1)?;
+                Err(_) => {
+                    s.restore_state(&save_state);
                 }
-                T![->] => {
-                    is_let = true;
-                    break;
-                }
-
-                _ => (),
             }
         }
 
-        let mut r = Vec::new();
-
-        if !is_let {
-            let expr = if is_match {
-                s.parse_expr()?
-            } else {
-                let mut config = ParseConfig::default();
-                config.stop_on_struct_brace = true;
-                let expr = s.parse_expr_config(&config)?;
-                expr
-            };
-            r.push((ConditionItem::Expr(expr), None));
-            return Ok(Conditions {
-                items: r,
-            });
-        }
-
+        // let-chains
         loop {
             let outer_attrs = s.parse_outer_attrs()?;
 
@@ -3628,9 +3604,15 @@ impl Parse {
 
         let mut expr = s.parse_sub_expr(config)?;
 
-        if config.stop_on_block_expr {
-            if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
+        if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
+            let token = s.current();
+            if matches!(&token.code, T!["("]) {
                 return Ok(expr);
+            }
+            if !matches!(&token.code, T![.]) {
+                if config.stop_on_block_expr {
+                    return Ok(expr);
+                }
             }
         }
 

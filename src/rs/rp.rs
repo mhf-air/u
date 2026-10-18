@@ -2805,51 +2805,40 @@ impl Parse {
 
         // the only difference when is_match == true is it allows ExprStruct
 
-        // find if the conditions contain let
-        let mut is_let = false;
-        let mut start = s.index.get();
-        while start < s.tokens.len() {
-            let token = &s.tokens[start];
-            start += 1;
-            match &token.code {
-                T![=>] => break,
-                T!["{"] => {
-                    if !is_match {
-                        break;
-                    }
-                }
+        let mut r = Vec::new();
 
-                T![;] if s.magic => break,
-
-                TokenCode::Pair(_) => {
-                    start = s.skip_pair(start - 1)?;
+        let save_state = s.save_state();
+        if is_match {
+            let a = s.parse_expr();
+            match a {
+                Ok(expr) => {
+                    r.push((ConditionItem::Expr(expr), None));
+                    return Ok(Conditions {
+                        items: r,
+                    });
                 }
-                T![let] => {
-                    is_let = true;
-                    break;
+                Err(_) => {
+                    s.restore_state(&save_state);
                 }
-
-                _ => (),
+            }
+        } else {
+            let mut config = ParseConfig::default();
+            config.stop_on_struct_brace = true;
+            let a = s.parse_expr_config(&config);
+            match a {
+                Ok(expr) => {
+                    r.push((ConditionItem::Expr(expr), None));
+                    return Ok(Conditions {
+                        items: r,
+                    });
+                }
+                Err(_) => {
+                    s.restore_state(&save_state);
+                }
             }
         }
 
-        let mut r = Vec::new();
-
-        if !is_let {
-            let expr = if is_match {
-                s.parse_expr()?
-            } else {
-                let mut config = ParseConfig::default();
-                config.stop_on_struct_brace = true;
-                let expr = s.parse_expr_config(&config)?;
-                expr
-            };
-            r.push((ConditionItem::Expr(expr), None));
-            return Ok(Conditions {
-                items: r,
-            });
-        }
-
+        // let-chains
         loop {
             let outer_attrs = s.parse_outer_attrs()?;
 
@@ -3460,15 +3449,15 @@ impl Parse {
 
         let mut expr = s.parse_sub_expr(config)?;
 
-        if config.stop_on_block_expr {
-            if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
-                return Ok(expr);
-            }
-        }
         if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
             let token = s.current();
             if matches!(&token.code, T!["("]) {
                 return Ok(expr);
+            }
+            if !matches!(&token.code, T![.]) {
+                if config.stop_on_block_expr {
+                    return Ok(expr);
+                }
             }
         }
 
