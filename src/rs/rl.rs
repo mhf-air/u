@@ -73,9 +73,9 @@ impl Lex {
         let width = u.len();
 
         let (end_line, end_column) = if check_nl {
-            if let Some(index) = u.as_str().rfind('\n'){
+            if let Some(index) = u.as_str().rfind('\n') {
                 let count = u.as_bytes().iter().filter(|&&c| c == b'\n').count();
-                (s.line + count, width - index)
+                (s.line + count, width - index - 1)
             } else {
                 (s.line, s.column + width - 1)
             }
