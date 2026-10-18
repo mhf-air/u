@@ -306,12 +306,12 @@ Point type = [S]..f
 Point type = [S as Copy]..f
 
 foo['a, 'b, T] func[async, unsafe](a i32, b i32) i32 where {
-    T Iterator
-    T..Item Copy
-    String Partial-eq[T]
-    T Iterator[Item Copy]
-    fn(T) Iterator
-    f Box[dyn Fn-mut(&mut T) + 'a]
+    T Iterator,
+    T..Item Copy,
+    String Partial-eq[T],
+    T Iterator[Item Copy],
+    fn(T) Iterator,
+    f Box[dyn Fn-mut(&mut T) + 'a],
     'a 'b
 } {}
 

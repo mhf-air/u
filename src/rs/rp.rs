@@ -472,7 +472,9 @@ impl Parse {
             // parse stmt expr
             let mut config = ParseConfig::default();
             config.may_end_with_semicolon = true;
-            config.stop_on_block_expr = true;
+            if need_stop_on_block_expr(s) {
+                config.stop_on_block_expr = true;
+            }
             let mut expr = s.parse_expr_config(&config)?;
             expr.outer_attrs = outer_attrs;
 
@@ -661,7 +663,42 @@ impl Parse {
             }
         }
 
-        Ok(stmt)
+        return Ok(stmt);
+
+        fn need_stop_on_block_expr(s: &Parse) -> bool {
+            let token = s.current();
+            if matches!(
+                &token.code,
+                T![if]
+                | T![match]
+                | T![loop]
+                | T![while]
+                | T![for]
+                | T!["{"]
+                | TokenCode::Lifetime(_)
+            ) {
+                return true;
+            }
+            if s.index.get() + 1 >= s.tokens.len() {
+                return false;
+            }
+            let t1 = s.nth(1);
+            match &token.code {
+                T![const] | T![unsafe]
+                    if matches!(&t1.code, T!["{"]) => true,
+                T![async] => {
+                    if matches!(&t1.code, T!["{"]) {
+                        return true;
+                    }
+                    if s.index.get() + 2 >= s.tokens.len() {
+                        return false;
+                    }
+                    let t2 = s.nth(2);
+                    matches!(&t1.code, T![move]) && matches!(&t2.code, T!["{"])
+                }
+                _ => false,
+            }
+        }
     }
 
     fn get_first_special_token(&self) -> Option<&Token> {
@@ -1052,7 +1089,7 @@ impl Parse {
             s.plusplus();
 
             let token = s.current();
-            if matches!(&token.code, T![>] | T![,] | T![;]) {
+            if matches!(&token.code, T![>] | T![,] | T![;] | T!["{"]) {
                 r.items.push((lifetime, None));
                 break;
             }
@@ -2403,22 +2440,41 @@ impl Parse {
                 break;
             }
             let stmt = s.parse_stmt(r.items.len())?;
-            if let Stmt::Item(item) = stmt {
-                let payload = match item.payload {
-                    ItemPayload::Func(f) => AssociatedItemPayload::Func(*f),
-                    ItemPayload::Const(f) => AssociatedItemPayload::Const(f),
-                    ItemPayload::TypeAlias(f) => AssociatedItemPayload::TypeAlias(f),
-                    ItemPayload::MacroCall(f) => AssociatedItemPayload::MacroCall(f),
-                    _ => {
-                        return Err(s.panic(&token, "illegal impl item"));
+            match stmt {
+                Stmt::Item(item) => {
+                    let payload = match item.payload {
+                        ItemPayload::Func(f) => AssociatedItemPayload::Func(*f),
+                        ItemPayload::Const(f) => AssociatedItemPayload::Const(f),
+                        ItemPayload::TypeAlias(f) => AssociatedItemPayload::TypeAlias(f),
+                        ItemPayload::MacroCall(f) => AssociatedItemPayload::MacroCall(f),
+                        _ => {
+                            return Err(s.panic(&token, "illegal impl item"));
+                        }
+                    };
+                    r.items.push(AssociatedItem {
+                        outer_attrs: item.outer_attrs,
+                        payload,
+                    });
+                }
+                Stmt::Value(item) => {
+                    let mut is_macro_call = false;
+                    if let ExprPayload::WithoutBlock(b) = &item.expr.payload {
+                        if let ExprWithoutBlock::MacroCall(_) = b.as_ref() {
+                            is_macro_call = true;
+                        }
                     }
-                };
-                r.items.push(AssociatedItem {
-                    outer_attrs: item.outer_attrs,
-                    payload,
-                });
-            } else {
-                return Err(s.panic(&token, "illegal impl item"));
+                    if is_macro_call {
+                        r.items.push(AssociatedItem {
+                            outer_attrs: Attrs::default(),
+                            payload: AssociatedItemPayload::MacroCall(item.expr),
+                        });
+                    } else {
+                        return Err(s.panic(token, "illegal extern stmt value"));
+                    }
+                }
+                _ => {
+                    return Err(s.panic(&token, "illegal impl item"));
+                }
             }
 
             s.skip_semicolons();
@@ -4949,8 +5005,7 @@ impl Parse {
                 T![,] => {
                     s.plusplus();
                     let next_token = s.current();
-                    let show_comma = next_token.span.line == token.span.line;
-                    r.items.push((w_item, show_comma));
+                    r.items.push((w_item, true));
                     if matches!(&next_token.code, T![;] | T!["{"] | T![=]) {
                         r.t_after_last = next_token.clone();
                         break;
@@ -5606,14 +5661,20 @@ impl Parse {
                                 //      Some(
                                 //          Pattern
                                 //      )
+                                // and
+                                //      Some("a" | "b")
+                                // and
+                                //      Some("a") | b
                                 // don't change
                                 let mut is_optional = false;
                                 if path.items.len() == 1 {
                                     let p = &path.items[0];
                                     if p.t_sep.is_none()
+                                        && !matches!(&s.current().code, T![|])
                                         && p.name.token.u == "Some"
                                         && p.generic_args.items.is_empty()
                                         && a.items.len() == 1
+                                        && a.items[0].0.items.len() == 1
                                         && p.name.token.span.end_line == t_first_in_pattern.span.line
                                     {
                                         is_optional = true;

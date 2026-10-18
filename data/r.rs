@@ -1050,7 +1050,14 @@ fn f() {
     let a = union
         + 1;
 
+    // change to ?a
     let Some(a) = b;
+    // don't change
+    let Some(
+        a
+    ) = b;
+    // don't change
+    let Some(a | b) = b;
 
     let a = Person {
         age: 20,

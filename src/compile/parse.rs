@@ -2433,22 +2433,41 @@ impl Parse {
                 break;
             }
             let stmt = s.parse_stmt(r.items.len())?;
-            if let Stmt::Item(item) = stmt {
-                let payload = match item.payload {
-                    ItemPayload::Func(f) => AssociatedItemPayload::Func(*f),
-                    ItemPayload::Const(f) => AssociatedItemPayload::Const(f),
-                    ItemPayload::TypeAlias(f) => AssociatedItemPayload::TypeAlias(f),
-                    ItemPayload::MacroCall(f) => AssociatedItemPayload::MacroCall(f),
-                    _ => {
-                        return Err(s.panic(&token, "illegal impl item"));
+            match stmt {
+                Stmt::Item(item) => {
+                    let payload = match item.payload {
+                        ItemPayload::Func(f) => AssociatedItemPayload::Func(*f),
+                        ItemPayload::Const(f) => AssociatedItemPayload::Const(f),
+                        ItemPayload::TypeAlias(f) => AssociatedItemPayload::TypeAlias(f),
+                        ItemPayload::MacroCall(f) => AssociatedItemPayload::MacroCall(f),
+                        _ => {
+                            return Err(s.panic(&token, "illegal impl item"));
+                        }
+                    };
+                    r.items.push(AssociatedItem {
+                        outer_attrs: item.outer_attrs,
+                        payload,
+                    });
+                }
+                Stmt::Value(item) => {
+                    let mut is_macro_call = false;
+                    if let ExprPayload::WithoutBlock(b) = &item.expr.payload {
+                        if let ExprWithoutBlock::MacroCall(_) = b.as_ref() {
+                            is_macro_call = true;
+                        }
                     }
-                };
-                r.items.push(AssociatedItem {
-                    outer_attrs: item.outer_attrs,
-                    payload,
-                });
-            } else {
-                return Err(s.panic(&token, "illegal impl item"));
+                    if is_macro_call {
+                        r.items.push(AssociatedItem {
+                            outer_attrs: Attrs::default(),
+                            payload: AssociatedItemPayload::MacroCall(item.expr),
+                        });
+                    } else {
+                        return Err(s.panic(token, "illegal extern stmt value"));
+                    }
+                }
+                _ => {
+                    return Err(s.panic(&token, "illegal impl item"));
+                }
             }
 
             s.skip_semicolons();
@@ -5261,10 +5280,12 @@ impl Parse {
                     s.plusplus();
                 }
                 T![;] => {
-                    let mut t = token.clone();
-                    t.code = T![,];
-                    r.items.push((w_item, Some(t)));
+                    r.items.push((w_item, None));
                     s.plusplus();
+                    let token = s.current();
+                    if !matches!(&token.code, T!["}"]) {
+                        return Err(s.panic(token, &format!("expected }} but got {:?}", token)));
+                    }
                 }
                 _ => {
                     return Err(s.panic(token, &format!("expected ; or }} but got {:?}", token)));
@@ -5732,6 +5753,10 @@ impl Parse {
                     t_sep,
                     pattern: Box::new(pat),
                 };
+                // prevent intending for "Some(a | b)", but write "?a | b"
+                if matches!(&s.current().code, T![|]) {
+                    return Err(s.panic(token, "use Some(a) | b instead of ?a | b"));
+                }
                 return Ok(PatternNoTopAlt::WithoutRange(
                     PatternWithoutRange::PatSome(r),
                 ));
