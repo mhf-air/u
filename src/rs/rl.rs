@@ -968,23 +968,27 @@ impl Lex {
                     match next_ch {
                         // <=
                         '=' => {
-                            // s.add_token(TokenCode::Op(Op::LessEq), "<=".to_owned());
-                            // i += 1;
-
-                            s.add_token(TokenCode::Op(Op::Less), "<".to_owned());
-                            s.add_token(TokenCode::Assign(Assign::Assign), "=".to_owned());
+                            // for cases such as
+                            //     if a as usize << b {}
+                            // because this can't be used in generics, so no need to separate.
+                            // same with <<=
+                            s.add_token(TokenCode::Op(Op::LessEq), "<=".to_owned());
                             i += 1;
+
+                            // s.add_token(TokenCode::Op(Op::Less), "<".to_owned());
+                            // s.add_token(TokenCode::Assign(Assign::Assign), "=".to_owned());
+                            // i += 1;
                         }
                         '<' => {
                             if i + 2 < total_len && s.chars[i + 2] == '=' {
                                 // <<=
-                                // s.add_token(TokenCode::Assign(Assign::LeftShift), "<<=".to_owned());
-                                // i += 2;
-
-                                s.add_token(TokenCode::Op(Op::Less), "<".to_owned());
-                                s.add_token(TokenCode::Op(Op::Less), "<".to_owned());
-                                s.add_token(TokenCode::Assign(Assign::Assign), "=".to_owned());
+                                s.add_token(TokenCode::Assign(Assign::LeftShift), "<<=".to_owned());
                                 i += 2;
+
+                                // s.add_token(TokenCode::Op(Op::Less), "<".to_owned());
+                                // s.add_token(TokenCode::Op(Op::Less), "<".to_owned());
+                                // s.add_token(TokenCode::Assign(Assign::Assign), "=".to_owned());
+                                // i += 2;
                             } else {
                                 // // <<
                                 // s.add_token(TokenCode::Op(Op::LeftShift), "<<".to_owned());

@@ -1608,17 +1608,7 @@ impl Parse {
         // where
         let token = s.current();
         if matches!(&token.code, T![where]) {
-            let mut where_ = s.parse_where()?;
-            let token = s.current();
-            if matches!(&token.code, T!["{"]) {
-                s.minusminus();
-                let t_last = s.current();
-                s.plusplus();
-                if t_last.span.end_line != token.span.line {
-                    where_.show_backslash = true;
-                }
-            }
-            r.where_ = Some(where_);
+            r.where_ = Some(s.parse_where()?);
         }
 
         let token = s.current();
@@ -1907,17 +1897,7 @@ impl Parse {
         // possible where clause before =
         let token = s.current();
         if matches!(&token.code, T![where]) {
-            let mut where_ = s.parse_where()?;
-            let token = s.current();
-            if matches!(&token.code, T![=]) {
-                s.minusminus();
-                let t_last = s.current();
-                s.plusplus();
-                if t_last.span.end_line != token.span.line {
-                    where_.show_backslash = true;
-                }
-            }
-            r.where_ = Some(where_);
+            r.where_ = Some(s.parse_where()?);
         }
 
         // possible type
@@ -1982,17 +1962,7 @@ impl Parse {
 
         // struct
         if matches!(&s.current().code, T![where]) {
-            let mut where_ = s.parse_where()?;
-            let token = s.current();
-            if matches!(&token.code, T!["{"]) {
-                s.minusminus();
-                let t_last = s.current();
-                s.plusplus();
-                if t_last.span.end_line != token.span.line {
-                    where_.show_backslash = true;
-                }
-            }
-            r.where_ = Some(where_);
+            r.where_ = Some(s.parse_where()?);
         }
         if matches!(&s.current().code, T![;]) {
             return Ok(r);
@@ -3285,11 +3255,11 @@ impl Parse {
                                 let mut t = token.clone();
                                 t.code = T![<<];
                                 t
-                            } else if matches!(&t1.code, T![=]) {
-                                s.plusplus();
-                                let mut t = token.clone();
-                                t.code = T![<=];
-                                t
+                            // } else if matches!(&t1.code, T![=]) {
+                            //     s.plusplus();
+                            //     let mut t = token.clone();
+                            //     t.code = T![<=];
+                            //     t
                             } else {
                                 token.clone()
                             }
@@ -3573,9 +3543,6 @@ impl Parse {
 
         if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
             let token = s.current();
-            if matches!(&token.code, T!["("]) {
-                return Ok(expr);
-            }
             if !matches!(&token.code, T![.] | T![?]) {
                 if config.stop_on_block_expr {
                     return Ok(expr);
@@ -3643,32 +3610,36 @@ impl Parse {
                     }
                 }
                 T![<] => {
-                    let mut is_assign = false;
-                    let t1 = s.current();
-                    if matches!(&t1.code, T![<]) {
-                        let t2 = s.nth(1);
-                        if matches!(&t2.code, T![=]) {
-                            is_assign = true;
-                        }
-                    }
-                    if is_assign {
-                        s.inc(2);
-                        let mut t = token.clone();
-                        t.code = T![<<=];
-                        let right = s.parse_expr_config(config)?;
-                        r.payload = ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
-                            ExprOperator::CompoundAssignment(ExprCompoundAssignment {
-                                op: t,
-                                left: expr,
-                                right,
-                            }),
-                        )));
-                        break;
-                    } else {
-                        s.minusminus();
-                        r = expr;
-                        break;
-                    }
+                    s.minusminus();
+                    r = expr;
+                    break;
+
+                    // let mut is_assign = false;
+                    // let t1 = s.current();
+                    // if matches!(&t1.code, T![<]) {
+                    //     let t2 = s.nth(1);
+                    //     if matches!(&t2.code, T![=]) {
+                    //         is_assign = true;
+                    //     }
+                    // }
+                    // if is_assign {
+                    //     s.inc(2);
+                    //     let mut t = token.clone();
+                    //     t.code = T![<<=];
+                    //     let right = s.parse_expr_config(config)?;
+                    //     r.payload = ExprPayload::WithoutBlock(Box::new(ExprWithoutBlock::Operator(
+                    //         ExprOperator::CompoundAssignment(ExprCompoundAssignment {
+                    //             op: t,
+                    //             left: expr,
+                    //             right,
+                    //         }),
+                    //     )));
+                    //     break;
+                    // } else {
+                    //     s.minusminus();
+                    //     r = expr;
+                    //     break;
+                    // }
                 }
                 // compound assignment
                 T![+=]
@@ -5138,6 +5109,16 @@ impl Parse {
                 _ => {
                     return Err(s.panic(token, &format!("illegal token {:?} for WhereClause", token)));
                 }
+            }
+        }
+
+        let token = s.current();
+        if !matches!(&token.code, T![;]) {
+            s.minusminus();
+            let t_last = s.current();
+            s.plusplus();
+            if t_last.span.end_line != token.span.line {
+                r.show_backslash = true;
             }
         }
 

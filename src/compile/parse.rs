@@ -3625,9 +3625,6 @@ impl Parse {
 
         if matches!(&expr.payload, ExprPayload::WithBlock(_)) {
             let token = s.current();
-            if matches!(&token.code, T!["("]) {
-                return Ok(expr);
-            }
             if !matches!(&token.code, T![.] | T![?]) {
                 if config.stop_on_block_expr {
                     return Ok(expr);
