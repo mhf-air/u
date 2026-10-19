@@ -485,7 +485,7 @@ impl Parse {
                 let t_last = s.current();
                 s.plusplus();
                 let need_backslash = matches!(expr.payload, ExprPayload::WithoutBlock(_))
-                    && t_last.span.end_line != token.span.line ;
+                    && t_last.span.end_line != token.span.line;
                 return Ok(Stmt::Value(StmtValue { expr, need_backslash }));
             }
 

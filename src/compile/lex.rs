@@ -1745,6 +1745,9 @@ impl Token {
 
                     Op::RsDotDot => "..",
                     Op::RsUnderscore => "_",
+                    Op::RsCommaComma => ",,",
+                    Op::RsCommaCommaEq => ",,=",
+                    Op::RsColonEq => ":=",
                 }
             }
             TokenCode::Pair(pair) => {
@@ -2459,6 +2462,9 @@ pub enum Op {
 
     RsDotDot,
     RsUnderscore,
+    RsCommaComma,
+    RsCommaCommaEq,
+    RsColonEq,
 }
 
 impl fmt::Debug for Op {
@@ -2508,6 +2514,9 @@ impl fmt::Debug for Op {
 
             Self::RsDotDot => write!(f, ".."),
             Self::RsUnderscore => write!(f, "_"),
+            Self::RsCommaComma => write!(f, ",,"),
+            Self::RsCommaCommaEq => write!(f, ",,="),
+            Self::RsColonEq => write!(f, ":="),
         }
     }
 }
@@ -2693,6 +2702,9 @@ macro_rules! T {
 	[ "rs:ret" ] => { TokenCode::Keyword(Keyword::RsRet) };
 	[ "rs:.." ] => { TokenCode::Op(Op::RsDotDot) };
 	[ "rs:_" ] => { TokenCode::Op(Op::RsUnderscore) };
+	[ "rs:,," ] => { TokenCode::Op(Op::RsCommaComma) };
+	[ "rs:,,=" ] => { TokenCode::Op(Op::RsCommaCommaEq) };
+	[ "rs::=" ] => { TokenCode::Op(Op::RsColonEq) };
 	[ "rs:[" ] => { TokenCode::Pair(Pair::RsSquareOpen) };
 	[ "rs:]" ] => { TokenCode::Pair(Pair::RsSquareClose) };
 }

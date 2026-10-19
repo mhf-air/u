@@ -747,11 +747,6 @@ impl Lex {
                     }
                     let next_ch = s.chars[i + 1];
                     match next_ch {
-                        // ++
-                        '+' => {
-                            s.add_token(TokenCode::Op(Op::PlusPlus), "++".to_owned());
-                            i += 1;
-                        }
                         // +=
                         '=' => {
                             s.add_token(TokenCode::Assign(Assign::Add), "+=".to_owned());

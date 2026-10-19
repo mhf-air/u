@@ -891,7 +891,7 @@ impl ToLang for Struct {
 
 #[derive(Debug)]
 pub enum StructPayload {
-    Struct(Vec<StructField>) ,
+    Struct(Vec<StructField>),
     Tuple(Vec<TupleField>),
 }
 #[derive(Debug, Default)]

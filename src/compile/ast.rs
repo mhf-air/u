@@ -1,4 +1,4 @@
-use crate::compile::lex::{ Token, TokenCode, Span, Keyword, Pair, Op, T };
+use crate::compile::lex::{ Token, TokenCode, Span, Keyword, Pair, Op, Assign, T };
 use std::convert::TryFrom;
 use std::mem;
 
@@ -631,13 +631,23 @@ impl ToLang for Func {
             }
 
             body.inner_attrs.to_rs(p);
-            if s.qualifier.t_no_s.is_none() && s.self_param.is_some() && !body.stmts.is_empty() {
+            if s.qualifier.t_no_s.is_none()
+                && s.self_param.is_some()
+                && !body.stmts.is_empty()
+            {
                 let line_paren = body.t_brace_open.span.line;
                 let line_first = body.t_first_after_brace.span.line;
                 if line_paren != line_first {
                     let t = &body.t_first_after_brace.tokens_before;
-                    if !t.is_empty() {
-                        t[0].to_rs_one(p);
+                    for a in t {
+                        if matches!(&a.code, TokenCode::Blank) {
+                            if a.u.starts_with("\n\n") {
+                                p.push_raw(&a.u[1..]);
+                            } else {
+                                p.push_raw(&a.u);
+                            }
+                            break;
+                        }
                     }
                     p.push_raw("let s = self;");
                 } else {
@@ -891,7 +901,7 @@ impl ToLang for Struct {
 
 #[derive(Debug)]
 pub enum StructPayload {
-    Struct(Vec<StructField>) ,
+    Struct(Vec<StructField>),
     Tuple(Vec<TupleField>),
 }
 #[derive(Debug, Default)]
@@ -1461,6 +1471,9 @@ fn transform_macro_tokens(tokens: &[Token]) -> Vec<Token> {
             T![ret] => T!["rs:ret"],
             T![..] => T!["rs:.."],
             T![_] => T!["rs:_"],
+            T![,,] => T!["rs:,,"],
+            T![,,=] => T!["rs:,,="],
+            T![:=] => T!["rs::="],
             T!["["] => T!["rs:["],
             T!["]"] => T!["rs:]"],
             _ => t.code,
