@@ -1809,14 +1809,17 @@ impl Parse {
             // check if it's the short form
             let mut is_short = false;
             if let PatternNoTopAlt::WithoutRange(pat) = &pat {
-                if let PatternWithoutRange::Identifier(a) = pat {
-                    if a.t_mut.is_none() {
-                        param.name = a.name.clone();
-                        is_short = true;
-                    }
+                if let PatternWithoutRange::Identifier(a) = pat
+                    && a.pattern.is_none()
+                    && a.t_ref.is_none()
+                    && a.t_mut.is_none()
+                {
+                    param.name = a.name.clone();
+                    is_short = true;
                 } else if let PatternWithoutRange::Path(a) = pat
-                        && let PatternPath::Path(a) = a
-                        && a.items.len() == 1 {
+                    && let PatternPath::Path(a) = a
+                    && a.items.len() == 1
+                {
                     let name = a.items[0].name.token.clone();
                     param.name = name.clone();
                     is_short = true;
@@ -3107,11 +3110,15 @@ impl Parse {
 
         // check if it's the short form
         if let PatternNoTopAlt::WithoutRange(pat) = &pat {
-            if let PatternWithoutRange::Identifier(a) = pat {
+            if let PatternWithoutRange::Identifier(a) = pat
+                && a.pattern.is_none()
+                && a.t_ref.is_none()
+            {
                 r.short = Some((a.name.clone(), a.t_mut.clone()));
             } else if let PatternWithoutRange::Path(a) = pat
-                    && let PatternPath::Path(a) = a
-                    && a.items.len() == 1 {
+                && let PatternPath::Path(a) = a
+                && a.items.len() == 1
+            {
                 let name = a.items[0].name.token.clone();
                 r.short = Some((name, None));
             }
@@ -3539,7 +3546,7 @@ impl Parse {
             if matches!(&token.code, T!["("]) {
                 return Ok(expr);
             }
-            if !matches!(&token.code, T![.]) {
+            if !matches!(&token.code, T![.] | T![?]) {
                 if config.stop_on_block_expr {
                     return Ok(expr);
                 }

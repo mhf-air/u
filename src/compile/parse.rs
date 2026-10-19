@@ -3628,7 +3628,7 @@ impl Parse {
             if matches!(&token.code, T!["("]) {
                 return Ok(expr);
             }
-            if !matches!(&token.code, T![.]) {
+            if !matches!(&token.code, T![.] | T![?]) {
                 if config.stop_on_block_expr {
                     return Ok(expr);
                 }
