@@ -94,6 +94,12 @@ example
         ret 0
     }
 
+    // have to use ',' after every WhereItem if it's on a separate line
+    User[T] struct where
+        T: Clone,
+    {
+    }
+
     impl[unsafe][T, U] ops..My-trait for Point[T, U] where { T: Copy + Default } {
         Output type = usize
 

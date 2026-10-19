@@ -5117,7 +5117,9 @@ impl Parse {
             s.minusminus();
             let t_last = s.current();
             s.plusplus();
-            if t_last.span.end_line != token.span.line {
+            if !matches!(&t_last.code, T![,])
+                && t_last.span.end_line != token.span.line
+            {
                 r.show_backslash = true;
             }
         }
