@@ -285,28 +285,28 @@ identifier func() {
 }
 
 // use fn() for function type, not func
-Point[T] type = fn(T, T): T
+Point[T] type = fn(T, T) => T
 Point+[T Copy + Default] type = (T, T)
 Point^[T Copy + Default] type = (T, T)
 Point[N const usize] type Copy + Clone = [`i32; N`]
-Point[T] type = (T, T) where { T Copy }
-Point[T] type = fn(T) where { T Iterator }
+Point[T] type = (T, T) where { T: Copy }
+Point[T] type = fn(T) where { T: Iterator }
 Point['a 'b + 'c, 'd 'e] type = &'a i32
 Point[T] type = abc..Abc..[T]
-Point[T] type = std..boxed..Box[dyn std..ops..Fn-once(isize): isize]
+Point[T] type = std..boxed..Box[dyn std..ops..Fn-once(isize) => isize]
 Point[T] type = impl Iterator[Item = ops..Example[T]]
 Point[T] type = impl Iterator[Item ops..Example[T]]
 Point type = [S]..f
 Point type = [S as Copy]..f
 
 foo['a, 'b, T] func[async, unsafe](a i32, b i32) i32 where {
-    T Iterator,
-    T..Item Copy,
-    String Partial-eq[T],
-    T Iterator[Item Copy],
-    fn(T) Iterator,
-    f Box[dyn Fn-mut(&mut T) + 'a],
-    'a 'b
+    T: Iterator,
+    T..Item: Copy,
+    String: Partial-eq[T],
+    T: Iterator[Item Copy],
+    fn(T): Iterator,
+    f: Box[dyn Fn-mut(&mut T) + 'a],
+    'a: 'b
 } {}
 
 f func(
@@ -348,7 +348,7 @@ const-c-void[T] func(r &T) *const c-void {
 }
 
 Person['a] struct where {
-    T Clone
+    T: Clone
 } {
     #[serde(rename = "lnum")]
     name+ &'a str
@@ -398,7 +398,7 @@ Foo enum {
 }
 
 Animal[T, E] enum where {
-    T Clone
+    T: Clone
 } {
     Dog(String, f64)
     Cat {
@@ -408,24 +408,24 @@ Animal[T, E] enum where {
 }
 
 My-union[T] union where {
-    T Clone
+    T: Clone
 } {
     name+ String
     age i32
 }
 
 With-self trait Super[Self] where {
-    Self Sized
+    Self: Sized
 } {}
 Copy-iterator trait Iterator[Item Copy] {}
 
-Seq[T] trait[unsafe] Display + Debug where { T Copy } {
+Seq[T] trait[unsafe] Display + Debug where { T: Copy } {
     name--c const &str = "hello"
     Item type = T
     A type
     Assoc type Trait2[Assoc2 Copy]
 
-    foo func() where { Self Sized } {
+    foo func() where { Self: Sized } {
     }
 
     mov () func()
@@ -433,7 +433,7 @@ Seq[T] trait[unsafe] Display + Debug where { T Copy } {
 
     len (&) func() u32
     elt-at (&) func(n u32) T
-    iter[F] (&mut) func(f F) where { F Iterator }
+    iter[F] (&mut) func(f F) where { F: Iterator }
 
     call_()
 }
@@ -441,14 +441,14 @@ Seq[T] trait[unsafe] Display + Debug where { T Copy } {
 Foo trait {
     Bar['a] type
 
-    Item['a] type where { Self 'a }
+    Item['a] type where { Self: 'a }
     next['a] (&'a mut) func() Option[Self..Item['a]]
 
     Pointer[T] type Deref[Target = T]
     new[T] func(value T) Self..Pointer[T]
 
     Array['x, N const usize] type where {
-        Self 'x
+        Self: 'x
     } = i32
     borrow-array['a, N const usize] (&'a) func() Self..Array['a, N]
 }
@@ -480,14 +480,14 @@ impl Point[f32] {
 }
 
 impl[T] Point[T] where {
-    T Clone
+    T: Clone
 } {
 }
 
 impl[unsafe][T, N const usize] My-trait for [`T; N`] {}
 impl[I] ops..Index[I] for str {}
-impl fn(i32): i32 {}
-impl[T] fn(T): T {}
+impl fn(i32) => i32 {}
+impl[T] fn(T) => T {}
 
 impl crate..Person {
     abc (&) func() {
@@ -497,7 +497,7 @@ impl crate..Person {
 impl self..Person {}
 impl super..Person {}
 
-apply[F] func(f F) where { F Fn-once() } { }
+apply[F] func(f F) where { F: Fn-once() } { }
 apply[F Fn-once()] func(f F) { }
 
 // these are functions
@@ -626,7 +626,7 @@ f func() {
     let mut a
     let mut a: i32
     let (a, b, c)
-    let a: fn(i32, ...)
+    let a: fn(i32, ...) => i32
 }
 
 // special cases for auto-added semicolons

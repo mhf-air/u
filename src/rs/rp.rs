@@ -5067,6 +5067,7 @@ impl Parse {
             let w_item = if let TokenCode::Lifetime(_) = &token.code {
                 let lifetime = token.clone();
                 s.plusplus();
+                let t_colon = s.current().clone();
                 s.expect(T![:])?;
                 let bounds = s.parse_lifetime_bounds()?;
                 let item = WhereItemLifetime {
@@ -5074,6 +5075,7 @@ impl Parse {
                         name: lifetime,
                     },
                     lifetime_bounds: bounds.items,
+                    t_colon,
                 };
                 WhereItem::Lifetime(item)
             } else {
@@ -5083,6 +5085,7 @@ impl Parse {
                     item.for_lifetimes = Some(f);
                 }
                 item.type_ = s.parse_type()?;
+                item.t_colon = s.current().clone();
                 s.expect(T![:])?;
                 item.bounds = s.parse_type_param_bounds()?;
                 WhereItem::TypeBound(item)

@@ -1826,6 +1826,7 @@ impl ToLang for WhereItem {
         match &s {
             WhereItem::Lifetime(a) => {
                 a.lifetime.to_u(p);
+                a.t_colon.to_u(p);
                 for (it, t) in &a.lifetime_bounds {
                     it.to_u(p);
                     if let Some(t) = t {
@@ -1838,6 +1839,7 @@ impl ToLang for WhereItem {
                     for_.to_u(p);
                 }
                 a.type_.to_u(p);
+                a.t_colon.to_u(p);
                 a.bounds.to_u(p);
             }
         }
@@ -1847,12 +1849,14 @@ impl ToLang for WhereItem {
 pub struct WhereItemLifetime {
     pub lifetime: Lifetime,
     pub lifetime_bounds: Vec<(Lifetime, Option<Token>)>,
+    pub t_colon: Token,
 }
 #[derive(Debug, Default)]
 pub struct WhereItemTypeBound {
     pub for_lifetimes: Option<ForLifetimes>,
     pub type_: Type,
     pub bounds: TypeParamBounds,
+    pub t_colon: Token,
 }
 
 // --------------------------------------------------------------------------------
@@ -2281,7 +2285,7 @@ impl ToLang for TypePathFunc {
 
         if let Some((t, return_type)) = &s.return_type {
             t.to_u_before(p);
-            p.push_raw(":");
+            p.push_raw("=>");
             return_type.to_u(p);
         }
     }
@@ -3159,7 +3163,7 @@ impl ToLang for TypeBareFunction {
 
         if let Some((t, return_type)) = &s.return_type {
             t.to_u_before(p);
-            p.push_raw(":");
+            p.push_raw("=>");
             return_type.to_u(p);
         }
     }

@@ -94,7 +94,7 @@ example
         ret 0
     }
 
-    impl[unsafe][T, U] ops..My-trait for Point[T, U] where {T Copy + Default} {
+    impl[unsafe][T, U] ops..My-trait for Point[T, U] where { T: Copy + Default } {
         Output type = usize
 
         new func()
@@ -614,7 +614,7 @@ the following two expressions are the same
 
 - **new syntax for bare function type and closure type**
 
-    use : here instead of ->, because Type might appear before :=, which will
+    use => instead of ->, because Type might appear before :=, which will
     mistake a := statement into a -> statement
 
 ```

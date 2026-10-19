@@ -1786,7 +1786,7 @@ impl ToLang for WhereItem {
         match &s {
             WhereItem::Lifetime(a) => {
                 a.lifetime.to_rs(p);
-                p.push_raw(":");
+                a.t_colon.to_rs(p);
                 for (it, t) in &a.lifetime_bounds {
                     it.to_rs(p);
                     if let Some(t) = t {
@@ -1799,7 +1799,7 @@ impl ToLang for WhereItem {
                     for_.to_rs(p);
                 }
                 a.type_.to_rs(p);
-                p.push_raw(":");
+                a.t_colon.to_rs(p);
                 a.bounds.to_rs(p);
             }
         }
@@ -1809,12 +1809,14 @@ impl ToLang for WhereItem {
 pub struct WhereItemLifetime {
     pub lifetime: Lifetime,
     pub lifetime_bounds: Vec<(Lifetime, Option<Token>)>,
+    pub t_colon: Token,
 }
 #[derive(Debug, Default)]
 pub struct WhereItemTypeBound {
     pub for_lifetimes: Option<ForLifetimes>,
     pub type_: Type,
     pub bounds: TypeParamBounds,
+    pub t_colon: Token,
 }
 
 // --------------------------------------------------------------------------------
