@@ -209,10 +209,10 @@ impl Lex {
                 code: TokenCode::Op(Op::Semicolon),
                 span: Span {
                     line: s.line,
-                    column: std::usize::MAX,
+                    column: usize::MAX,
                     width: 1,
                     end_line: s.line,
-                    end_column: std::usize::MAX,
+                    end_column: usize::MAX,
                 },
                 tokens_before: Vec::new(),
                 u: String::new(),
@@ -1580,7 +1580,7 @@ impl Token {
     pub fn is_added_semicolon(&self) -> bool {
         let s = self;
         if let TokenCode::Op(Op::Semicolon) = s.code {
-            if s.span.column == std::usize::MAX {
+            if s.span.column == usize::MAX {
                 return true;
             }
         }

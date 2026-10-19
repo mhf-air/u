@@ -1251,7 +1251,7 @@ impl Token {
     pub fn is_added_semicolon(&self) -> bool {
         let s = self;
         if let TokenCode::Op(Op::Semicolon) = s.code {
-            if s.span.column == std::usize::MAX {
+            if s.span.column == usize::MAX {
                 return true;
             }
         }

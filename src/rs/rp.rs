@@ -213,7 +213,7 @@ impl Parse {
     fn panic(&self, token: &Token, a: &str) -> ParseError {
         // panic!("{}:{}: {}", token.span.line, token.span.column, a);
 
-        if token.span.column == std::usize::MAX {
+        if token.span.column == usize::MAX {
             ParseError {
                 line: token.span.line,
                 column: 1,
