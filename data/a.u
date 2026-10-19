@@ -3,18 +3,12 @@
 //!
 //! rust reference
 //!     https://doc.rust-lang.org/reference/introduction.html
-//!
-//! - open *.rs: read *.rs -> rust's ast -> write .*.u
-//! - write .*.u: u u-compile .*.u
 
 /*!
     another form of inner doc comment
 */
 
 #![allow(unused-uses)]
-
-// todo
-// - goto-definition jump to the correct position in u
 
 extern crate+ self
 extern crate std as ruststd
