@@ -330,7 +330,6 @@ impl ToLang for Mod {
         s.t_mod.to_u_one(p);
 
         let Some((t_open, t_close)) = &s.t_braces else {
-            p.push_raw(";");
             return;
         };
 
