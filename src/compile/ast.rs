@@ -623,13 +623,7 @@ impl ToLang for Func {
 
         // body
         if let Some(body) = &s.body {
-            if let Some(where_) = &s.where_ {
-                where_.t_brace_close.to_rs_before(p);
-                body.t_brace_open.to_rs_one(p);
-            } else {
-                body.t_brace_open.to_rs(p);
-            }
-
+            body.t_brace_open.to_rs(p);
             body.inner_attrs.to_rs(p);
             if s.qualifier.t_no_s.is_none()
                 && s.self_param.is_some()
@@ -826,13 +820,7 @@ impl ToLang for TypeAlias {
             where_.to_rs(p);
         }
         if let Some((t_eq, type_, where_)) = &s.rhs {
-            if let Some(where_) = &s.where_ {
-                where_.t_brace_close.to_rs_before(p);
-                t_eq.to_rs_one(p);
-            } else {
-                t_eq.to_rs(p);
-            }
-
+            t_eq.to_rs(p);
             type_.to_rs(p);
             if let Some(where_) = &where_ {
                 where_.to_rs(p);
@@ -871,11 +859,8 @@ impl ToLang for Struct {
                 StructPayload::Struct(a) => {
                     if let Some(where_) = &s.where_ {
                         where_.to_rs(p);
-                        where_.t_brace_close.to_rs_before(p);
-                        t_o.to_rs_one(p);
-                    } else {
-                        t_o.to_rs(p);
                     }
+                    t_o.to_rs(p);
                     for it in a {
                         it.to_rs(p);
                     }
@@ -980,12 +965,9 @@ impl ToLang for Enum {
         }
         if let Some(where_) = &s.where_ {
             where_.to_rs(p);
-            where_.t_brace_close.to_rs_before(p);
-            s.t_brace_open.to_rs_one(p);
-        } else {
-            s.t_brace_open.to_rs(p);
         }
 
+        s.t_brace_open.to_rs(p);
         for it in &s.items {
             it.to_rs(p);
         }
@@ -1074,12 +1056,9 @@ impl ToLang for Union {
 
         if let Some(where_) = &s.where_ {
             where_.to_rs(p);
-            where_.t_brace_close.to_rs_before(p);
-            s.t_brace_open.to_rs_one(p);
-        } else {
-            s.t_brace_open.to_rs(p);
         }
 
+        s.t_brace_open.to_rs(p);
         for it in &s.fields {
             it.to_rs(p);
         }
@@ -1197,12 +1176,9 @@ impl ToLang for Trait {
         }
         if let Some(where_) = &s.where_ {
             where_.to_rs(p);
-            where_.t_brace_close.to_rs_before(p);
-            s.t_brace_open.to_rs_one(p);
-        } else {
-            s.t_brace_open.to_rs(p);
         }
 
+        s.t_brace_open.to_rs(p);
         s.inner_attrs.to_rs(p);
         for it in &s.items {
             it.to_rs(p);
@@ -1303,12 +1279,9 @@ impl ToLang for Impl {
 
         if let Some(where_) = &s.where_ {
             where_.to_rs(p);
-            where_.t_brace_close.to_rs_before(p);
-            s.t_brace_open.to_rs_one(p);
-        } else {
-            s.t_brace_open.to_rs(p);
         }
 
+        s.t_brace_open.to_rs(p);
         s.inner_attrs.to_rs(p);
         for it in &s.items {
             it.to_rs(p);
@@ -1754,7 +1727,6 @@ pub struct Where {
     pub items: Vec<(WhereItem, Option<Token>)>,
 
     pub t_where: Token,
-    pub t_brace_close: Token,
 }
 impl ToLang for Where {
     fn to_rs(&self, p: &mut LangFormatter) {

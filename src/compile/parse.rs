@@ -5229,19 +5229,9 @@ impl Parse {
         r.t_where = s.current().clone();
         s.expect(T![where])?;
 
-        let span_b = s.current().span;
-        s.expect(T!["{"])?;
-        let span_next = s.current().span;
-        // 'where {T Clone}'
-        if span_b.line == span_next.line && span_b.end_column + 1 == span_next.column {
-            return Err(s.panic(s.current(), "there must be whitespace after 'where {'"));
-        }
-
         while s.has_more() {
             let token = s.current();
-            if matches!(&token.code, T!["}"]) {
-                r.t_brace_close = token.clone();
-                s.plusplus();
+            if matches!(&token.code, T!["{"] | T![;] | T![=]) {
                 break;
             }
 
@@ -5274,26 +5264,17 @@ impl Parse {
 
             let token = s.current();
             match &token.code {
-                T!["}"] => {
+                T!["{"] | T![;] | T![=] => {
                     r.items.push((w_item, None));
-                    r.t_brace_close = token.clone();
-                    s.plusplus();
                     break;
                 }
                 T![,] => {
                     r.items.push((w_item, Some(token.clone())));
                     s.plusplus();
                 }
-                T![;] => {
-                    r.items.push((w_item, None));
-                    s.plusplus();
-                    let token = s.current();
-                    if !matches!(&token.code, T!["}"]) {
-                        return Err(s.panic(token, &format!("expected }} but got {:?}", token)));
-                    }
-                }
                 _ => {
-                    return Err(s.panic(token, &format!("expected ; or }} but got {:?}", token)));
+                    return Err(s.panic(token,
+                        &format!("expected ';', '}}' or '=' but got {:?}", token)));
                 }
             }
         }

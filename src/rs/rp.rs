@@ -1608,7 +1608,17 @@ impl Parse {
         // where
         let token = s.current();
         if matches!(&token.code, T![where]) {
-            r.where_ = Some(s.parse_where()?);
+            let mut where_ = s.parse_where()?;
+            let token = s.current();
+            if matches!(&token.code, T!["{"]) {
+                s.minusminus();
+                let t_last = s.current();
+                s.plusplus();
+                if t_last.span.end_line != token.span.line {
+                    where_.show_backslash = true;
+                }
+            }
+            r.where_ = Some(where_);
         }
 
         let token = s.current();
@@ -1897,7 +1907,17 @@ impl Parse {
         // possible where clause before =
         let token = s.current();
         if matches!(&token.code, T![where]) {
-            r.where_ = Some(s.parse_where()?);
+            let mut where_ = s.parse_where()?;
+            let token = s.current();
+            if matches!(&token.code, T![=]) {
+                s.minusminus();
+                let t_last = s.current();
+                s.plusplus();
+                if t_last.span.end_line != token.span.line {
+                    where_.show_backslash = true;
+                }
+            }
+            r.where_ = Some(where_);
         }
 
         // possible type
@@ -1962,7 +1982,17 @@ impl Parse {
 
         // struct
         if matches!(&s.current().code, T![where]) {
-            r.where_ = Some(s.parse_where()?);
+            let mut where_ = s.parse_where()?;
+            let token = s.current();
+            if matches!(&token.code, T!["{"]) {
+                s.minusminus();
+                let t_last = s.current();
+                s.plusplus();
+                if t_last.span.end_line != token.span.line {
+                    where_.show_backslash = true;
+                }
+            }
+            r.where_ = Some(where_);
         }
         if matches!(&s.current().code, T![;]) {
             return Ok(r);
@@ -5095,7 +5125,6 @@ impl Parse {
             match &token.code {
                 T![;] | T!["{"] | T![=] => {
                     r.items.push((w_item, false));
-                    r.t_after_last = s.current().clone();
                     break;
                 }
                 T![,] => {
@@ -5103,7 +5132,6 @@ impl Parse {
                     let next_token = s.current();
                     r.items.push((w_item, true));
                     if matches!(&next_token.code, T![;] | T!["{"] | T![=]) {
-                        r.t_after_last = next_token.clone();
                         break;
                     }
                 }
