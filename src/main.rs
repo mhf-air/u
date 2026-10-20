@@ -1,10 +1,6 @@
 use std::env;
 use std::error::Error;
 
-/**
-usage:
-    u ${cmd}
-*/
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
     let cmd = u::cmd::a::Config::new(args);

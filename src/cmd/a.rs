@@ -4,8 +4,9 @@ use std::fs;
 use std::io;
 use std::mem;
 
-pub const U_TO_RS: bool = true;
-// pub const U_TO_RS: bool = false;
+pub const U_TO_RS: bool =
+    true;
+    // false
 
 // -----------------------------------------------------------------------------
 macro_rules! io_func {
@@ -116,10 +117,7 @@ impl CmdToRs {
     fn run(&self) -> io::Result<()> {
         let s = self;
         if s.src.is_empty() {
-            println!(
-                "usage: u to-rs <file-path>
-"
-            );
+            println!("usage: u to-rs <file-path>\n");
             return Ok(());
         }
 
@@ -157,10 +155,7 @@ impl CmdFromRs {
     fn run(&self) -> io::Result<()> {
         let s = self;
         if s.src.is_empty() {
-            println!(
-                "usage: u to-rs <file-path>
-"
-            );
+            println!("usage: u to-rs <file-path>\n");
             return Ok(());
         }
 
@@ -187,8 +182,8 @@ impl CmdHelp {
 These are common U commands used in various situations:
 
 commands:
-    to-rs       compile .u to .rs
-    from-rs     compile .rs to .u
+    u-r     compile .u to .rs
+    r-u     compile .rs to .u
 "
         );
         Ok(())
