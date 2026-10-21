@@ -1657,7 +1657,6 @@ impl Parse {
 
         f.t_paren_open = s.current().clone();
         s.expect(T!["("])?;
-        f.t_first_after_paren = s.current().clone();
 
         // self param
         let save_state = s.save_state();

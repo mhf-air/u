@@ -458,7 +458,6 @@ pub struct Func {
     pub t_func: Token,
     pub t_paren_open: Token,
     pub t_paren_close: Token,
-    pub t_first_after_paren: Token,
     pub t_first: Token,
     pub show_arrow: bool,
 }
