@@ -120,7 +120,7 @@ impl<'a> LangFormatter<'a> {
 
         s.line += delta_line;
         if delta_line > 0 {
-            s.column = span.end_column;
+            s.column = span.end_column + 1;
         } else {
             s.column += rs.len();
         }
@@ -129,20 +129,27 @@ impl<'a> LangFormatter<'a> {
 
     pub fn push_raw(&mut self, a: &str) {
         let s = self;
-        s.buf.push_str(a);
+        let span = Span {
+            line: s.line,
+            column: s.column,
+            width: a.len(),
+            end_line: s.line,
+            end_column: s.column + a.len() - 1,
+        };
+        s.push_token(a, 0, span);
     }
-    pub fn push_raw_nl(&mut self, a: &str) {
-        let s = self;
-        s.buf.push_str(a);
-        for c in a.chars() {
-            if c == '\n' {
-                s.line += 1;
-                s.column = 1;
-            } else {
-                s.column += 1;
-            }
-        }
-    }
+    // pub fn push_raw_nl(&mut self, a: &str) {
+    //     let s = self;
+    //     s.buf.push_str(a);
+    //     for c in a.chars() {
+    //         if c == '\n' {
+    //             s.line += 1;
+    //             s.column = 1;
+    //         } else {
+    //             s.column += 1;
+    //         }
+    //     }
+    // }
 }
 
 pub trait ToLang {
