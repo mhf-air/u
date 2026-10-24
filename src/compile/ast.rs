@@ -138,18 +138,23 @@ impl<'a> LangFormatter<'a> {
         };
         s.push_token(a, 0, span);
     }
-    // pub fn push_raw_nl(&mut self, a: &str) {
-    //     let s = self;
-    //     s.buf.push_str(a);
-    //     for c in a.chars() {
-    //         if c == '\n' {
-    //             s.line += 1;
-    //             s.column = 1;
-    //         } else {
-    //             s.column += 1;
-    //         }
-    //     }
-    // }
+    pub fn push_raw_nl(&mut self, a: &str) {
+        let s = self;
+        let mut delta_line = 0;
+        for c in a.chars() {
+            if c == '\n' {
+                delta_line += 1;
+            }
+        }
+        let span = Span {
+            line: s.line,
+            column: s.column,
+            width: a.len(),
+            end_line: s.line,
+            end_column: s.column + a.len() - 1,
+        };
+        s.push_token(a, delta_line, span);
+    }
 }
 
 pub trait ToLang {
@@ -643,9 +648,9 @@ impl ToLang for Func {
                     for a in t {
                         if matches!(&a.code, TokenCode::Blank) {
                             if a.u.starts_with("\n\n") {
-                                p.push_raw(&a.u[1..]);
+                                p.push_raw_nl(&a.u[1..]);
                             } else {
-                                p.push_raw(&a.u);
+                                p.push_raw_nl(&a.u);
                             }
                             break;
                         }
